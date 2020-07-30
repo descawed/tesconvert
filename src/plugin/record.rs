@@ -18,11 +18,13 @@ pub struct Field{
 // or nightly Rust.
 macro_rules! to_num {
     ($type:ty, $name:ident) => (
-        pub fn $name(&self) -> $type {
-            assert_eq!(self.data.len(), size_of::<$type>());
+        pub fn $name(&self) -> Option<$type> {
+            if self.data.len() != size_of::<$type>() {
+                return None;
+            }
             let mut buf = [0u8; size_of::<$type>()];
             buf.copy_from_slice(&self.data[..]);
-            <$type>::from_le_bytes(buf)
+            Some(<$type>::from_le_bytes(buf))
         }
     )
 }
@@ -45,12 +47,9 @@ impl Field {
 
     pub fn read<T: Read>(f: &mut T) -> io::Result<Field> {
         let mut name = [0u8; 4];
-        let mut raw_size = [0u8; 4];
-
         f.read_exact(&mut name)?;
-        f.read_exact(&mut raw_size)?;
 
-        let size = u32::from_le_bytes(raw_size) as usize;
+        let size = extract!(u32 from f)? as usize;
         let mut data = vec![0u8; size];
 
         f.read_exact(&mut data)?;
@@ -62,6 +61,10 @@ impl Field {
         &self.name
     }
 
+    pub fn display_name(&self) -> &str {
+        str::from_utf8(&self.name).unwrap_or("<invalid>")
+    }
+
     pub fn size(&self) -> usize {
         self.name.len() + size_of::<u32>() + self.data.len()
     }
@@ -70,7 +73,7 @@ impl Field {
         let len = self.data.len();
 
         if len > u32::MAX as usize {
-            return Err(Error::new(ErrorKind::InvalidData, "Field data too long to be serialized"));
+            return super::read_error("Field data too long to be serialized");
         }
 
         f.write(&self.name)?;
@@ -82,6 +85,10 @@ impl Field {
 
     pub fn get(&self) -> &[u8] {
         &self.data[..]
+    }
+
+    pub fn consume(self) -> Vec<u8> {
+        self.data
     }
 
     pub fn set(&mut self, data: Vec<u8>) {
@@ -168,10 +175,9 @@ impl Record {
 
     pub fn read<T: Read>(f: &mut T) -> io::Result<Record> {
         let mut name = [0u8; 4];
-        let mut raw_size = [0u8; 4];
-
         f.read_exact(&mut name)?;
-        f.read_exact(&mut raw_size)?;
+
+        let mut size = extract!(u32 from f)? as usize;
 
         let mut buf = [0u8; 4];
         // the next field is useless, but skipping bytes is apparently needlessly complicated
@@ -190,7 +196,6 @@ impl Record {
             fields: vec![],
         };
 
-        let mut size = u32::from_le_bytes(raw_size) as usize;
         let mut data = vec![0u8; size];
         // read in the field data
         f.read_exact(&mut data)?;
@@ -202,7 +207,7 @@ impl Record {
             let field = Field::read(&mut data_ref)?;
             let field_size = field.size();
             if field_size > size {
-                return Err(Error::new(ErrorKind::InvalidData, "Field size exceeds record size"));
+                return super::read_error("Field size exceeds record size");
             }
 
             size -= field.size();
@@ -216,7 +221,7 @@ impl Record {
         let size = self.field_size();
 
         if size > u32::MAX as usize {
-            return Err(Error::new(ErrorKind::InvalidData, "Record data too long to be serialized"));
+            return super::read_error("Record data too long to be serialized");
         }
 
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
@@ -264,6 +269,22 @@ impl Record {
         self.name.len()
             + size_of::<u32>()*3 // 3 = size + dummy + flags
             + self.field_size()
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = Field> {
+        self.fields.into_iter()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Field> {
+        self.fields.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Field> {
+        self.fields.iter_mut()
+    }
+
+    pub fn clear(&mut self) {
+        self.fields.clear();
     }
 }
 
@@ -337,7 +358,7 @@ mod tests{
     fn read_numeric_field() {
         let data = b"DATA\x08\0\0\0\x75\x39\xc2\x04\0\0\0\0";
         let field = Field::read(&mut data.as_ref()).unwrap();
-        let v = field.get_u64();
+        let v = field.get_u64().unwrap();
         assert_eq!(v, 0x4c23975u64);
     }
 
