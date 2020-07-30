@@ -1,9 +1,11 @@
 use std::error;
 use std::ffi::{CStr, CString, NulError};
 use std::io;
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
+
+use crate::common::*;
 
 pub struct Field{
     name: [u8; 4],
@@ -49,7 +51,7 @@ impl Field {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
-        let size = extract!(u32 from f)? as usize;
+        let size = extract!(f as u32)? as usize;
         let mut data = vec![0u8; size];
 
         f.read_exact(&mut data)?;
@@ -73,7 +75,7 @@ impl Field {
         let len = self.data.len();
 
         if len > u32::MAX as usize {
-            return super::read_error("Field data too long to be serialized");
+            return Err(io_error("Field data too long to be serialized"));
         }
 
         f.write(&self.name)?;
@@ -177,7 +179,7 @@ impl Record {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
-        let mut size = extract!(u32 from f)? as usize;
+        let mut size = extract!(f as u32)? as usize;
 
         let mut buf = [0u8; 4];
         // the next field is useless, but skipping bytes is apparently needlessly complicated
@@ -207,7 +209,7 @@ impl Record {
             let field = Field::read(&mut data_ref)?;
             let field_size = field.size();
             if field_size > size {
-                return super::read_error("Field size exceeds record size");
+                return Err(io_error("Field size exceeds record size"));
             }
 
             size -= field.size();
@@ -221,7 +223,7 @@ impl Record {
         let size = self.field_size();
 
         if size > u32::MAX as usize {
-            return super::read_error("Record data too long to be serialized");
+            return Err(io_error("Record data too long to be serialized"));
         }
 
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
@@ -248,6 +250,10 @@ impl Record {
 
     pub fn name(&self) -> &[u8] {
         &self.name
+    }
+
+    pub fn display_name(&self) -> &str {
+        str::from_utf8(&self.name).unwrap_or("<invalid>")
     }
 
     pub fn add_field(&mut self, field: Field) {
