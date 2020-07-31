@@ -236,9 +236,7 @@ mod tests {
         test_record.add_field(Field::new_i32(b"INTV", -50));
         plugin.add_record(test_record).unwrap();
 
-        // TODO: I tried a couple different ways to do this in one line, but none of them worked and I couldn't figure out why
-        let mut buf_writer = &mut buf;
-        plugin.write(&mut buf_writer).unwrap();
+        plugin.write(&mut &mut buf).unwrap();
 
         assert_eq!(buf, EXPECTED_PLUGIN);
     }
