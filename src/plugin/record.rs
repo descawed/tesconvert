@@ -32,9 +32,16 @@ macro_rules! to_num {
 }
 
 macro_rules! from_num {
-    ($type:ty, $name:ident) => (
+    ($type:ty, $name:ident, $new_name:ident) => (
         pub fn $name(&mut self, v: $type) {
             self.data = v.to_le_bytes().to_vec();
+        }
+
+        pub fn $new_name(name: &[u8; 4], data: $type) -> Field {
+            Field {
+                name: name.clone(),
+                data: data.to_le_bytes().to_vec(),
+            }
         }
     )
 }
@@ -45,6 +52,21 @@ impl Field {
             name: name.clone(),
             data,
         }
+    }
+
+    pub fn new_string(name: &[u8; 4], data: String) -> Field {
+        Field {
+            name: name.clone(),
+            data: data.into_bytes(),
+        }
+    }
+
+    pub fn new_zstring(name: &[u8; 4], data: String) -> Result<Field, NulError> {
+        let zstr = CString::new(data)?;
+        Ok(Field {
+            name: name.clone(),
+            data: zstr.into_bytes_with_nul(),
+        })
     }
 
     pub fn read<T: Read>(f: &mut T) -> io::Result<Field> {
@@ -78,9 +100,9 @@ impl Field {
             return Err(io_error("Field data too long to be serialized"));
         }
 
-        f.write(&self.name)?;
-        f.write(&(len as u32).to_le_bytes())?;
-        f.write(&self.data)?;
+        f.write_exact(&self.name)?;
+        f.write_exact(&(len as u32).to_le_bytes())?;
+        f.write_exact(&self.data)?;
 
         Ok(())
     }
@@ -132,19 +154,19 @@ impl Field {
 
     to_num!(f32, get_f32);
 
-    from_num!(i8, set_i8);
-    from_num!(u8, set_u8);
+    from_num!(i8, set_i8, new_i8);
+    from_num!(u8, set_u8, new_u8);
 
-    from_num!(i16, set_i16);
-    from_num!(u16, set_u16);
+    from_num!(i16, set_i16, new_i16);
+    from_num!(u16, set_u16, new_u16);
 
-    from_num!(i32, set_i32);
-    from_num!(u32, set_u32);
+    from_num!(i32, set_i32, new_i32);
+    from_num!(u32, set_u32, new_u32);
 
-    from_num!(i64, set_i64);
-    from_num!(u64, set_u64);
+    from_num!(i64, set_i64, new_i64);
+    from_num!(u64, set_u64, new_u64);
 
-    from_num!(f32, set_f32);
+    from_num!(f32, set_f32, new_f32);
 }
 
 const FLAG_DELETED: u32 = 0x0020;
@@ -231,10 +253,10 @@ impl Record {
             | if self.is_initially_disabled { FLAG_INITIALLY_DISABLED } else { 0 }
             | if self.is_blocked { FLAG_BLOCKED } else { 0 };
 
-        f.write(&self.name)?;
-        f.write(&(size as u32).to_le_bytes())?;
-        f.write(b"\0\0\0\0")?; // dummy field
-        f.write(&flags.to_le_bytes())?;
+        f.write_exact(&self.name)?;
+        f.write_exact(&(size as u32).to_le_bytes())?;
+        f.write_exact(b"\0\0\0\0")?; // dummy field
+        f.write_exact(&flags.to_le_bytes())?;
 
         for field in self.fields.iter() {
             field.write(f)?;

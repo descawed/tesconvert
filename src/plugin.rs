@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 use std::str;
 
 pub mod record;
@@ -17,11 +17,25 @@ pub struct Plugin {
 }
 
 const HEADER_LENGTH: usize = 300;
+const AUTHOR_LENGTH: usize = 32;
+const DESCRIPTION_LENGTH: usize = 256;
 const FLAG_MASTER: u32 = 0x1;
-const VERSION_1_2: f32 = 1.20000004768371582031;
-const VERSION_1_3: f32 = 1.29999995231628417969;
+
+pub const VERSION_1_2: f32 = 1.20000004768371582031;
+pub const VERSION_1_3: f32 = 1.29999995231628417969;
 
 impl Plugin {
+    pub fn new(author: String, description: String) -> Plugin {
+        Plugin {
+            version: VERSION_1_3,
+            is_master: false,
+            author,
+            description,
+            masters: vec![],
+            records: vec![],
+        }
+    }
+
     pub fn read<T: Read>(f: &mut T) -> io::Result<Plugin> {
         let header = Record::read(f)?;
         if header.name() != b"TES3" {
@@ -41,11 +55,12 @@ impl Plugin {
         }
 
         // decode header structure
+        // TODO: I honestly don't understand why I have to use as_ref for the reader but I can just do &mut buf for the writer
         let mut head_reader: &[u8] = header_data.as_ref();
         let version = extract!(head_reader as f32)?;
         let flags = extract!(head_reader as u32)?;
-        let author = extract_string(32, &mut head_reader)?;
-        let description = extract_string(256, &mut head_reader)?;
+        let author = extract_string(AUTHOR_LENGTH, &mut head_reader)?;
+        let description = extract_string(DESCRIPTION_LENGTH, &mut head_reader)?;
         let num_records = extract!(head_reader as u32)?;
 
         let mut masters = vec![];
@@ -97,6 +112,48 @@ impl Plugin {
         let mut reader = BufReader::new(f);
         Plugin::read(&mut reader)
     }
+
+    pub fn add_master(&mut self, name: String, size: u64) -> bool {
+        // don't add it if it's already in the list
+        if !self.masters.iter().any(|m| m.0 == name) {
+            self.masters.push((name, size));
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn add_record(&mut self, record: Record) {
+        self.records.push(record);
+    }
+
+    pub fn write<T: Write>(&self, f: &mut T) -> io::Result<()> {
+        let mut header = Record::new(b"TES3");
+        let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LENGTH);
+        let mut buf_writer = &mut buf;
+
+        serialize!(self.version => buf_writer)?;
+        serialize!(if self.is_master { FLAG_MASTER } else { 0 } => buf_writer)?;
+        serialize_str(&self.author, AUTHOR_LENGTH, &mut buf_writer)?;
+        serialize_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
+        serialize!(self.records.len() as u32 => buf_writer)?;
+
+        header.add_field(Field::new(b"HEDR", buf));
+
+        for (name, size) in self.masters.iter() {
+            let mast = Field::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(&format!("Failed to encode master file name: {}", e)))?;
+            header.add_field(mast);
+            header.add_field(Field::new_u64(b"DATA", *size));
+        }
+
+        header.write(f)?;
+
+        for record in self.records.iter() {
+            record.write(f)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -104,6 +161,7 @@ mod tests {
     use super::*;
 
     static TEST_PLUGIN: &[u8] = include_bytes!("test/multipatch.esp");
+    static EXPECTED_PLUGIN: &[u8] = include_bytes!("test/expected.esp");
 
     #[test]
     fn read_plugin() {
@@ -114,5 +172,24 @@ mod tests {
         assert_eq!(plugin.description, "options: cellnames,fogbug,merge_lists,summons_persist");
         assert_eq!(plugin.masters.len(), 0);
         assert_eq!(plugin.records.len(), 8);
+    }
+
+    #[test]
+    fn write_plugin() {
+        let mut buf: Vec<u8> = Vec::with_capacity(EXPECTED_PLUGIN.len());
+        let mut plugin = Plugin::new(String::from("test"), String::from("This is an empty test plugin"));
+        plugin.is_master = true;
+        plugin.add_master(String::from("Morrowind.esm"), 79837557);
+
+        let mut test_record = Record::new(b"GMST");
+        test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")));
+        test_record.add_field(Field::new_i32(b"INTV", -50));
+        plugin.add_record(test_record);
+
+        // TODO: I tried a couple different ways to do this in one line, but none of them worked and I couldn't figure out why
+        let mut buf_writer = &mut buf;
+        plugin.write(&mut buf_writer).unwrap();
+
+        assert_eq!(buf, EXPECTED_PLUGIN);
     }
 }
