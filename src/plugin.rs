@@ -18,6 +18,8 @@ pub struct Plugin {
 
 const HEADER_LENGTH: usize = 300;
 const FLAG_MASTER: u32 = 0x1;
+const VERSION_1_2: f32 = 1.20000004768371582031;
+const VERSION_1_3: f32 = 1.29999995231628417969;
 
 impl Plugin {
     pub fn read<T: Read>(f: &mut T) -> io::Result<Plugin> {
@@ -99,5 +101,18 @@ impl Plugin {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
+    static TEST_PLUGIN: &[u8] = include_bytes!("test/multipatch.esp");
+
+    #[test]
+    fn read_plugin() {
+        let plugin = Plugin::read(&mut TEST_PLUGIN.as_ref()).unwrap();
+        assert_eq!(plugin.version, VERSION_1_3);
+        assert!(!plugin.is_master);
+        assert_eq!(plugin.author, "tes3cmd multipatch");
+        assert_eq!(plugin.description, "options: cellnames,fogbug,merge_lists,summons_persist");
+        assert_eq!(plugin.masters.len(), 0);
+        assert_eq!(plugin.records.len(), 8);
+    }
 }
