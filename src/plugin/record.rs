@@ -278,6 +278,25 @@ impl Record {
         str::from_utf8(&self.name).unwrap_or("<invalid>")
     }
 
+    pub fn id(&self) -> Option<&str> {
+        match &self.name {
+            b"CELL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL" | b"SSCR" | b"TES3" => None,
+            _ => {
+                let mut id = None;
+                for field in self.fields.iter() {
+                    if field.name() == b"NAME" {
+                        id = match &self.name {
+                            b"GMST" | b"WEAP" => field.get_string().ok(),
+                            _ => field.get_zstring().ok(),
+                        };
+                        break;
+                    }
+                }
+                id
+            },
+        }
+    }
+
     pub fn add_field(&mut self, field: Field) {
         if field.name() == b"DELE" {
             // we'll add this field automatically based on the deleted flag, so don't add it to

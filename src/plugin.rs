@@ -1,11 +1,33 @@
+use std::cell::{Ref, RefMut, RefCell};
+use std::collections::HashMap;
+use std::error;
+use std::fmt;
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Write, BufWriter};
+use std::rc::Rc;
 use std::str;
 
 pub mod record;
 pub use record::*;
 use super::common::*;
+
+#[derive(Debug)]
+pub enum PluginError {
+    DuplicateId(String),
+    DuplicateMaster(String),
+}
+
+impl fmt::Display for PluginError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PluginError::DuplicateId(id) => write!(f, "ID {} already in use", id),
+            PluginError::DuplicateMaster(name) => write!(f, "Master {} already present", name),
+        }
+    }
+}
+
+impl error::Error for PluginError {}
 
 pub struct Plugin {
     version: f32,
@@ -13,7 +35,8 @@ pub struct Plugin {
     author: String,
     description: String,
     masters: Vec<(String, u64)>,
-    records: Vec<Record>,
+    records: Vec<Rc<RefCell<Record>>>,
+    id_map: HashMap<String, Rc<RefCell<Record>>>,
 }
 
 const HEADER_LENGTH: usize = 300;
@@ -24,6 +47,7 @@ const FLAG_MASTER: u32 = 0x1;
 pub const VERSION_1_2: f32 = 1.20000004768371582031;
 pub const VERSION_1_3: f32 = 1.29999995231628417969;
 
+// FIXME: figure out how to handle it if the ID of a record changes after being put in the map
 impl Plugin {
     pub fn new(author: String, description: String) -> Plugin {
         Plugin {
@@ -33,6 +57,7 @@ impl Plugin {
             description,
             masters: vec![],
             records: vec![],
+            id_map: HashMap::new(),
         }
     }
 
@@ -61,9 +86,18 @@ impl Plugin {
         let flags = extract!(head_reader as u32)?;
         let author = extract_string(AUTHOR_LENGTH, &mut head_reader)?;
         let description = extract_string(DESCRIPTION_LENGTH, &mut head_reader)?;
-        let num_records = extract!(head_reader as u32)?;
+        let num_records = extract!(head_reader as u32)? as usize;
 
-        let mut masters = vec![];
+        let mut plugin = Plugin {
+            version,
+            is_master: flags & FLAG_MASTER != 0,
+            author,
+            description,
+            masters: vec![],
+            records: Vec::with_capacity(num_records),
+            id_map: HashMap::with_capacity(num_records),
+        };
+
         let mut master_name = None;
         while let Some(field) = fields.next() {
             match field.name() {
@@ -78,7 +112,7 @@ impl Plugin {
                 b"DATA" => {
                     if let Some(name) = master_name {
                         let size = field.get_u64().ok_or(io_error("Invalid master size"))?;
-                        masters.push((name, size));
+                        plugin.add_master(name, size).map_err(|e| io_error(&format!("Duplicate masters: {}", e)))?;
                         master_name = None;
                     } else {
                         return Err(io_error("Data field without master"));
@@ -92,19 +126,11 @@ impl Plugin {
             return Err(io_error(&format!("Missing size for master {}", name)));
         }
 
-        let mut records = Vec::with_capacity(num_records as usize);
         for _ in 0..num_records {
-            records.push(Record::read(f)?);
+            plugin.add_record(Record::read(f)?).map_err(|e| io_error(&format!("Duplicate ID: {}", e)))?;
         }
 
-        Ok(Plugin {
-            version,
-            is_master: flags & FLAG_MASTER != 0,
-            author,
-            description,
-            masters,
-            records,
-        })
+        Ok(plugin)
     }
 
     pub fn load_file(path: &str) -> io::Result<Plugin> {
@@ -113,18 +139,36 @@ impl Plugin {
         Plugin::read(&mut reader)
     }
 
-    pub fn add_master(&mut self, name: String, size: u64) -> bool {
+    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), PluginError> {
         // don't add it if it's already in the list
         if !self.masters.iter().any(|m| m.0 == name) {
             self.masters.push((name, size));
-            true
+            Ok(())
         } else {
-            false
+            Err(PluginError::DuplicateMaster(name))
         }
     }
 
-    pub fn add_record(&mut self, record: Record) {
-        self.records.push(record);
+    pub fn add_record(&mut self, record: Record) -> Result<(), PluginError> {
+        let r = Rc::new(RefCell::new(record));
+        if let Some(id) = r.borrow().id() {
+            let key = String::from(id);
+            if self.id_map.contains_key(id) {
+                return Err(PluginError::DuplicateId(key));
+            }
+
+            self.id_map.insert(key, Rc::clone(&r));
+        }
+        self.records.push(r);
+        Ok(())
+    }
+
+    pub fn get_record(&self, id: &str) -> Option<Ref<Record>> {
+        self.id_map.get(id).map(|r| r.borrow())
+    }
+
+    pub fn get_record_mut(&self, id: &str) -> Option<RefMut<Record>> {
+        self.id_map.get(id).map(|r| r.borrow_mut())
     }
 
     pub fn write<T: Write>(&self, f: &mut T) -> io::Result<()> {
@@ -149,10 +193,16 @@ impl Plugin {
         header.write(f)?;
 
         for record in self.records.iter() {
-            record.write(f)?;
+            record.borrow().write(f)?;
         }
 
         Ok(())
+    }
+
+    pub fn save_file(&self, path: &str) -> io::Result<()> {
+        let f = File::create(path)?;
+        let mut writer = BufWriter::new(f);
+        self.write(&mut writer)
     }
 }
 
@@ -179,17 +229,35 @@ mod tests {
         let mut buf: Vec<u8> = Vec::with_capacity(EXPECTED_PLUGIN.len());
         let mut plugin = Plugin::new(String::from("test"), String::from("This is an empty test plugin"));
         plugin.is_master = true;
-        plugin.add_master(String::from("Morrowind.esm"), 79837557);
+        plugin.add_master(String::from("Morrowind.esm"), 79837557).unwrap();
 
         let mut test_record = Record::new(b"GMST");
         test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")));
         test_record.add_field(Field::new_i32(b"INTV", -50));
-        plugin.add_record(test_record);
+        plugin.add_record(test_record).unwrap();
 
         // TODO: I tried a couple different ways to do this in one line, but none of them worked and I couldn't figure out why
         let mut buf_writer = &mut buf;
         plugin.write(&mut buf_writer).unwrap();
 
         assert_eq!(buf, EXPECTED_PLUGIN);
+    }
+
+    #[test]
+    fn fetch_record() {
+        let plugin = Plugin::read(&mut TEST_PLUGIN.as_ref()).unwrap();
+        let record = plugin.get_record("BM_wolf_grey_summon").unwrap();
+        for field in record.iter() {
+            if let Some(expected) = match field.name() {
+                b"NAME" => Some("BM_wolf_grey_summon"),
+                b"MODL" => Some("r\\Wolf_Black.NIF"),
+                b"CNAM" => Some("BM_wolf_grey"),
+                b"FNAM" => Some("Wolf"),
+                _ => None,
+            } {
+                let value = field.get_zstring().unwrap();
+                assert_eq!(value, expected);
+            }
+        }
     }
 }
