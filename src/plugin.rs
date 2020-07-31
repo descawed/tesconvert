@@ -42,8 +42,8 @@ impl Plugin {
         let mut head_reader: &[u8] = header_data.as_ref();
         let version = extract!(head_reader as f32)?;
         let flags = extract!(head_reader as u32)?;
-        let author = extract_str(32, &mut head_reader)?;
-        let description = extract_str(256, &mut head_reader)?;
+        let author = extract_string(32, &mut head_reader)?;
+        let description = extract_string(256, &mut head_reader)?;
         let num_records = extract!(head_reader as u32)?;
 
         let mut masters = vec![];

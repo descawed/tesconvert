@@ -16,7 +16,7 @@ macro_rules! extract {
     };
 }
 
-pub fn extract_str<T: Read>(size: usize, f: &mut T) -> io::Result<String> {
+pub fn extract_string<T: Read>(size: usize, f: &mut T) -> io::Result<String> {
     let mut buf = vec![0u8; size];
     f.read_exact(&mut buf)?;
     // ensure there is exactly one null byte at the end of the string
