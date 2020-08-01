@@ -224,8 +224,6 @@ impl Record {
         // read in the field data
         f.read_exact(&mut data)?;
 
-        // TODO: all these Field constructions are going to make copies of the stuff in data,
-        //  but we could actually just hand over ownership of the contents of this vector.
         let mut data_ref: &[u8] = data.as_ref();
         while size > 0 {
             let field = Field::read(&mut data_ref)?;
