@@ -318,6 +318,10 @@ impl Record {
             + self.field_size()
     }
 
+    pub fn len(&self) -> usize {
+        self.fields.len()
+    }
+
     pub fn into_iter(self) -> impl Iterator<Item = Field> {
         self.fields.into_iter()
     }

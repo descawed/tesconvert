@@ -245,6 +245,7 @@ mod tests {
     fn fetch_record() {
         let plugin = Plugin::read(&mut TEST_PLUGIN.as_ref()).unwrap();
         let record = plugin.get_record("BM_wolf_grey_summon").unwrap();
+        assert_eq!(record.len(), 9);
         for field in record.iter() {
             if let Some(expected) = match field.name() {
                 b"NAME" => Some("BM_wolf_grey_summon"),
