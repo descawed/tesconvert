@@ -61,8 +61,8 @@ impl Plugin {
         }
     }
 
-    pub fn read<T: Read>(f: &mut T) -> io::Result<Plugin> {
-        let header = Record::read(f)?;
+    pub fn read<T: Read>(mut f: T) -> io::Result<Plugin> {
+        let header = Record::read(&mut f)?;
         if header.name() != b"TES3" {
             return Err(io_error(&format!("Expected TES3 record, got {}", header.display_name())));
         }
@@ -127,7 +127,7 @@ impl Plugin {
         }
 
         for _ in 0..num_records {
-            plugin.add_record(Record::read(f)?).map_err(|e| io_error(&format!("Duplicate ID: {}", e)))?;
+            plugin.add_record(Record::read(&mut f)?).map_err(|e| io_error(&format!("Duplicate ID: {}", e)))?;
         }
 
         Ok(plugin)
@@ -171,7 +171,7 @@ impl Plugin {
         self.id_map.get(id).map(|r| r.borrow_mut())
     }
 
-    pub fn write<T: Write>(&self, f: &mut T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let mut header = Record::new(b"TES3");
         let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LENGTH);
         let mut buf_writer = &mut buf;
@@ -190,10 +190,10 @@ impl Plugin {
             header.add_field(Field::new_u64(b"DATA", *size));
         }
 
-        header.write(f)?;
+        header.write(&mut f)?;
 
         for record in self.records.iter() {
-            record.borrow().write(f)?;
+            record.borrow().write(&mut f)?;
         }
 
         Ok(())

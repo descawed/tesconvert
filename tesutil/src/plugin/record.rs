@@ -69,7 +69,7 @@ impl Field {
         })
     }
 
-    pub fn read<T: Read>(f: &mut T) -> io::Result<Field> {
+    pub fn read<T: Read>(mut f: T) -> io::Result<Field> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -93,7 +93,7 @@ impl Field {
         self.name.len() + size_of::<u32>() + self.data.len()
     }
 
-    pub fn write<T: Write>(&self, f: &mut T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let len = self.data.len();
 
         if len > u32::MAX as usize {
@@ -197,7 +197,7 @@ impl Record {
         }
     }
 
-    pub fn read<T: Read>(f: &mut T) -> io::Result<Record> {
+    pub fn read<T: Read>(mut f: T) -> io::Result<Record> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -239,7 +239,7 @@ impl Record {
         Ok(record)
     }
 
-    pub fn write<T: Write>(&self, f: &mut T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let size = self.field_size();
 
         if size > u32::MAX as usize {
@@ -257,12 +257,12 @@ impl Record {
         f.write_exact(&flags.to_le_bytes())?;
 
         for field in self.fields.iter() {
-            field.write(f)?;
+            field.write(&mut f)?;
         }
 
         if self.is_deleted {
             let del = Field::new(b"DELE", vec![0; 4]);
-            del.write(f)?;
+            del.write(&mut f)?;
         }
 
         Ok(())
