@@ -5,8 +5,9 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
 
-use crate::common::*;
+use crate::*;
 
+#[derive(Debug)]
 pub struct Field{
     name: [u8; 4],
     data: Vec<u8>,
@@ -47,6 +48,7 @@ macro_rules! from_num {
 }
 
 impl Field {
+    // violates C-CALLER-CONTROL
     pub fn new(name: &[u8; 4], data: Vec<u8>) -> Field {
         Field {
             name: name.clone(),
@@ -115,6 +117,8 @@ impl Field {
         self.data
     }
 
+    // C-VALIDATE: change these setters to validate that the length of data doesn't exceed u32::MAX
+    // and then remove the check in write
     pub fn set(&mut self, data: Vec<u8>) {
         self.data = data;
     }
@@ -174,6 +178,7 @@ const FLAG_PERSISTENT: u32 = 0x0400;
 const FLAG_INITIALLY_DISABLED: u32 = 0x0800;
 const FLAG_BLOCKED: u32 = 0x2000;
 
+#[derive(Debug)]
 pub struct Record{
     name: [u8; 4],
     pub is_deleted: bool,

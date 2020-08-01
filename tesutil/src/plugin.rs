@@ -10,7 +10,8 @@ use std::str;
 
 pub mod record;
 pub use record::*;
-use super::common::*;
+
+use crate::*;
 
 #[derive(Debug)]
 pub enum PluginError {
@@ -29,6 +30,7 @@ impl fmt::Display for PluginError {
 
 impl error::Error for PluginError {}
 
+#[derive(Debug)]
 pub struct Plugin {
     version: f32,
     pub is_master: bool,
