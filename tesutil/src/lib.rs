@@ -98,8 +98,7 @@ mod tests {
     #[test]
     fn test_extract_string() {
         let data = b"abcd\0\0\0\0\0\0";
-        let reader = &mut data.as_ref();
-        let s = extract_string(10, reader).unwrap();
+        let s = extract_string(10, &mut data.as_ref()).unwrap();
         assert_eq!(s, "abcd");
     }
 
