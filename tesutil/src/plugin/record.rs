@@ -1,9 +1,11 @@
 use std::error;
-use std::ffi::{CStr, CString, NulError};
+use std::ffi::{CStr, CString};
 use std::io;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
+
+use len_trait::len::Len;
 
 use crate::*;
 
@@ -47,24 +49,41 @@ macro_rules! from_num {
     )
 }
 
+const MAX_DATA: usize = u32::MAX as usize;
+
+fn check_size<T: Len + ?Sized>(data: &T, msg: &str) -> Result<(), TesError> {
+    if data.len() > MAX_DATA {
+        Err(TesError::LimitExceeded {
+            description: String::from(msg),
+            max_size: MAX_DATA,
+            actual_size: data.len(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 impl Field {
     // violates C-CALLER-CONTROL
-    pub fn new(name: &[u8; 4], data: Vec<u8>) -> Field {
-        Field {
+    pub fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, TesError> {
+        check_size(&data, "field data too large")?;
+        Ok(Field {
             name: name.clone(),
             data,
-        }
+        })
     }
 
-    pub fn new_string(name: &[u8; 4], data: String) -> Field {
-        Field {
+    pub fn new_string(name: &[u8; 4], data: String) -> Result<Field, TesError> {
+        check_size(&data, "field data too large")?;
+        Ok(Field {
             name: name.clone(),
             data: data.into_bytes(),
-        }
+        })
     }
 
-    pub fn new_zstring(name: &[u8; 4], data: String) -> Result<Field, NulError> {
+    pub fn new_zstring(name: &[u8; 4], data: String) -> Result<Field, Box<dyn error::Error>> {
         let zstr = CString::new(data)?;
+        check_size(zstr.as_bytes_with_nul(), "field data too large")?;
         Ok(Field {
             name: name.clone(),
             data: zstr.into_bytes_with_nul(),
@@ -98,10 +117,6 @@ impl Field {
     pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let len = self.data.len();
 
-        if len > u32::MAX as usize {
-            return Err(io_error("Field data too long to be serialized"));
-        }
-
         f.write_exact(&self.name)?;
         f.write_exact(&(len as u32).to_le_bytes())?;
         f.write_exact(&self.data)?;
@@ -117,10 +132,10 @@ impl Field {
         self.data
     }
 
-    // C-VALIDATE: change these setters to validate that the length of data doesn't exceed u32::MAX
-    // and then remove the check in write
-    pub fn set(&mut self, data: Vec<u8>) {
+    pub fn set(&mut self, data: Vec<u8>) -> Result<(), TesError> {
+        check_size(&data, "field data too large")?;
         self.data = data;
+        Ok(())
     }
 
     // FIXME: the below string functions will fail on non-English versions of the game
@@ -128,8 +143,10 @@ impl Field {
         str::from_utf8(&self.data[..])
     }
 
-    pub fn set_string(&mut self, data: String) {
+    pub fn set_string(&mut self, data: String) -> Result<(), TesError> {
+        check_size(&data, "field data too large")?;
         self.data = data.into_bytes();
+        Ok(())
     }
 
     pub fn get_zstring(&self) -> Result<&str, Box<dyn error::Error>> {
@@ -138,8 +155,9 @@ impl Field {
         Ok(s)
     }
 
-    pub fn set_zstring(&mut self, data: String) -> Result<(), NulError> {
+    pub fn set_zstring(&mut self, data: String) -> Result<(), Box<dyn error::Error>> {
         let zstr = CString::new(data)?;
+        check_size(zstr.as_bytes_with_nul(), "field data too large")?;
         self.data = zstr.into_bytes_with_nul();
         Ok(())
     }
@@ -247,8 +265,12 @@ impl Record {
     pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let size = self.field_size();
 
-        if size > u32::MAX as usize {
-            return Err(io_error("Record data too long to be serialized"));
+        if size > MAX_DATA {
+            return Err(io_error(TesError::LimitExceeded {
+                description: String::from("Record data too long to be serialized"),
+                max_size: MAX_DATA,
+                actual_size: size,
+            }));
         }
 
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
@@ -266,7 +288,7 @@ impl Record {
         }
 
         if self.is_deleted {
-            let del = Field::new(b"DELE", vec![0; 4]);
+            let del = Field::new(b"DELE", vec![0; 4]).unwrap();
             del.write(&mut f)?;
         }
 
@@ -348,7 +370,7 @@ mod tests{
 
     #[test]
     fn create_field() {
-        Field::new(b"NAME", vec![]);
+        Field::new(b"NAME", vec![]).unwrap();
     }
 
     #[test]
@@ -378,7 +400,7 @@ mod tests{
 
     #[test]
     fn write_field() {
-        let field = Field::new(b"NAME", b"PCHasCrimeGold\0".to_vec());
+        let field = Field::new(b"NAME", b"PCHasCrimeGold\0".to_vec()).unwrap();
         let mut buf = vec![];
         field.write(&mut buf).unwrap();
         assert_eq!(buf, *b"NAME\x0f\0\0\0PCHasCrimeGold\0");
@@ -418,28 +440,28 @@ mod tests{
 
     #[test]
     fn set_zstring_field() {
-        let mut field = Field::new(b"NAME", vec![]);
+        let mut field = Field::new(b"NAME", vec![]).unwrap();
         field.set_zstring(String::from("sWerewolfRefusal")).unwrap();
         assert_eq!(field.data, *b"sWerewolfRefusal\0");
     }
 
     #[test]
     fn set_string_field() {
-        let mut field = Field::new(b"BNAM", vec![]);
-        field.set_string(String::from("a_steel_helmet"));
+        let mut field = Field::new(b"BNAM", vec![]).unwrap();
+        field.set_string(String::from("a_steel_helmet")).unwrap();
         assert_eq!(field.data, *b"a_steel_helmet");
     }
 
     #[test]
     fn set_raw_field() {
-        let mut field = Field::new(b"ALDT", vec![]);
-        field.set(b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0".to_vec());
+        let mut field = Field::new(b"ALDT", vec![]).unwrap();
+        field.set(b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0".to_vec()).unwrap();
         assert_eq!(field.data, *b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0");
     }
 
     #[test]
     fn set_numeric_field() {
-        let mut field = Field::new(b"XSCL", vec![]);
+        let mut field = Field::new(b"XSCL", vec![]).unwrap();
         field.set_f32(0.75);
         assert_eq!(field.data, *b"\0\0\x40\x3f");
     }
@@ -468,8 +490,8 @@ mod tests{
     fn write_record() {
         let mut record = Record::new(b"DIAL");
         record.is_deleted = true;
-        record.add_field(Field::new(b"NAME", b"Berel Sala\0".to_vec()));
-        record.add_field(Field::new(b"DATA", vec![0; 4]));
+        record.add_field(Field::new(b"NAME", b"Berel Sala\0".to_vec()).unwrap());
+        record.add_field(Field::new(b"DATA", vec![0; 4]).unwrap());
 
         let mut buf = vec![];
         record.write(&mut buf).unwrap();

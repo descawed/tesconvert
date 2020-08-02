@@ -1,34 +1,15 @@
 use std::cell::{Ref, RefMut, RefCell};
 use std::collections::HashMap;
-use std::error;
-use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read, Write, BufWriter};
 use std::rc::Rc;
 use std::str;
 
-pub mod record;
+mod record;
 pub use record::*;
 
 use crate::*;
-
-#[derive(Debug)]
-pub enum PluginError {
-    DuplicateId(String),
-    DuplicateMaster(String),
-}
-
-impl fmt::Display for PluginError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PluginError::DuplicateId(id) => write!(f, "ID {} already in use", id),
-            PluginError::DuplicateMaster(name) => write!(f, "Master {} already present", name),
-        }
-    }
-}
-
-impl error::Error for PluginError {}
 
 #[derive(Debug)]
 pub struct Plugin {
@@ -66,7 +47,7 @@ impl Plugin {
     pub fn read<T: Read>(mut f: T) -> io::Result<Plugin> {
         let header = Record::read(&mut f)?;
         if header.name() != b"TES3" {
-            return Err(io_error(&format!("Expected TES3 record, got {}", header.display_name())));
+            return Err(io_error(format!("Expected TES3 record, got {}", header.display_name())));
         }
 
         let mut fields = header.into_iter();
@@ -105,31 +86,31 @@ impl Plugin {
             match field.name() {
                 b"MAST" => {
                     if let Some(name) = master_name {
-                        return Err(io_error(&format!("Missing size for master {}", name)));
+                        return Err(io_error(format!("Missing size for master {}", name)));
                     }
 
-                    let string_name = field.get_zstring().map_err(|e| io_error(&format!("Could not decode master name: {}", e)))?;
+                    let string_name = field.get_zstring().map_err(|e| io_error(format!("Could not decode master name: {}", e)))?;
                     master_name = Some(String::from(string_name));
                 },
                 b"DATA" => {
                     if let Some(name) = master_name {
                         let size = field.get_u64().ok_or(io_error("Invalid master size"))?;
-                        plugin.add_master(name, size).map_err(|e| io_error(&format!("Duplicate masters: {}", e)))?;
+                        plugin.add_master(name, size).map_err(|e| io_error(format!("Duplicate masters: {}", e)))?;
                         master_name = None;
                     } else {
                         return Err(io_error("Data field without master"));
                     }
                 },
-                _ => return Err(io_error(&format!("Unexpected field in header: {}", field.display_name()))),
+                _ => return Err(io_error(format!("Unexpected field in header: {}", field.display_name()))),
             }
         }
 
         if let Some(name) = master_name {
-            return Err(io_error(&format!("Missing size for master {}", name)));
+            return Err(io_error(format!("Missing size for master {}", name)));
         }
 
         for _ in 0..num_records {
-            plugin.add_record(Record::read(&mut f)?).map_err(|e| io_error(&format!("Duplicate ID: {}", e)))?;
+            plugin.add_record(Record::read(&mut f)?).map_err(|e| io_error(format!("Duplicate ID: {}", e)))?;
         }
 
         Ok(plugin)
@@ -141,22 +122,22 @@ impl Plugin {
         Plugin::read(&mut reader)
     }
 
-    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), PluginError> {
+    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), TesError> {
         // don't add it if it's already in the list
         if !self.masters.iter().any(|m| m.0 == name) {
             self.masters.push((name, size));
             Ok(())
         } else {
-            Err(PluginError::DuplicateMaster(name))
+            Err(TesError::DuplicateMaster(name))
         }
     }
 
-    pub fn add_record(&mut self, record: Record) -> Result<(), PluginError> {
+    pub fn add_record(&mut self, record: Record) -> Result<(), TesError> {
         let r = Rc::new(RefCell::new(record));
         if let Some(id) = r.borrow().id() {
             let key = String::from(id);
             if self.id_map.contains_key(id) {
-                return Err(PluginError::DuplicateId(key));
+                return Err(TesError::DuplicateId(key));
             }
 
             self.id_map.insert(key, Rc::clone(&r));
@@ -184,10 +165,10 @@ impl Plugin {
         serialize_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
         serialize!(self.records.len() as u32 => buf_writer)?;
 
-        header.add_field(Field::new(b"HEDR", buf));
+        header.add_field(Field::new(b"HEDR", buf).unwrap());
 
         for (name, size) in self.masters.iter() {
-            let mast = Field::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(&format!("Failed to encode master file name: {}", e)))?;
+            let mast = Field::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(format!("Failed to encode master file name: {}", e)))?;
             header.add_field(mast);
             header.add_field(Field::new_u64(b"DATA", *size));
         }
@@ -234,7 +215,7 @@ mod tests {
         plugin.add_master(String::from("Morrowind.esm"), 79837557).unwrap();
 
         let mut test_record = Record::new(b"GMST");
-        test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")));
+        test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")).unwrap());
         test_record.add_field(Field::new_i32(b"INTV", -50));
         plugin.add_record(test_record).unwrap();
 

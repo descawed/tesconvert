@@ -1,6 +1,8 @@
 pub mod plugin;
 
+use std::error;
 use std::ffi::CStr;
+use std::fmt;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::iter;
@@ -26,6 +28,27 @@ macro_rules! serialize {
     }
 }
 
+#[derive(Debug)]
+pub enum TesError {
+    DuplicateId(String),
+    DuplicateMaster(String),
+    LimitExceeded { description: String, max_size: usize, actual_size: usize },
+}
+
+impl fmt::Display for TesError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TesError::DuplicateId(id) => write!(f, "ID {} already in use", id),
+            TesError::DuplicateMaster(name) => write!(f, "Master {} already present", name),
+            TesError::LimitExceeded {
+                description, max_size, actual_size
+            } => write!(f, "Limit exceeded: {}. Max size {}, actual size {}", description, max_size, actual_size),
+        }
+    }
+}
+
+impl error::Error for TesError {}
+
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
 trait WriteExact {
     fn write_exact(&mut self, buf: &[u8]) -> io::Result<()>;
@@ -44,24 +67,26 @@ impl<T: Write> WriteExact for T {
     }
 }
 
-fn extract_string<T: Read>(size: usize, f: &mut T) -> io::Result<String> {
+fn extract_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
     let mut buf = vec![0u8; size];
     f.read_exact(&mut buf)?;
     // ensure there is exactly one null byte at the end of the string
     let chars: Vec<u8> = buf.into_iter().take_while(|b| *b != 0).chain(iter::once(0)).collect();
-    let cs = CStr::from_bytes_with_nul(&chars).map_err(|e| io_error(&format!("Invalid null-terminated string: {}", e)))?;
+    let cs = CStr::from_bytes_with_nul(&chars).map_err(|e| io_error(format!("Invalid null-terminated string: {}", e)))?;
     match cs.to_str() {
         Ok(s) => Ok(String::from(s)),
-        Err(e) => Err(io_error(&format!("Failed to decode string: {}", e))),
+        Err(e) => Err(io_error(format!("Failed to decode string: {}", e))),
     }
 }
 
-fn serialize_str<T: Write>(s: &str, size: usize, f: &mut T) -> io::Result<()> {
+fn serialize_str<T: Write>(s: &str, size: usize, mut f: T) -> io::Result<()> {
     let mut buf = vec![0u8; size];
     buf[..s.len()].copy_from_slice(s.as_bytes());
     f.write_exact(&buf)
 }
 
-fn io_error(msg: &str) -> Error {
-    Error::new(ErrorKind::InvalidData, msg)
+fn io_error<E>(e: E) -> Error
+where E: Into<Box<dyn error::Error + Send + Sync>>
+{
+    Error::new(ErrorKind::InvalidData, e)
 }
