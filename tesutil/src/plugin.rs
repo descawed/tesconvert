@@ -12,6 +12,27 @@ pub use record::*;
 use crate::*;
 
 #[derive(Debug)]
+pub enum PluginError {
+    DuplicateId(String),
+    DuplicateMaster(String),
+    LimitExceeded { description: String, max_size: usize, actual_size: usize },
+}
+
+impl fmt::Display for PluginError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PluginError::DuplicateId(id) => write!(f, "ID {} already in use", id),
+            PluginError::DuplicateMaster(name) => write!(f, "Master {} already present", name),
+            PluginError::LimitExceeded {
+                description, max_size, actual_size
+            } => write!(f, "Limit exceeded: {}. Max size {}, actual size {}", description, max_size, actual_size),
+        }
+    }
+}
+
+impl error::Error for PluginError {}
+
+#[derive(Debug)]
 pub struct Plugin {
     version: f32,
     pub is_master: bool,
@@ -122,22 +143,22 @@ impl Plugin {
         Plugin::read(&mut reader)
     }
 
-    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), TesError> {
+    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), PluginError> {
         // don't add it if it's already in the list
         if !self.masters.iter().any(|m| m.0 == name) {
             self.masters.push((name, size));
             Ok(())
         } else {
-            Err(TesError::DuplicateMaster(name))
+            Err(PluginError::DuplicateMaster(name))
         }
     }
 
-    pub fn add_record(&mut self, record: Record) -> Result<(), TesError> {
+    pub fn add_record(&mut self, record: Record) -> Result<(), PluginError> {
         let r = Rc::new(RefCell::new(record));
         if let Some(id) = r.borrow().id() {
             let key = String::from(id);
             if self.id_map.contains_key(id) {
-                return Err(TesError::DuplicateId(key));
+                return Err(PluginError::DuplicateId(key));
             }
 
             self.id_map.insert(key, Rc::clone(&r));

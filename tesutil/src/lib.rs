@@ -1,3 +1,10 @@
+///! Utilities for working with the files of The Elder Scrolls III and IV
+///!
+///! This crate contains utilities for reading and writing file formats associated with The Elder
+///! Scrolls III: Morrowind and The Elder Scrolls IV: Oblivion. Currently, only plugin files (.esm,
+///! .esp, .ess) are implemented, but support for archives (.bsa) will be added in the future, and
+///! potentially other formats as well.
+
 pub mod plugin;
 
 use std::error;
@@ -27,27 +34,6 @@ macro_rules! serialize {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum TesError {
-    DuplicateId(String),
-    DuplicateMaster(String),
-    LimitExceeded { description: String, max_size: usize, actual_size: usize },
-}
-
-impl fmt::Display for TesError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TesError::DuplicateId(id) => write!(f, "ID {} already in use", id),
-            TesError::DuplicateMaster(name) => write!(f, "Master {} already present", name),
-            TesError::LimitExceeded {
-                description, max_size, actual_size
-            } => write!(f, "Limit exceeded: {}. Max size {}, actual size {}", description, max_size, actual_size),
-        }
-    }
-}
-
-impl error::Error for TesError {}
 
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
 trait WriteExact {

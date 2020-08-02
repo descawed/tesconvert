@@ -8,6 +8,7 @@ use std::str;
 use len_trait::len::Len;
 
 use crate::*;
+use super::PluginError;
 
 #[derive(Debug)]
 pub struct Field{
@@ -51,9 +52,9 @@ macro_rules! from_num {
 
 const MAX_DATA: usize = u32::MAX as usize;
 
-fn check_size<T: Len + ?Sized>(data: &T, msg: &str) -> Result<(), TesError> {
+fn check_size<T: Len + ?Sized>(data: &T, msg: &str) -> Result<(), PluginError> {
     if data.len() > MAX_DATA {
-        Err(TesError::LimitExceeded {
+        Err(PluginError::LimitExceeded {
             description: String::from(msg),
             max_size: MAX_DATA,
             actual_size: data.len(),
@@ -65,7 +66,7 @@ fn check_size<T: Len + ?Sized>(data: &T, msg: &str) -> Result<(), TesError> {
 
 impl Field {
     // violates C-CALLER-CONTROL
-    pub fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, TesError> {
+    pub fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, PluginError> {
         check_size(&data, "field data too large")?;
         Ok(Field {
             name: name.clone(),
@@ -73,7 +74,7 @@ impl Field {
         })
     }
 
-    pub fn new_string(name: &[u8; 4], data: String) -> Result<Field, TesError> {
+    pub fn new_string(name: &[u8; 4], data: String) -> Result<Field, PluginError> {
         check_size(&data, "field data too large")?;
         Ok(Field {
             name: name.clone(),
@@ -132,7 +133,7 @@ impl Field {
         self.data
     }
 
-    pub fn set(&mut self, data: Vec<u8>) -> Result<(), TesError> {
+    pub fn set(&mut self, data: Vec<u8>) -> Result<(), PluginError> {
         check_size(&data, "field data too large")?;
         self.data = data;
         Ok(())
@@ -143,7 +144,7 @@ impl Field {
         str::from_utf8(&self.data[..])
     }
 
-    pub fn set_string(&mut self, data: String) -> Result<(), TesError> {
+    pub fn set_string(&mut self, data: String) -> Result<(), PluginError> {
         check_size(&data, "field data too large")?;
         self.data = data.into_bytes();
         Ok(())
@@ -266,7 +267,7 @@ impl Record {
         let size = self.field_size();
 
         if size > MAX_DATA {
-            return Err(io_error(TesError::LimitExceeded {
+            return Err(io_error(PluginError::LimitExceeded {
                 description: String::from("Record data too long to be serialized"),
                 max_size: MAX_DATA,
                 actual_size: size,
