@@ -90,3 +90,23 @@ where E: Into<Box<dyn error::Error + Send + Sync>>
 {
     Error::new(ErrorKind::InvalidData, e)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_string() {
+        let data = b"abcd\0\0\0\0\0\0";
+        let reader = &mut data.as_ref();
+        let s = extract_string(10, reader).unwrap();
+        assert_eq!(s, "abcd");
+    }
+
+    #[test]
+    fn test_serialize_str() {
+        let mut buf = [0u8; 10];
+        serialize_str("abcd", 10, &mut buf.as_mut()).unwrap();
+        assert_eq!(buf, *b"abcd\0\0\0\0\0\0");
+    }
+}
