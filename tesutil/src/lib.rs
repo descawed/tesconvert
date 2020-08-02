@@ -1,9 +1,9 @@
-///! Utilities for working with the files of The Elder Scrolls III and IV
-///!
-///! This crate contains utilities for reading and writing file formats associated with The Elder
-///! Scrolls III: Morrowind and The Elder Scrolls IV: Oblivion. Currently, only plugin files (.esm,
-///! .esp, .ess) are implemented, but support for archives (.bsa) will be added in the future, and
-///! potentially other formats as well.
+//! Utilities for working with the files of The Elder Scrolls III and IV
+//!
+//! This crate contains utilities for reading and writing file formats associated with The Elder
+//! Scrolls III: Morrowind and The Elder Scrolls IV: Oblivion. Currently, only plugin files (.esm,
+//! .esp, .ess) are implemented, but support for archives (.bsa) will be added in the future, and
+//! potentially other formats as well.
 
 pub mod plugin;
 
@@ -22,7 +22,7 @@ macro_rules! extract {
             let mut buf = [0u8; std::mem::size_of::<$t>()];
             $f.read_exact(&mut buf).map(move |_| <$t>::from_le_bytes(buf))
         }
-    };
+    }
 }
 
 #[macro_export]

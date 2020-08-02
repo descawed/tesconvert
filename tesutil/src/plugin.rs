@@ -1,3 +1,13 @@
+//! Types for manipulating plugin files
+//!
+//! This module contains types for reading and writing plugin files (.esm, .esp, and .ess).
+//! [`Plugin`] represents a plugin file. [`Record`] represents an individual record in a plugin
+//! file, and [`Field`] represents a field in a record.
+//!
+//! [`Plugin`]: struct.Plugin.html
+//! [`Record`]: struct.Record.html
+//! [`Field`]: struct.Field.html
+
 use std::cell::{Ref, RefMut, RefCell};
 use std::collections::HashMap;
 use std::fs::File;
@@ -6,15 +16,38 @@ use std::io::{BufReader, Read, Write, BufWriter};
 use std::rc::Rc;
 use std::str;
 
+use len_trait::len::Len;
+
 mod record;
 pub use record::*;
 
 use crate::*;
 
+fn check_size<T: Len + ?Sized>(data: &T, max_size: usize, msg: &str) -> Result<(), PluginError> {
+    if data.len() > max_size {
+        Err(PluginError::LimitExceeded {
+            description: String::from(msg),
+            max_size,
+            actual_size: data.len(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
+/// Error type for plugin errors
+///
+/// A type for errors in plugin files that aren't represented well by `std` error types. Methods
+/// that return a [`std::io::Error`] will sometimes wrap a `PluginError` in that error.
+///
+/// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
 #[derive(Debug)]
 pub enum PluginError {
+    /// Multiple records in the plugin have the same ID string
     DuplicateId(String),
+    /// The same master file is referenced by the plugin multiple times
     DuplicateMaster(String),
+    /// A size limit, e.g. on a record or field, has been exceeded
     LimitExceeded { description: String, max_size: usize, actual_size: usize },
 }
 
@@ -32,9 +65,33 @@ impl fmt::Display for PluginError {
 
 impl error::Error for PluginError {}
 
+/// Represents a plugin file
+///
+/// This type can be used to read and write plugin (mod) files. These include .esm files (masters,
+/// on which other plugins may depend), .esp files (regular plugin files), and .ess files (saves).
+/// Note that the `is_master` flag determines whether a plugin is a master, not the file extension;
+/// using .esm for masters and .esp for non-masters is merely convention.
+///
+/// Plugins consist of a series of records which represent all the different objects in the game
+/// world. Each record consists of one or more fields containing the data and attributes of the
+/// object.
+///
+/// Plugins can be read from a file with [`load_file`] and saved to a file with [`save_file`]. You
+/// can also use [`read`] and [`write`] directly to read a plugin from/write a plugin to a buffer
+/// or any other type implementing [`Read`] or [`Write`], respectively. A new, empty plugin may be
+/// created with [`new`].
+///
+/// [`load_file`]: #method.load_file
+/// [`save_file`]: #method.save_file
+/// [`read`]: #method.read
+/// [`write`]: #method.write
+/// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+/// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+/// [`new`]: #method.new
 #[derive(Debug)]
 pub struct Plugin {
     version: f32,
+    /// Indicates whether this plugin is a master
     pub is_master: bool,
     author: String,
     description: String,
@@ -44,17 +101,60 @@ pub struct Plugin {
 }
 
 const HEADER_LENGTH: usize = 300;
-const AUTHOR_LENGTH: usize = 32;
-const DESCRIPTION_LENGTH: usize = 256;
 const FLAG_MASTER: u32 = 0x1;
 
+/// Maximum length of the plugin author string
+pub const AUTHOR_LENGTH: usize = 32;
+/// Maximum length of the plugin description string
+pub const DESCRIPTION_LENGTH: usize = 256;
+/// Maximum number of records in a plugin
+pub const MAX_RECORDS: usize = u32::MAX as usize;
+
+/// Morrowind version 1.2
+///
+/// Use this instead of a literal `1.2f32` to ensure the correct binary representation.
 pub const VERSION_1_2: f32 = 1.20000004768371582031;
+/// Morrowind version 1.3
+///
+/// Use this instead of a literal `1.3f32` to ensure the correct binary representation.
 pub const VERSION_1_3: f32 = 1.29999995231628417969;
 
-// FIXME: figure out how to handle it if the ID of a record changes after being put in the map
+// FIXME: figure out how to handle the ID of a record changing after being put in the map
 impl Plugin {
-    pub fn new(author: String, description: String) -> Plugin {
-        Plugin {
+    /// Create a new, empty plugin
+    ///
+    /// Add masters and records to the empty plugin with [`add_master`] and [`add_record`]
+    /// respectively. The version of new plugins is always 1.3.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if the length of the author string exceeds
+    /// [`AUTHOR_LENGTH`] or the length of the description string exceeds [`DESCRIPTION_LENGTH`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
+    /// let mut record = Record::new(b"GMST");
+    /// record.add_field(Field::new_string(b"NAME", String::from("iDispKilling"))?);
+    /// record.add_field(Field::new_i32(b"INTV", -50));
+    /// plugin.add_record(record)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`add_master`]: #method.add_master
+    /// [`add_record`]: #method.add_record
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`AUTHOR_LENGTH`]: constant.AUTHOR_LENGTH.html
+    /// [`DESCRIPTION_LENGTH`]: constant.DESCRIPTION_LENGTH.html
+    pub fn new(author: String, description: String) -> Result<Plugin, PluginError> {
+        check_size(&author, AUTHOR_LENGTH, "author value too long")?;
+        check_size(&description, DESCRIPTION_LENGTH, "description value too long")?;
+        Ok(Plugin {
             version: VERSION_1_3,
             is_master: false,
             author,
@@ -62,7 +162,7 @@ impl Plugin {
             masters: vec![],
             records: vec![],
             id_map: HashMap::new(),
-        }
+        })
     }
 
     pub fn read<T: Read>(mut f: T) -> io::Result<Plugin> {
@@ -143,6 +243,30 @@ impl Plugin {
         Plugin::read(&mut reader)
     }
 
+    pub fn version(&self) -> f32 {
+        self.version
+    }
+
+    pub fn author(&self) -> &str {
+        &self.author
+    }
+
+    pub fn set_author(&mut self, author: String) -> Result<(), PluginError> {
+        check_size(&author, AUTHOR_LENGTH, "author value too long")?;
+        self.author = author;
+        Ok(())
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    pub fn set_description(&mut self, description: String) -> Result<(), PluginError> {
+        check_size(&description, DESCRIPTION_LENGTH, "descriptioin value too long")?;
+        self.description = description;
+        Ok(())
+    }
+
     pub fn add_master(&mut self, name: String, size: u64) -> Result<(), PluginError> {
         // don't add it if it's already in the list
         if !self.masters.iter().any(|m| m.0 == name) {
@@ -154,6 +278,8 @@ impl Plugin {
     }
 
     pub fn add_record(&mut self, record: Record) -> Result<(), PluginError> {
+        check_size(&self.records, MAX_RECORDS, "too many records")?;
+
         let r = Rc::new(RefCell::new(record));
         if let Some(id) = r.borrow().id() {
             let key = String::from(id);
@@ -231,7 +357,7 @@ mod tests {
     #[test]
     fn write_plugin() {
         let mut buf: Vec<u8> = Vec::with_capacity(EXPECTED_PLUGIN.len());
-        let mut plugin = Plugin::new(String::from("test"), String::from("This is an empty test plugin"));
+        let mut plugin = Plugin::new(String::from("test"), String::from("This is an empty test plugin")).unwrap();
         plugin.is_master = true;
         plugin.add_master(String::from("Morrowind.esm"), 79837557).unwrap();
 

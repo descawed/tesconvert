@@ -5,10 +5,8 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
 
-use len_trait::len::Len;
-
 use crate::*;
-use super::PluginError;
+use super::{PluginError, check_size};
 
 #[derive(Debug)]
 pub struct Field{
@@ -50,24 +48,12 @@ macro_rules! from_num {
     )
 }
 
-const MAX_DATA: usize = u32::MAX as usize;
-
-fn check_size<T: Len + ?Sized>(data: &T, msg: &str) -> Result<(), PluginError> {
-    if data.len() > MAX_DATA {
-        Err(PluginError::LimitExceeded {
-            description: String::from(msg),
-            max_size: MAX_DATA,
-            actual_size: data.len(),
-        })
-    } else {
-        Ok(())
-    }
-}
+pub const MAX_DATA: usize = u32::MAX as usize;
 
 impl Field {
     // violates C-CALLER-CONTROL
     pub fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, PluginError> {
-        check_size(&data, "field data too large")?;
+        check_size(&data, MAX_DATA, "field data too large")?;
         Ok(Field {
             name: name.clone(),
             data,
@@ -75,7 +61,7 @@ impl Field {
     }
 
     pub fn new_string(name: &[u8; 4], data: String) -> Result<Field, PluginError> {
-        check_size(&data, "field data too large")?;
+        check_size(&data, MAX_DATA, "field data too large")?;
         Ok(Field {
             name: name.clone(),
             data: data.into_bytes(),
@@ -84,7 +70,7 @@ impl Field {
 
     pub fn new_zstring(name: &[u8; 4], data: String) -> Result<Field, Box<dyn error::Error>> {
         let zstr = CString::new(data)?;
-        check_size(zstr.as_bytes_with_nul(), "field data too large")?;
+        check_size(zstr.as_bytes_with_nul(), MAX_DATA, "field data too large")?;
         Ok(Field {
             name: name.clone(),
             data: zstr.into_bytes_with_nul(),
@@ -134,7 +120,7 @@ impl Field {
     }
 
     pub fn set(&mut self, data: Vec<u8>) -> Result<(), PluginError> {
-        check_size(&data, "field data too large")?;
+        check_size(&data, MAX_DATA, "field data too large")?;
         self.data = data;
         Ok(())
     }
@@ -145,7 +131,7 @@ impl Field {
     }
 
     pub fn set_string(&mut self, data: String) -> Result<(), PluginError> {
-        check_size(&data, "field data too large")?;
+        check_size(&data, MAX_DATA, "field data too large")?;
         self.data = data.into_bytes();
         Ok(())
     }
@@ -158,7 +144,7 @@ impl Field {
 
     pub fn set_zstring(&mut self, data: String) -> Result<(), Box<dyn error::Error>> {
         let zstr = CString::new(data)?;
-        check_size(zstr.as_bytes_with_nul(), "field data too large")?;
+        check_size(zstr.as_bytes_with_nul(), MAX_DATA, "field data too large")?;
         self.data = zstr.into_bytes_with_nul();
         Ok(())
     }
@@ -209,6 +195,9 @@ pub struct Record{
 
 const DELETED_FIELD_SIZE: usize = 12;
 
+// FIXME: change Record so that add_field can efficiently check if adding the field would exceed
+//  the maximum record size and then remove the check from write. obstacles: size method is O(n);
+//  a caller could edit fields with iter_mut() and Record won't be notified of the new size.
 impl Record {
     pub fn new(name: &[u8; 4]) -> Record {
         Record {
