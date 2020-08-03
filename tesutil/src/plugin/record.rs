@@ -1,4 +1,3 @@
-use std::error;
 use std::ffi::{CStr, CString};
 use std::io;
 use std::io::{Read, Write};
@@ -6,8 +5,21 @@ use std::mem::size_of;
 use std::str;
 
 use crate::*;
-use super::{PluginError, check_size};
+use super::{PluginError, check_size, decode_failed};
 
+/// An attribute of a record
+///
+/// A record consists of one or more fields which describe the attributes of that record. Each field
+/// consists of a 4-byte ASCII identifier, such as `b"NAME"`, and the field data. A field can hold
+/// data of any type, including integers, floats, strings, and structs. The type of data a
+/// particular field depends on the identifier (referred to here as `name`) and the record it
+/// belongs to.
+///
+/// Note that all of the various `new` functions for `Field` take the name by reference and copy it.
+/// This is because new fields are (almost?) always constructed from hard-coded names such as
+/// `b"STRV"` or `b"DATA"`, and it would be cumbersome to have to explicitly clone these everywhere.
+/// The data, on the other hand, is taken as an owned value, because this is much more likely to be
+/// dynamic.
 #[derive(Debug)]
 pub struct Field{
     name: [u8; 4],
@@ -22,13 +34,16 @@ pub struct Field{
 // or nightly Rust.
 macro_rules! to_num {
     ($type:ty, $name:ident) => (
-        pub fn $name(&self) -> Option<$type> {
+        pub fn $name(&self) -> Result<$type, PluginError> {
             if self.data.len() != size_of::<$type>() {
-                return None;
+                return Err(PluginError::DecodeFailed {
+                    description: format!("expected {} bytes for {}, found {}", size_of::<$type>(), stringify!($type), self.data.len()),
+                    cause: None,
+                });
             }
             let mut buf = [0u8; size_of::<$type>()];
             buf.copy_from_slice(&self.data[..]);
-            Some(<$type>::from_le_bytes(buf))
+            Ok(<$type>::from_le_bytes(buf))
         }
     )
 }
@@ -48,10 +63,29 @@ macro_rules! from_num {
     )
 }
 
+/// Maximum size in bytes of a record or field
 pub const MAX_DATA: usize = u32::MAX as usize;
 
 impl Field {
-    // violates C-CALLER-CONTROL
+    /// Creates a new field with the specified data
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if `data` is larger than [`MAX_DATA`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new(b"DATA", vec![/* binary gobbledygook */])?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, PluginError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         Ok(Field {
@@ -60,6 +94,25 @@ impl Field {
         })
     }
 
+    /// Creates a new field with the specified string data
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if `data` is larger than [`MAX_DATA`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new_string(b"NAME", String::from("Flora_kelp_01"))?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn new_string(name: &[u8; 4], data: String) -> Result<Field, PluginError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         Ok(Field {
@@ -68,8 +121,33 @@ impl Field {
         })
     }
 
-    pub fn new_zstring(name: &[u8; 4], data: String) -> Result<Field, Box<dyn error::Error>> {
-        let zstr = CString::new(data)?;
+    /// Creates a new field with the specified string data
+    ///
+    /// The difference between this and [`new_string`] is that `new_zstring` will store the string
+    /// with a terminating null byte.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if `data` plus the terminating null byte is larger
+    /// than [`MAX_DATA`]. Returns a [`std::ffi::NulError`] if `data` contains internal nulls.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let field = Field::new_zstring(b"NAME", String::from("Flora_kelp_01"))?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`new_string`]: #method.new_string
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
+    /// [`std::ffi::NulError`]: https://doc.rust-lang.org/std/ffi/struct.NulError.html
+    pub fn new_zstring(name: &[u8; 4], data: String) -> Result<Field, PluginError> {
+        let zstr = CString::new(data).map_err(|e| decode_failed("Failed to decode as zstring", e))?;
         check_size(zstr.as_bytes_with_nul(), MAX_DATA, "field data too large")?;
         Ok(Field {
             name: name.clone(),
@@ -77,6 +155,30 @@ impl Field {
         })
     }
 
+    /// Reads a field from a binary stream
+    ///
+    /// Reads a field from any type that implements [`Read`] or a mutable reference to such a type.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    /// # use std::io;
+    ///
+    /// # fn main() -> io::Result<()> {
+    /// let data = b"NAME\x09\0\0\0GameHour\0";
+    /// let field = Field::read(&mut data.as_ref())?;
+    /// assert_eq!(field.name(), b"NAME");
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn read<T: Read>(mut f: T) -> io::Result<Field> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
@@ -89,18 +191,86 @@ impl Field {
         Ok(Field { name, data })
     }
 
+    /// Returns the field name
+    ///
+    /// This is always a 4-byte ASCII identifier.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new(b"NAME", vec![])?;
+    /// assert_eq!(field.name(), b"NAME");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn name(&self) -> &[u8] {
         &self.name
     }
 
+    /// Returns the field name as a string
+    ///
+    /// If the field name cannot be decoded as UTF-8 (which will never happen in a valid plugin
+    /// file), the string `"<invalid>"` will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new(b"NAME", vec![])?;
+    /// assert_eq!(field.display_name(), "NAME");
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn display_name(&self) -> &str {
         str::from_utf8(&self.name).unwrap_or("<invalid>")
     }
 
+    /// Calculates the size in bytes of this field
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
+    /// assert_eq!(field.size(), 11); // 4 bytes for the name + 4 bytes for the length + 3 bytes of data
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn size(&self) -> usize {
         self.name.len() + size_of::<u32>() + self.data.len()
     }
 
+    /// Writes the field to the provided writer
+    ///
+    /// Writes a field to any type that implements [`Write`] or a mutable reference to such a type.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut buf: Vec<u8> = vec![];
+    /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
+    /// field.write(&mut &mut buf)?;
+    /// assert!(buf.len() > 0);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let len = self.data.len();
 
@@ -111,39 +281,139 @@ impl Field {
         Ok(())
     }
 
+    /// Returns a reference to the field's data
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
+    /// assert_eq!(*field.get(), [1, 2, 3]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn get(&self) -> &[u8] {
         &self.data[..]
     }
 
+    /// Consumes the field and takes ownership of its data
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
+    /// let data = field.consume();
+    /// assert_eq!(data[..], [1, 2, 3]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn consume(self) -> Vec<u8> {
         self.data
     }
 
+    /// Sets the field's data
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if the size of `data` exceeds [`MAX_DATA`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), PluginError> {
+    /// let mut field = Field::new(b"DATA", vec![])?;
+    /// field.set(b"new data to use".to_vec())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn set(&mut self, data: Vec<u8>) -> Result<(), PluginError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         self.data = data;
         Ok(())
     }
 
+    /// Gets a reference to the field's data as a string
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::DecodeFailed`] if the data is not valid UTF-8. This means that, currently,
+    /// this function only works correctly with English versions of the game. This will be updated
+    /// in the future.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tesutil::plugin::*;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let data = b"NAME\x10\0\0\0sSkillClassMajor";
+    /// let field = Field::read(&mut data.as_ref())?;
+    /// let name = field.get_string()?;
+    /// assert_eq!(name, "sSkillClassMajor");
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     // FIXME: the below string functions will fail on non-English versions of the game
-    pub fn get_string(&self) -> Result<&str, str::Utf8Error> {
-        str::from_utf8(&self.data[..])
+    pub fn get_string(&self) -> Result<&str, PluginError> {
+        str::from_utf8(&self.data[..]).map_err(|e| decode_failed("failed to decode string", e))
     }
 
+    /// Sets the field's data from a string
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if the size of `data` exceeds [`MAX_DATA`].
+    ///
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn set_string(&mut self, data: String) -> Result<(), PluginError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         self.data = data.into_bytes();
         Ok(())
     }
 
-    pub fn get_zstring(&self) -> Result<&str, Box<dyn error::Error>> {
-        let zstr = CStr::from_bytes_with_nul(&self.data[..])?;
-        let s = zstr.to_str()?;
+    /// Gets a reference to the fields data as a null-terminated string
+    ///
+    /// The data must include a terminating null byte, and the null will not be included in the
+    /// result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data includes internal null bytes or if the data is not valid UTF-8.
+    pub fn get_zstring(&self) -> Result<&str, PluginError> {
+        let zstr = CStr::from_bytes_with_nul(&self.data[..]).map_err(|e| decode_failed("string contained internal nulls", e))?;
+        let s = zstr.to_str().map_err(|e| decode_failed("failed to decode string", e))?;
         Ok(s)
     }
 
-    pub fn set_zstring(&mut self, data: String) -> Result<(), Box<dyn error::Error>> {
-        let zstr = CString::new(data)?;
+    /// Sets the field's data as a string
+    ///
+    /// The difference between this and [`set_string`] is that `set_zstring` will store the string
+    /// with a terminating null byte.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`PluginError::LimitExceeded`] if `data` plus the terminating null byte is larger
+    /// than [`MAX_DATA`]. Returns a [`PluginError::DecodeFailed`] if `data` contains internal nulls.
+    ///
+    /// [`set_string`]: #method.set_string
+    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
+    /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
+    pub fn set_zstring(&mut self, data: String) -> Result<(), PluginError> {
+        let zstr = CString::new(data).map_err(|e| decode_failed("string contained internal nulls", e))?;
         check_size(zstr.as_bytes_with_nul(), MAX_DATA, "field data too large")?;
         self.data = zstr.into_bytes_with_nul();
         Ok(())
@@ -183,12 +453,33 @@ const FLAG_PERSISTENT: u32 = 0x0400;
 const FLAG_INITIALLY_DISABLED: u32 = 0x0800;
 const FLAG_BLOCKED: u32 = 0x2000;
 
+/// A game object in a plugin
+///
+/// A record represents an object in the game, such as an NPC, container, global variable, etc.
+/// Each record consists of a 4-byte ASCII identifier, such as `b"CREA"`, and a series of fields
+/// defining the object's attributes.
+///
+/// Note that [`Field::new`] takes the name by reference and copies it. This is because new records
+/// are (almost?) always constructed from hard-coded names such as `b"NPC_"` or `b"GLOB"`, and it
+/// would be cumbersome to have to explicitly clone these everywhere.
+///
+/// [`Field::new`]: #method.new
 #[derive(Debug)]
 pub struct Record{
     name: [u8; 4],
+    /// Whether the record is deleted
+    ///
+    /// This is different from actually removing the record from a plugin. If a plugin includes
+    /// a record that is also present in a master file, that record will override the one from the
+    /// master. Removing the record from the plugin will cause the record from the master to appear
+    /// in the game unmodified. Including the record in the plugin but marking it deleted will cause
+    /// the record to be deleted from the game.
     pub is_deleted: bool,
+    /// Whether references to this object persist
     pub is_persistent: bool,
+    /// Whether this object starts disabled
     pub is_initially_disabled: bool,
+    // TODO: figure out what this does
     pub is_blocked: bool,
     fields: Vec<Field>,
 }
@@ -199,6 +490,7 @@ const DELETED_FIELD_SIZE: usize = 12;
 //  the maximum record size and then remove the check from write. obstacles: size method is O(n);
 //  a caller could edit fields with iter_mut() and Record won't be notified of the new size.
 impl Record {
+    /// Creates a new, empty record
     pub fn new(name: &[u8; 4]) -> Record {
         Record {
             name: name.clone(),
@@ -210,6 +502,16 @@ impl Record {
         }
     }
 
+    /// Reads a record from a binary stream
+    ///
+    /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    ///
+    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn read<T: Read>(mut f: T) -> io::Result<Record> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
@@ -252,6 +554,16 @@ impl Record {
         Ok(record)
     }
 
+    /// Writes the record to the provided writer
+    ///
+    /// Writes a record to any type that implements [`Write`] or a mutable reference to such a type.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    ///
+    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         let size = self.field_size();
 
@@ -285,14 +597,24 @@ impl Record {
         Ok(())
     }
 
+    /// Returns a reference to the record name
     pub fn name(&self) -> &[u8] {
         &self.name
     }
 
+    /// Returns the record name as a string
+    ///
+    /// If the record name cannot be decoded as UTF-8 (which will never happen in a valid plugin
+    /// file), the string `"<invalid>"` will be returned.
     pub fn display_name(&self) -> &str {
         str::from_utf8(&self.name).unwrap_or("<invalid>")
     }
 
+    /// Returns the record ID
+    ///
+    /// Not all record types have an ID; in this case, this method will return `None`. For record
+    /// types that do have an ID, this method may also return `None` if the `b"NAME"` field
+    /// containing the ID has not yet been added to the record.
     pub fn id(&self) -> Option<&str> {
         match &self.name {
             b"CELL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL" | b"SSCR" | b"TES3" => None,
@@ -312,6 +634,13 @@ impl Record {
         }
     }
 
+    /// Adds a field to this record
+    ///
+    /// Note: you should use the [`is_deleted`] member instead of directly adding `b"DELE"` fields
+    /// to records. If you do attempt to add a `b"DELE"` field, [`is_deleted`] will be set to true
+    /// instead.
+    ///
+    /// [`is_deleted`]: #structfield.is_deleted
     pub fn add_field(&mut self, field: Field) {
         if field.name() == b"DELE" {
             // we'll add this field automatically based on the deleted flag, so don't add it to
@@ -327,28 +656,34 @@ impl Record {
             + if self.is_deleted { DELETED_FIELD_SIZE } else { 0 }
     }
 
+    /// Calculates the size in bytes of this record
     pub fn size(&self) -> usize {
         self.name.len()
             + size_of::<u32>()*3 // 3 = size + dummy + flags
             + self.field_size()
     }
 
+    /// Returns the number of fields currently in the record
     pub fn len(&self) -> usize {
         self.fields.len()
     }
 
+    /// Consumes the record and returns an iterator over its fields
     pub fn into_iter(self) -> impl Iterator<Item = Field> {
         self.fields.into_iter()
     }
 
+    /// Returns an iterator over this record's fields
     pub fn iter(&self) -> impl Iterator<Item = &Field> {
         self.fields.iter()
     }
 
+    /// Returns a mutable iterator over this record's fields
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Field> {
         self.fields.iter_mut()
     }
 
+    /// Removes all fields from this record
     pub fn clear(&mut self) {
         self.fields.clear();
     }

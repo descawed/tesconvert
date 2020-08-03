@@ -35,10 +35,18 @@ fn check_size<T: Len + ?Sized>(data: &T, max_size: usize, msg: &str) -> Result<(
     }
 }
 
+// this answer has a good explanation for why the 'static lifetime is required here: https://users.rust-lang.org/t/box-with-a-trait-object-requires-static-lifetime/35261
+fn decode_failed<T: error::Error + Send + Sync + 'static>(msg: &str, e: T) -> PluginError {
+    PluginError::DecodeFailed {
+        description: String::from(msg),
+        cause: Some(Box::new(e)),
+    }
+}
+
 /// Error type for plugin errors
 ///
-/// A type for errors in plugin files that aren't represented well by `std` error types. Methods
-/// that return a [`std::io::Error`] will sometimes wrap a `PluginError` in that error.
+/// A type for errors that may occur while reading or writing plugin files. Methods that return a
+/// [`std::io::Error`] will sometimes wrap a `PluginError` in that error.
 ///
 /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
 #[derive(Debug)]
@@ -49,6 +57,8 @@ pub enum PluginError {
     DuplicateMaster(String),
     /// A size limit, e.g. on a record or field, has been exceeded
     LimitExceeded { description: String, max_size: usize, actual_size: usize },
+    /// Failed to decode binary data as the expected type or format
+    DecodeFailed { description: String, cause: Option<Box<dyn error::Error + Send + Sync>> },
 }
 
 impl fmt::Display for PluginError {
@@ -59,6 +69,12 @@ impl fmt::Display for PluginError {
             PluginError::LimitExceeded {
                 description, max_size, actual_size
             } => write!(f, "Limit exceeded: {}. Max size {}, actual size {}", description, max_size, actual_size),
+            PluginError::DecodeFailed {
+                description, cause
+            } => match cause {
+                Some(cause) => write!(f, "Decode failed: {}. Caused by: {}", description, cause),
+                None => write!(f, "Decode failed: {}", description),
+            },
         }
     }
 }
@@ -236,7 +252,7 @@ impl Plugin {
                 },
                 b"DATA" => {
                     if let Some(name) = master_name {
-                        let size = field.get_u64().ok_or(io_error("Invalid master size"))?;
+                        let size = field.get_u64().map_err(|e| io_error(e))?;
                         plugin.add_master(name, size).map_err(|e| io_error(format!("Duplicate masters: {}", e)))?;
                         master_name = None;
                     } else {
