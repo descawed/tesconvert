@@ -562,4 +562,21 @@ mod tests {
         field.set_f32(0.75);
         assert_eq!(field.data, *b"\0\0\x40\x3f");
     }
+
+    #[test]
+    fn read_tes4_field() {
+        let data = b"EDID\x13\0fDialogSpeachDelay\0";
+        let field = Field::read(&mut data.as_ref(), Game::Oblivion).unwrap();
+        let s = field.get_zstring().unwrap();
+        assert_eq!(s, "fDialogSpeachDelay");
+    }
+
+    #[test]
+    fn read_long_tes4_field() {
+        let data = b"XXXX\x04\0\x51\0\0\0DATA\0\0Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.\0";
+        let field = Field::read(&mut data.as_ref(), Game::Oblivion).unwrap();
+        let s = field.get_zstring().unwrap();
+        assert_eq!(field.name, *b"DATA");
+        assert_eq!(s, "Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.");
+    }
 }
