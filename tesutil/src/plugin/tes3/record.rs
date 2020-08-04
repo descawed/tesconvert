@@ -125,7 +125,7 @@ impl Record {
 
         let mut data_ref: &[u8] = data.as_ref();
         while size > 0 {
-            let field = Field::read(&mut data_ref)?;
+            let field = Field::read(&mut data_ref, Game::Morrowind)?;
             let field_size = field.size();
             if field_size > size {
                 return Err(io_error("Field size exceeds record size"));

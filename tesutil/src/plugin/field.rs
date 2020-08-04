@@ -155,6 +155,7 @@ impl Field {
     /// Reads a field from a binary stream
     ///
     /// Reads a field from any type that implements [`Read`] or a mutable reference to such a type.
+    /// `game` indicates which type of plugin file the field is being read from.
     ///
     /// # Errors
     ///
@@ -168,7 +169,7 @@ impl Field {
     ///
     /// # fn main() -> io::Result<()> {
     /// let data = b"NAME\x09\0\0\0GameHour\0";
-    /// let field = Field::read(&mut data.as_ref())?;
+    /// let field = Field::read(&mut data.as_ref(), tesutil::Game::Morrowind)?;
     /// assert_eq!(field.name(), b"NAME");
     /// # Ok(())
     /// # }
@@ -176,11 +177,26 @@ impl Field {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn read<T: Read>(mut f: T) -> io::Result<Field> {
+    pub fn read<T: Read>(mut f: T, game: Game) -> io::Result<Field> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
-        let size = extract!(f as u32)? as usize;
+        let size = match game {
+            Game::Morrowind => extract!(f as u32)? as usize,
+            Game::Oblivion => {
+                if name == *b"XXXX" {
+                    extract!(f as u16)?; // always 4 bytes
+                    let real_size = extract!(f as u32)?;
+                    // now fetch the actual record
+                    f.read_exact(&mut name)?;
+                    extract!(f as u16)?; // regular size is irrelevant here
+                    real_size as usize
+                } else {
+                    extract!(f as u16)? as usize
+                }
+            },
+        };
+
         let mut data = vec![0u8; size];
 
         f.read_exact(&mut data)?;
@@ -354,7 +370,7 @@ impl Field {
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let data = b"NAME\x10\0\0\0sSkillClassMajor";
-    /// let field = Field::read(&mut data.as_ref())?;
+    /// let field = Field::read(&mut data.as_ref(), tesutil::Game::Morrowind)?;
     /// let name = field.get_string()?;
     /// assert_eq!(name, "sSkillClassMajor");
     /// # Ok(())
@@ -457,7 +473,7 @@ mod tests {
     #[test]
     fn read_field() {
         let data = b"NAME\x09\0\0\0GameHour\0";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Field::read(&mut data.as_ref(), Game::Morrowind).unwrap();
         assert_eq!(field.name, *b"NAME");
         assert_eq!(field.data, b"GameHour\0");
         assert_eq!(field.size(), data.len());
@@ -466,7 +482,7 @@ mod tests {
     #[test]
     fn read_field_empty() {
         let data = b"";
-        if Field::read(&mut data.as_ref()).is_ok() {
+        if Field::read(&mut data.as_ref(), Game::Morrowind).is_ok() {
             panic!("Read of empty field succeeded");
         }
     }
@@ -474,7 +490,7 @@ mod tests {
     #[test]
     fn read_field_invalid_len() {
         let data = b"NAME\x0f\0\0\0GameHour\0";
-        if Field::read(&mut data.as_ref()).is_ok() {
+        if Field::read(&mut data.as_ref(), Game::Morrowind).is_ok() {
             panic!("Read of field with invalid length succeeded");
         }
     }
@@ -490,7 +506,7 @@ mod tests {
     #[test]
     fn read_zstring_field() {
         let data = b"NAME\x09\0\0\0GameHour\0";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Field::read(&mut data.as_ref(), Game::Morrowind).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(s, "GameHour");
     }
@@ -498,7 +514,7 @@ mod tests {
     #[test]
     fn read_string_field() {
         let data = b"BNAM\x15\0\0\0shield_nordic_leather";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Field::read(&mut data.as_ref(), Game::Morrowind).unwrap();
         let s = field.get_string().unwrap();
         assert_eq!(s, "shield_nordic_leather");
     }
@@ -506,7 +522,7 @@ mod tests {
     #[test]
     fn read_raw_field() {
         let data = b"ALDT\x0c\0\0\0\0\0\xa0\x40\x0a\0\0\0\0\0\0\0";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Field::read(&mut data.as_ref(), Game::Morrowind).unwrap();
         let d = field.get();
         assert_eq!(d, *b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0");
     }
@@ -514,7 +530,7 @@ mod tests {
     #[test]
     fn read_numeric_field() {
         let data = b"DATA\x08\0\0\0\x75\x39\xc2\x04\0\0\0\0";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Field::read(&mut data.as_ref(), Game::Morrowind).unwrap();
         let v = field.get_u64().unwrap();
         assert_eq!(v, 0x4c23975u64);
     }

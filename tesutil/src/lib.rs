@@ -35,6 +35,14 @@ macro_rules! serialize {
     }
 }
 
+/// Indicates the game whose data is being manipulated
+///
+/// Used by code that can operate on either game to know in which format to read/write data.
+pub enum Game {
+    Morrowind,
+    Oblivion,
+}
+
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
 trait WriteExact {
     fn write_exact(&mut self, buf: &[u8]) -> io::Result<()>;
