@@ -21,6 +21,9 @@ use len_trait::len::Len;
 mod record;
 pub use record::*;
 
+mod field;
+pub use field::*;
+
 use crate::*;
 
 fn check_size<T: Len + ?Sized>(data: &T, max_size: usize, msg: &str) -> Result<(), PluginError> {
@@ -125,6 +128,8 @@ pub const AUTHOR_LENGTH: usize = 32;
 pub const DESCRIPTION_LENGTH: usize = 256;
 /// Maximum number of records in a plugin
 pub const MAX_RECORDS: usize = u32::MAX as usize;
+/// Maximum size in bytes of a record or field
+pub const MAX_DATA: usize = u32::MAX as usize;
 
 /// Morrowind version 1.2
 ///
