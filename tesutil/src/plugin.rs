@@ -209,7 +209,6 @@ impl Plugin {
         }
 
         let mut fields = header.into_iter();
-        // TODO: does the game require the HEDR field to come first or is that just convention?
         let header = match fields.next() {
             Some(field) if field.name() == b"HEDR" => field,
             _ => return Err(io_error("Missing HEDR field")),
