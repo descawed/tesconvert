@@ -517,11 +517,29 @@ impl Record {
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn read<T: Read>(mut f: T) -> io::Result<Option<Record>> {
         let mut name = [0u8; 4];
-        let bytes_read = f.read(&mut name)?;
-        if bytes_read == 0 {
-            return Ok(None);
-        } else if bytes_read < name.len() {
-            return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
+
+        // there are a few reasons why we have to use this roundabout solution. there is a "number
+        // of records" field in the plugin header, but it's not guaranteed to be accurate, so we
+        // have to just keep reading records until EOF. unfortunately, the Read trait has no easy
+        // way to check for EOF. we could check for EOF more easily if T were Read + Seek, but that
+        // would prevent us from reading from byte arrays, which is handy for testing. instead, we
+        // have to use read instead of read_exact and check if it returns 0. if it doesn't return 0,
+        // we need to check that we got as many bytes as we were expecting. but that's not
+        // straightforward either, because it's possible read might read less than 4 bytes even if
+        // we're not at EOF (specifically, if we're at the end of BufReader's buffer), so we have to
+        // keep reading in a loop until we reach the number of bytes we need or read 0 bytes.
+        let mut total_bytes_read = 0;
+        while total_bytes_read < name.len() {
+            let bytes_read = f.read(&mut name[total_bytes_read..])?;
+            if bytes_read == 0 {
+                if total_bytes_read == 0 {
+                    return Ok(None);
+                } else if total_bytes_read < name.len() {
+                    return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
+                }
+            }
+
+            total_bytes_read += bytes_read;
         }
 
         let mut size = extract!(f as u32)? as usize;
@@ -625,7 +643,7 @@ impl Record {
     /// containing the ID has not yet been added to the record.
     pub fn id(&self) -> Option<&str> {
         match &self.name {
-            b"CELL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL" | b"SSCR" | b"TES3" => None,
+            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL" | b"SSCR" | b"TES3" => None,
             _ => {
                 let mut id = None;
                 for field in self.fields.iter() {

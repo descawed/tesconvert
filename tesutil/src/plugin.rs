@@ -246,7 +246,7 @@ impl Plugin {
                         return Err(io_error(format!("Missing size for master {}", name)));
                     }
 
-                    let string_name = field.get_zstring().map_err(|e| io_error(format!("Could not decode master name: {}", e)))?;
+                    let string_name = field.get_zstring().map_err(|e| io_error(e))?;
                     master_name = Some(String::from(string_name));
                 },
                 b"DATA" => {
@@ -269,7 +269,7 @@ impl Plugin {
         // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
         loop {
             if let Some(record) = Record::read(&mut f)? {
-                plugin.add_record(record).map_err(|e| io_error(format!("Duplicate ID: {}", e)))?;
+                plugin.add_record(record).map_err(|e| io_error(e))?;
             } else {
                 break;
             }
