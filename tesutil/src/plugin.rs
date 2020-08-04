@@ -203,7 +203,7 @@ impl Plugin {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn read<T: Read>(mut f: T) -> io::Result<Plugin> {
-        let header = Record::read(&mut f)?;
+        let header = Record::read(&mut f)?.ok_or(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"))?;
         if header.name() != b"TES3" {
             return Err(io_error(format!("Expected TES3 record, got {}", header.display_name())));
         }
@@ -267,8 +267,13 @@ impl Plugin {
             return Err(io_error(format!("Missing size for master {}", name)));
         }
 
-        for _ in 0..num_records {
-            plugin.add_record(Record::read(&mut f)?).map_err(|e| io_error(format!("Duplicate ID: {}", e)))?;
+        // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
+        loop {
+            if let Some(record) = Record::read(&mut f)? {
+                plugin.add_record(record).map_err(|e| io_error(format!("Duplicate ID: {}", e)))?;
+            } else {
+                break;
+            }
         }
 
         Ok(plugin)

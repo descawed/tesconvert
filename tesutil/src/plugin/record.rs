@@ -505,6 +505,9 @@ impl Record {
     /// Reads a record from a binary stream
     ///
     /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
+    /// On success, this function returns an `Option<Record>`. A value of `None` indicates that the
+    /// stream was at EOF; otherwise, it will be `Some(Record)`. This is necessary because EOF
+    /// indicates that the end of a plugin file has been reached.
     ///
     /// # Errors
     ///
@@ -512,9 +515,14 @@ impl Record {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn read<T: Read>(mut f: T) -> io::Result<Record> {
+    pub fn read<T: Read>(mut f: T) -> io::Result<Option<Record>> {
         let mut name = [0u8; 4];
-        f.read_exact(&mut name)?;
+        let bytes_read = f.read(&mut name)?;
+        if bytes_read == 0 {
+            return Ok(None);
+        } else if bytes_read < name.len() {
+            return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
+        }
 
         let mut size = extract!(f as u32)? as usize;
 
@@ -551,7 +559,7 @@ impl Record {
             record.add_field(field);
         }
 
-        Ok(record)
+        Ok(Some(record))
     }
 
     /// Writes the record to the provided writer
@@ -794,7 +802,7 @@ mod tests{
     #[test]
     fn read_record() {
         let data = b"GLOB\x27\0\0\0\0\0\0\0\0\0\0\0NAME\x0a\0\0\0TimeScale\0FNAM\x01\0\0\0fFLTV\x04\0\0\0\0\0\x20\x41";
-        let record = Record::read(&mut data.as_ref()).unwrap();
+        let record = Record::read(&mut data.as_ref()).unwrap().unwrap();
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted);
         assert!(!record.is_persistent);
@@ -806,7 +814,7 @@ mod tests{
     #[test]
     fn read_deleted_record() {
         let data = b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0";
-        let record = Record::read(&mut data.as_ref()).unwrap();
+        let record = Record::read(&mut data.as_ref()).unwrap().unwrap();
         assert!(record.is_deleted);
         assert_eq!(record.size(), data.len());
     }

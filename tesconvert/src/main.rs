@@ -1,3 +1,6 @@
+use tesutil::plugin::*;
+
 fn main() {
-    println!("Hello, world!");
+    let plugin = Plugin::load_file(r"F:\Steam\steamapps\common\Morrowind\Data Files\DaedricArmorGod.ESP").unwrap();
+    println!("Author: {}; Description: {}", plugin.author(), plugin.description());
 }
