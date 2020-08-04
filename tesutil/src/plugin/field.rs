@@ -263,6 +263,7 @@ impl Field {
     /// Writes the field to the provided writer
     ///
     /// Writes a field to any type that implements [`Write`] or a mutable reference to such a type.
+    /// `game` indicates which game the field is being written for.
     ///
     /// # Errors
     ///
@@ -276,7 +277,7 @@ impl Field {
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf: Vec<u8> = vec![];
     /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
-    /// field.write(&mut &mut buf)?;
+    /// field.write(&mut &mut buf, tesutil::Game::Morrowind)?;
     /// assert!(buf.len() > 0);
     /// # Ok(())
     /// # }
@@ -284,11 +285,20 @@ impl Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
-        let len = self.data.len();
+    pub fn write<T: Write>(&self, mut f: T, game: Game) -> io::Result<()> {
+        let mut len = self.data.len();
+
+        if game == Game::Oblivion && len > u16::MAX as usize {
+            f.write_exact(b"XXXX\x04\0")?;
+            serialize!(len as u32 => f)?;
+            len = 0;
+        }
 
         f.write_exact(&self.name)?;
-        f.write_exact(&(len as u32).to_le_bytes())?;
+        match game {
+            Game::Morrowind => f.write_exact(&(len as u32).to_le_bytes())?,
+            Game::Oblivion => f.write_exact(&(len as u16).to_le_bytes())?,
+        }
         f.write_exact(&self.data)?;
 
         Ok(())
@@ -499,8 +509,16 @@ mod tests {
     fn write_field() {
         let field = Field::new(b"NAME", b"PCHasCrimeGold\0".to_vec()).unwrap();
         let mut buf = vec![];
-        field.write(&mut buf).unwrap();
+        field.write(&mut buf, Game::Morrowind).unwrap();
         assert_eq!(buf, *b"NAME\x0f\0\0\0PCHasCrimeGold\0");
+    }
+
+    #[test]
+    fn write_tes4_field() {
+        let field = Field::new(b"EDID", b"sNoTalkFleeing\0".to_vec()).unwrap();
+        let mut buf = vec![];
+        field.write(&mut buf, Game::Oblivion).unwrap();
+        assert_eq!(buf, *b"EDID\x0f\0sNoTalkFleeing\0");
     }
 
     #[test]

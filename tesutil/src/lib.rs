@@ -38,6 +38,7 @@ macro_rules! serialize {
 /// Indicates the game whose data is being manipulated
 ///
 /// Used by code that can operate on either game to know in which format to read/write data.
+#[derive(PartialEq)]
 pub enum Game {
     Morrowind,
     Oblivion,

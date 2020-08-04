@@ -170,12 +170,12 @@ impl Record {
         f.write_exact(&flags.to_le_bytes())?;
 
         for field in self.fields.iter() {
-            field.write(&mut f)?;
+            field.write(&mut f, Game::Morrowind)?;
         }
 
         if self.is_deleted {
             let del = Field::new(b"DELE", vec![0; 4]).unwrap();
-            del.write(&mut f)?;
+            del.write(&mut f, Game::Morrowind)?;
         }
 
         Ok(())
