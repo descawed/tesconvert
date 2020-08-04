@@ -4,7 +4,7 @@ use std::mem::size_of;
 use std::str;
 
 use crate::*;
-use super::{PluginError, MAX_DATA, field::*};
+use crate::plugin::{PluginError, MAX_DATA, Field};
 
 const FLAG_DELETED: u32 = 0x0020;
 const FLAG_PERSISTENT: u32 = 0x0400;
