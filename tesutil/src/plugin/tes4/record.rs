@@ -12,8 +12,6 @@ use bitflags;
 
 use flate2::bufread::ZlibDecoder;
 
-
-
 bitflags! {
     struct RecordFlags: u32 {
         const MASTER = 0x00001;
@@ -108,25 +106,29 @@ impl Record {
         // read in the field data
         f.read_exact(&mut data)?;
 
-        let mut field_reader: dyn Read = if flags.contains(RecordFlags::COMPRESSED) {
+        if flags.contains(RecordFlags::COMPRESSED) {
             // 4 bytes to skip the size of the decoded data, which we don't need
-            ZlibDecoder::new(&mut &data[4..])
+            record.field_read_helper(ZlibDecoder::new(&mut &data[4..]), size)?;
         } else {
-            &mut data.as_ref()
+            record.field_read_helper(&mut &data[..], size)?;
         };
 
+        Ok(Some(record))
+    }
+
+    fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> io::Result<()> {
         while size > 0 {
-            let field = Field::read(&mut field_reader)?;
+            let field = Field::read(&mut f)?;
             let field_size = field.size();
             if field_size > size {
                 return Err(io_error("Field size exceeds record size"));
             }
 
             size -= field.size();
-            record.add_field(field);
+            self.add_field(field);
         }
 
-        Ok(Some(record))
+        Ok(())
     }
 
     /// Writes the record to the provided writer
