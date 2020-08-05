@@ -9,6 +9,7 @@ use std::str;
 use crate::*;
 use crate::plugin::*;
 use super::record::*;
+use super::field::*;
 
 /// Represents a plugin file
 ///
@@ -348,7 +349,7 @@ impl Plugin {
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`DESCRIPTION_LENGTH`]: constant.AUTHOR_LENGTH.html
     pub fn set_description(&mut self, description: String) -> Result<(), PluginError> {
-        check_size(&description, DESCRIPTION_LENGTH, "descriptioin value too long")?;
+        check_size(&description, DESCRIPTION_LENGTH, "description value too long")?;
         self.description = description;
         Ok(())
     }
@@ -410,8 +411,8 @@ impl Plugin {
     /// # fn main() -> Result<(), PluginError> {
     /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// let mut record = Record::new(b"GMST");
-    /// record.add_field(FieldInterface::new_string(b"NAME", String::from("iDispKilling"))?);
-    /// record.add_field(FieldInterface::new_i32(b"INTV", -50));
+    /// record.add_field(Field::new_string(b"NAME", String::from("iDispKilling"))?);
+    /// record.add_field(Field::new_i32(b"INTV", -50));
     /// plugin.add_record(record)?;
     /// # Ok(())
     /// # }
@@ -522,12 +523,12 @@ impl Plugin {
         serialize_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
         serialize!(num_records => buf_writer)?;
 
-        header.add_field(FieldInterface::new(b"HEDR", buf).unwrap());
+        header.add_field(Field::new(b"HEDR", buf).unwrap());
 
         for (name, size) in self.masters.iter() {
-            let mast = FieldInterface::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(format!("Failed to encode master file name: {}", e)))?;
+            let mast = Field::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(format!("Failed to encode master file name: {}", e)))?;
             header.add_field(mast);
-            header.add_field(FieldInterface::new_u64(b"DATA", *size));
+            header.add_field(Field::new_u64(b"DATA", *size));
         }
 
         header.write(&mut f)?;
@@ -596,8 +597,8 @@ mod tests {
         plugin.add_master(String::from("Morrowind.esm"), 79837557).unwrap();
 
         let mut test_record = Record::new(b"GMST");
-        test_record.add_field(FieldInterface::new_string(b"NAME", String::from("iDispKilling")).unwrap());
-        test_record.add_field(FieldInterface::new_i32(b"INTV", -50));
+        test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")).unwrap());
+        test_record.add_field(Field::new_i32(b"INTV", -50));
         plugin.add_record(test_record).unwrap();
 
         plugin.write(&mut &mut buf).unwrap();

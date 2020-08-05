@@ -10,7 +10,24 @@ use super::field::Field;
 // this line is only to help the IDE
 use bitflags;
 
-use flate2::bufread::ZlibDecoder;
+use flate2::Compression;
+use flate2::bufread::{ZlibDecoder, ZlibEncoder};
+
+macro_rules! flag_property {
+    ($get:ident, $set:ident, $flag:ident) => {
+        pub fn $get(&self) -> bool {
+            self.flags.contains(RecordFlags::$flag)
+        }
+
+        pub fn $set(&mut self, value: bool) {
+            if value {
+                self.flags |= RecordFlags::$flag;
+            } else{
+                self.flags -= RecordFlags::$flag;
+            }
+        }
+    }
+}
 
 bitflags! {
     struct RecordFlags: u32 {
@@ -26,6 +43,8 @@ bitflags! {
         const CANT_WAIT = 0x80000;
     }
 }
+
+const COMPRESSION_LEVEL: u32 = 6;
 
 /// A game object in a plugin
 ///
@@ -131,6 +150,30 @@ impl Record {
         Ok(())
     }
 
+    flag_property!(is_master, set_master, MASTER);
+    flag_property!(is_deleted, set_deleted, DELETED);
+    flag_property!(casts_shadows, set_casts_shadows, SHADOWS);
+    flag_property!(is_persistent, set_persistent, PERSISTENT);
+    flag_property!(is_quest_item, set_quest_item, PERSISTENT); // same flag; meaning is contextual
+    flag_property!(is_initially_disabled, set_initially_disabled, INITIALLY_DISABLED);
+    flag_property!(is_ignored, set_ignored, IGNORED);
+    flag_property!(is_visible_when_distant, set_visible_when_distant, VISIBLE_WHEN_DISTANT);
+    flag_property!(is_dangerous, set_dangerous, OFF_LIMITS);
+    flag_property!(is_off_limits, set_off_limits, OFF_LIMITS);
+    flag_property!(uses_compression, set_compression, COMPRESSED);
+
+    pub fn can_wait(&self) -> bool {
+        !self.flags.contains(RecordFlags::CANT_WAIT)
+    }
+
+    pub fn set_can_wait(&mut self, value: bool) {
+        if value {
+            self.flags -= RecordFlags::CANT_WAIT;
+        } else {
+            self.flags |= RecordFlags::CANT_WAIT;
+        }
+    }
+
     /// Writes the record to the provided writer
     ///
     /// Writes a record to any type that implements [`Write`] or a mutable reference to such a type.
@@ -152,18 +195,33 @@ impl Record {
             }));
         }
 
-        let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
-            | if self.is_persistent { FLAG_PERSISTENT } else { 0 }
-            | if self.is_initially_disabled { FLAG_INITIALLY_DISABLED } else { 0 }
-            | if self.is_blocked { FLAG_BLOCKED } else { 0 };
-
         f.write_exact(&self.name)?;
-        f.write_exact(&(size as u32).to_le_bytes())?;
-        f.write_exact(b"\0\0\0\0")?; // dummy field
-        f.write_exact(&flags.to_le_bytes())?;
 
-        for field in self.fields.iter() {
-            field.write(&mut f)?;
+        if self.flags.contains(RecordFlags::COMPRESSED) {
+            let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
+            for field in self.fields.iter() {
+                field.write(&mut &mut raw_buf)?;
+            }
+
+            let mut encoder = ZlibEncoder::new(&mut raw_buf.as_ref(), Compression::new(COMPRESSION_LEVEL));
+            let mut comp_buf: Vec<u8> = vec![];
+            encoder.read_to_end(&mut comp_buf)?;
+
+            f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
+            f.write_exact(&self.flags.bits.to_le_bytes())?;
+            f.write_exact(&self.form_id.to_le_bytes())?;
+            f.write_exact(&self.vcs_info.to_le_bytes())?;
+            f.write_exact(&(size as u32).to_le_bytes())?;
+            f.write_exact(&comp_buf)?;
+        } else {
+            f.write_exact(&(size as u32).to_le_bytes())?;
+            f.write_exact(&self.flags.bits.to_le_bytes())?;
+            f.write_exact(&self.form_id.to_le_bytes())?;
+            f.write_exact(&self.vcs_info.to_le_bytes())?;
+
+            for field in self.fields.iter() {
+                field.write(&mut f)?;
+            }
         }
 
         Ok(())
@@ -182,28 +240,9 @@ impl Record {
         str::from_utf8(&self.name).unwrap_or("<invalid>")
     }
 
-    /// Returns the record ID
-    ///
-    /// Not all record types have an ID; in this case, this method will return `None`. For record
-    /// types that do have an ID, this method may also return `None` if the `b"NAME"` field
-    /// containing the ID has not yet been added to the record.
-    pub fn id(&self) -> Option<&str> {
-        match &self.name {
-            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL" | b"SSCR" | b"TES3" => None,
-            _ => {
-                let mut id = None;
-                for field in self.fields.iter() {
-                    if field.name() == b"NAME" {
-                        id = match &self.name {
-                            b"GMST" | b"WEAP" => field.get_string().ok(),
-                            _ => field.get_zstring().ok(),
-                        };
-                        break;
-                    }
-                }
-                id
-            },
-        }
+    /// Returns the form ID
+    pub fn id(&self) -> u32 {
+        self.form_id
     }
 
     /// Adds a field to this record
