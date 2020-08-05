@@ -3,3 +3,6 @@ pub use record::*;
 
 mod plugin;
 pub use plugin::*;
+
+mod field;
+pub use field::*;

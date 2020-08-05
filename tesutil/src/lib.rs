@@ -14,6 +14,9 @@ use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::iter;
 
+#[macro_use]
+extern crate bitflags;
+
 // have to use a macro instead of a generic because from_le_bytes isn't a trait method
 #[macro_export]
 macro_rules! extract {
@@ -35,15 +38,6 @@ macro_rules! serialize {
     }
 }
 
-/// Indicates the game whose data is being manipulated
-///
-/// Used by code that can operate on either game to know in which format to read/write data.
-#[derive(PartialEq)]
-pub enum Game {
-    Morrowind,
-    Oblivion,
-}
-
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
 trait WriteExact {
     fn write_exact(&mut self, buf: &[u8]) -> io::Result<()>;
@@ -59,6 +53,41 @@ impl<T: Write> WriteExact for T {
             },
             Err(e) => Err(e),
         }
+    }
+}
+
+// used for reading record types
+trait ReadAllOrNone {
+    fn read_all_or_none(&mut self, buf: &mut [u8]) -> io::Result<bool>;
+}
+
+impl<T: Read> ReadAllOrNone for T {
+    fn read_all_or_none(&mut self, buf: &mut [u8]) -> io::Result<bool> {
+        // there are a few reasons why we have to use this roundabout solution. there is a "number
+        // of records" field in the plugin header, but it's not guaranteed to be accurate, so we
+        // have to just keep reading records until EOF. unfortunately, the Read trait has no easy
+        // way to check for EOF. we could check for EOF more easily if T were Read + Seek, but that
+        // would prevent us from reading from byte arrays, which is handy for testing. instead, we
+        // have to use read instead of read_exact and check if it returns 0. if it doesn't return 0,
+        // we need to check that we got as many bytes as we were expecting. but that's not
+        // straightforward either, because it's possible read might read less than 4 bytes even if
+        // we're not at EOF (specifically, if we're at the end of BufReader's buffer), so we have to
+        // keep reading in a loop until we reach the number of bytes we need or read 0 bytes.
+        let mut total_bytes_read = 0;
+        while total_bytes_read < buf.len() {
+            let bytes_read = self.read(&mut buf[total_bytes_read..])?;
+            if bytes_read == 0 {
+                if total_bytes_read == 0 {
+                    return Ok(false);
+                } else if total_bytes_read < buf.len() {
+                    return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
+                }
+            }
+
+            total_bytes_read += bytes_read;
+        }
+
+        Ok(true)
     }
 }
 

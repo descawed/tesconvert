@@ -4,7 +4,8 @@ use std::mem::size_of;
 use std::str;
 
 use crate::*;
-use crate::plugin::{PluginError, MAX_DATA, Field};
+use crate::plugin::{PluginError, MAX_DATA, FieldInterface};
+use super::field::Field;
 
 const FLAG_DELETED: u32 = 0x0020;
 const FLAG_PERSISTENT: u32 = 0x0400;
@@ -75,29 +76,8 @@ impl Record {
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     pub fn read<T: Read>(mut f: T) -> io::Result<Option<Record>> {
         let mut name = [0u8; 4];
-
-        // there are a few reasons why we have to use this roundabout solution. there is a "number
-        // of records" field in the plugin header, but it's not guaranteed to be accurate, so we
-        // have to just keep reading records until EOF. unfortunately, the Read trait has no easy
-        // way to check for EOF. we could check for EOF more easily if T were Read + Seek, but that
-        // would prevent us from reading from byte arrays, which is handy for testing. instead, we
-        // have to use read instead of read_exact and check if it returns 0. if it doesn't return 0,
-        // we need to check that we got as many bytes as we were expecting. but that's not
-        // straightforward either, because it's possible read might read less than 4 bytes even if
-        // we're not at EOF (specifically, if we're at the end of BufReader's buffer), so we have to
-        // keep reading in a loop until we reach the number of bytes we need or read 0 bytes.
-        let mut total_bytes_read = 0;
-        while total_bytes_read < name.len() {
-            let bytes_read = f.read(&mut name[total_bytes_read..])?;
-            if bytes_read == 0 {
-                if total_bytes_read == 0 {
-                    return Ok(None);
-                } else if total_bytes_read < name.len() {
-                    return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
-                }
-            }
-
-            total_bytes_read += bytes_read;
+        if !f.read_all_or_none(&mut name)? {
+            return Ok(None);
         }
 
         let mut size = extract!(f as u32)? as usize;
@@ -125,7 +105,7 @@ impl Record {
 
         let mut data_ref: &[u8] = data.as_ref();
         while size > 0 {
-            let field = Field::read(&mut data_ref, Game::Morrowind)?;
+            let field = Field::read(&mut data_ref)?;
             let field_size = field.size();
             if field_size > size {
                 return Err(io_error("Field size exceeds record size"));
@@ -170,12 +150,12 @@ impl Record {
         f.write_exact(&flags.to_le_bytes())?;
 
         for field in self.fields.iter() {
-            field.write(&mut f, Game::Morrowind)?;
+            field.write(&mut f)?;
         }
 
         if self.is_deleted {
             let del = Field::new(b"DELE", vec![0; 4]).unwrap();
-            del.write(&mut f, Game::Morrowind)?;
+            del.write(&mut f)?;
         }
 
         Ok(())
