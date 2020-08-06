@@ -32,7 +32,7 @@ macro_rules! to_num {
 macro_rules! from_num {
     ($type:ty, $name:ident, $new_name:ident) => (
         fn $name(&mut self, v: $type) {
-            self.set(v.to_le_bytes().to_vec());
+            self.set(v.to_le_bytes().to_vec()).unwrap();
         }
 
         fn $new_name(name: &[u8; 4], data: $type) -> Self {

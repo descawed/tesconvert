@@ -231,7 +231,7 @@ impl FieldInterface for Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn write(&self, f: &mut dyn Write) -> io::Result<()> {
+    fn write(&self, mut f: &mut dyn Write) -> io::Result<()> {
         let mut len = self.data.len();
 
         if len > u16::MAX as usize {

@@ -1,11 +1,11 @@
 use std::io;
 use std::io::{Read, Write};
-use std::mem::size_of;
 use std::str;
 
 use crate::*;
 use crate::plugin::{PluginError, MAX_DATA, FieldInterface};
 use super::field::Field;
+use super::group::Group;
 
 // this line is only to help the IDE
 use bitflags;
@@ -64,6 +64,7 @@ pub struct Record{
     form_id: u32,
     vcs_info: u32,
     fields: Vec<Field>,
+    groups: Vec<Group>,
 }
 
 // FIXME: change Record so that add_field can efficiently check if adding the field would exceed
@@ -78,15 +79,16 @@ impl Record {
             form_id: 0,
             vcs_info: 0,
             fields: vec![],
+            groups: vec![],
         }
     }
 
-    /// Reads a record from a binary stream
+    /// Reads a record from a binary stream with the name already provided
     ///
     /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
-    /// On success, this function returns an `Option<Record>`. A value of `None` indicates that the
-    /// stream was at EOF; otherwise, it will be `Some(Record)`. This is necessary because EOF
-    /// indicates that the end of a plugin file has been reached.
+    /// On success, this function returns a `(Record, usize)`, where the `usize` is the number of
+    /// bytes read. This function takes the record `name` instead of reading it because the caller
+    /// must have already verified that this is a record and not a [`Group`].
     ///
     /// # Errors
     ///
@@ -94,13 +96,9 @@ impl Record {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn read<T: Read>(mut f: T) -> io::Result<Option<Record>> {
-        let mut name = [0u8; 4];
-        if !f.read_all_or_none(&mut name)? {
-            return Ok(None);
-        }
-
-        let mut size = extract!(f as u32)? as usize;
+    /// [`Group`']: struct.Group.html
+    pub fn read_with_name<T: Read>(mut f: T, name: [u8; 4]) -> io::Result<(Record, usize)> {
+        let size = extract!(f as u32)? as usize;
 
         let mut buf = [0u8; 4];
         f.read_exact(&mut buf)?;
@@ -119,6 +117,7 @@ impl Record {
             form_id,
             vcs_info,
             fields: vec![],
+            groups: vec![],
         };
 
         let mut data = vec![0u8; size];
@@ -132,7 +131,35 @@ impl Record {
             record.field_read_helper(&mut &data[..], size)?;
         };
 
-        Ok(Some(record))
+        // 20 = type + size + flags + form ID = VCS info
+        Ok((record, size + 20))
+    }
+
+    /// Reads a record from a binary stream and returns it with the number of bytes read
+    ///
+    /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
+    /// On success, this function returns a `(Record, usize)`, where the `usize` is the number of
+    /// bytes read. This function takes the record `name` instead of reading it because the caller
+    /// must have already verified that this is a record and not a [`Group`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    ///
+    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+    /// [`Group`']: struct.Group.html
+    pub fn read<T: Read>(mut f: T) -> io::Result<Option<(Record, usize)>> {
+        let mut name = [0u8; 4];
+        if !f.read_all_or_none(&mut name)? {
+            return Ok(None);
+        }
+
+        if name == *b"GRUP" {
+            return Err(io_error("Expected record, found group"));
+        }
+
+        Ok(Some(Record::read_with_name(f, name)?))
     }
 
     fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> io::Result<()> {
@@ -177,6 +204,7 @@ impl Record {
     /// Writes the record to the provided writer
     ///
     /// Writes a record to any type that implements [`Write`] or a mutable reference to such a type.
+    /// On success, returns number of bytes written.
     ///
     /// # Errors
     ///
@@ -184,9 +212,11 @@ impl Record {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<usize> {
         let size = self.field_size();
 
+        // technically, if the record is compressed, we should do this check on the compressed data,
+        // but I don't think this will ever happen anyway
         if size > MAX_DATA {
             return Err(io_error(PluginError::LimitExceeded {
                 description: String::from("Record data too long to be serialized"),
@@ -197,13 +227,14 @@ impl Record {
 
         f.write_exact(&self.name)?;
 
-        if self.flags.contains(RecordFlags::COMPRESSED) {
+        let mut full_size = if self.flags.contains(RecordFlags::COMPRESSED) {
             let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
             for field in self.fields.iter() {
                 field.write(&mut &mut raw_buf)?;
             }
 
-            let mut encoder = ZlibEncoder::new(&mut raw_buf.as_ref(), Compression::new(COMPRESSION_LEVEL));
+            let mut buf_reader: &[u8] = raw_buf.as_ref();
+            let mut encoder = ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
             let mut comp_buf: Vec<u8> = vec![];
             encoder.read_to_end(&mut comp_buf)?;
 
@@ -213,6 +244,9 @@ impl Record {
             f.write_exact(&self.vcs_info.to_le_bytes())?;
             f.write_exact(&(size as u32).to_le_bytes())?;
             f.write_exact(&comp_buf)?;
+
+            // 24 = name + compressed size + flags + form ID + VCS info + uncompressed size
+            comp_buf.len() + 24
         } else {
             f.write_exact(&(size as u32).to_le_bytes())?;
             f.write_exact(&self.flags.bits.to_le_bytes())?;
@@ -222,9 +256,16 @@ impl Record {
             for field in self.fields.iter() {
                 field.write(&mut f)?;
             }
+
+            // 20 = name + size + flags + form ID + VCS info
+            size + 20
+        };
+
+        for group in self.groups.iter() {
+            full_size += group.write(&mut f)?;
         }
 
-        Ok(())
+        Ok(full_size)
     }
 
     /// Returns a reference to the record name
@@ -260,11 +301,12 @@ impl Record {
         self.fields.iter().map(|f| f.size()).sum::<usize>()
     }
 
-    /// Calculates the size in bytes of this record
-    pub fn size(&self) -> usize {
-        self.name.len()
-            + size_of::<u32>()*3 // 3 = size + dummy + flags
-            + self.field_size()
+    /// Adds an associated group to this record
+    ///
+    /// Examples of associated groups would be like a CELL record's Cell Children group or a DIAL
+    /// record's Topic Children group.
+    pub fn add_group(&mut self, group: Group) {
+        self.groups.push(group);
     }
 
     /// Returns the number of fields currently in the record
@@ -300,27 +342,25 @@ mod tests{
     #[test]
     fn read_record() {
         let data = b"GLOB\x27\0\0\0\0\0\0\0\0\0\0\0NAME\x0a\0\0\0TimeScale\0FNAM\x01\0\0\0fFLTV\x04\0\0\0\0\0\x20\x41";
-        let record = Record::read(&mut data.as_ref()).unwrap().unwrap();
+        let record = Record::read(&mut data.as_ref()).unwrap().unwrap().0;
         assert_eq!(record.name, *b"GLOB");
-        assert!(!record.is_deleted);
-        assert!(!record.is_persistent);
-        assert!(!record.is_initially_disabled);
-        assert!(!record.is_blocked);
+        assert!(!record.is_deleted());
+        assert!(!record.is_persistent());
+        assert!(!record.is_initially_disabled());
         assert_eq!(record.fields.len(), 3);
     }
 
     #[test]
     fn read_deleted_record() {
         let data = b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0";
-        let record = Record::read(&mut data.as_ref()).unwrap().unwrap();
-        assert!(record.is_deleted);
-        assert_eq!(record.size(), data.len());
+        let record = Record::read(&mut data.as_ref()).unwrap().unwrap().0;
+        assert!(record.is_deleted());
     }
 
     #[test]
     fn write_record() {
         let mut record = Record::new(b"DIAL");
-        record.is_deleted = true;
+        record.set_deleted(true);
         record.add_field(Field::new(b"NAME", b"Berel Sala\0".to_vec()).unwrap());
         record.add_field(Field::new(b"DATA", vec![0; 4]).unwrap());
 

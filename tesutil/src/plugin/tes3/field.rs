@@ -220,8 +220,8 @@ impl FieldInterface for Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn write(&self, f: &mut dyn Write) -> io::Result<()> {
-        let mut len = self.data.len();
+    fn write(&self, mut f: &mut dyn Write) -> io::Result<()> {
+        let len = self.data.len();
 
         f.write_exact(&self.name)?;
         f.write_exact(&(len as u32).to_le_bytes())?;
