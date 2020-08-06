@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 use crate::*;
 use super::record::Record;
 
+/// Indicates the type of group a group is
 #[derive(Debug)]
 pub enum GroupKind {
     Top([u8; 4]),
