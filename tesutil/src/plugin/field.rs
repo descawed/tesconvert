@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
 
-use super::{PluginError, decode_failed};
+use crate::{TesError, decode_failed};
 
 // unfortunately, to_le_bytes and from_le_bytes are not trait methods, but instead are implemented
 // directly on the integer types, which means we can't use generics to write a single method for
@@ -14,10 +14,10 @@ use super::{PluginError, decode_failed};
 // or nightly Rust.
 macro_rules! to_num {
     ($type:ty, $name:ident) => (
-        fn $name(&self) -> Result<$type, PluginError> {
+        fn $name(&self) -> Result<$type, TesError> {
             let data = self.get();
             if data.len() != size_of::<$type>() {
-                return Err(PluginError::DecodeFailed {
+                return Err(TesError::DecodeFailed {
                     description: format!("expected {} bytes for {}, found {}", size_of::<$type>(), stringify!($type), data.len()),
                     cause: None,
                 });
@@ -45,7 +45,7 @@ macro_rules! from_num {
 ///
 /// This trait is a general interface to the field types of different games.
 pub trait FieldInterface: Sized {
-    fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Self, PluginError>;
+    fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Self, TesError>;
 
     /// Creates a new field with the specified string data
     ///
@@ -56,9 +56,10 @@ pub trait FieldInterface: Sized {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = FieldInterface::new_string(b"NAME", String::from("Flora_kelp_01"))?;
     /// # Ok(())
     /// # }
@@ -66,7 +67,7 @@ pub trait FieldInterface: Sized {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
-    fn new_string(name: &[u8; 4], data: String) -> Result<Self, PluginError> {
+    fn new_string(name: &[u8; 4], data: String) -> Result<Self, TesError> {
         Self::new(name, data.into_bytes())
     }
 
@@ -95,7 +96,7 @@ pub trait FieldInterface: Sized {
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     /// [`std::ffi::NulError`]: https://doc.rust-lang.org/std/ffi/struct.NulError.html
-    fn new_zstring(name: &[u8; 4], data: String) -> Result<Self, PluginError> {
+    fn new_zstring(name: &[u8; 4], data: String) -> Result<Self, TesError> {
         let zstr = CString::new(data).map_err(|e| decode_failed("Failed to decode as zstring", e))?;
         Self::new(name, zstr.into_bytes_with_nul())
     }
@@ -112,9 +113,10 @@ pub trait FieldInterface: Sized {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = FieldInterface::new(b"NAME", vec![])?;
     /// assert_eq!(field.display_name(), "NAME");
     /// # Ok(())
@@ -128,7 +130,7 @@ pub trait FieldInterface: Sized {
     
     fn consume(self) -> Vec<u8>;
     
-    fn set(&mut self, data: Vec<u8>) -> Result<(), PluginError>;
+    fn set(&mut self, data: Vec<u8>) -> Result<(), TesError>;
     
     fn size(&self) -> usize;
 
@@ -158,7 +160,7 @@ pub trait FieldInterface: Sized {
     ///
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     // FIXME: the below string functions will fail on non-English versions of the game
-    fn get_string(&self) -> Result<&str, PluginError> {
+    fn get_string(&self) -> Result<&str, TesError> {
         str::from_utf8(&self.get()[..]).map_err(|e| decode_failed("failed to decode string", e))
     }
 
@@ -170,7 +172,7 @@ pub trait FieldInterface: Sized {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
-    fn set_string(&mut self, data: String) -> Result<(), PluginError> {
+    fn set_string(&mut self, data: String) -> Result<(), TesError> {
         self.set(data.into_bytes())
     }
 
@@ -182,7 +184,7 @@ pub trait FieldInterface: Sized {
     /// # Errors
     ///
     /// Returns an error if the data includes internal null bytes or if the data is not valid UTF-8.
-    fn get_zstring(&self) -> Result<&str, PluginError> {
+    fn get_zstring(&self) -> Result<&str, TesError> {
         let zstr = CStr::from_bytes_with_nul(&self.get()[..]).map_err(|e| decode_failed("string contained internal nulls", e))?;
         zstr.to_str().map_err(|e| decode_failed("failed to decode string", e))
     }
@@ -201,7 +203,7 @@ pub trait FieldInterface: Sized {
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
-    fn set_zstring(&mut self, data: String) -> Result<(), PluginError> {
+    fn set_zstring(&mut self, data: String) -> Result<(), TesError> {
         let zstr = CString::new(data).map_err(|e| decode_failed("string contained internal nulls", e))?;
         self.set(zstr.into_bytes_with_nul())
     }

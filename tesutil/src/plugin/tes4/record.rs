@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::str;
 
 use crate::*;
-use crate::plugin::{PluginError, MAX_DATA, FieldInterface};
+use crate::plugin::FieldInterface;
 use super::field::Field;
 use super::group::Group;
 
@@ -103,7 +103,7 @@ impl Record {
         let mut buf = [0u8; 4];
         f.read_exact(&mut buf)?;
 
-        let flags = RecordFlags::from_bits(u32::from_le_bytes(buf)).ok_or(io_error(PluginError::DecodeFailed {
+        let flags = RecordFlags::from_bits(u32::from_le_bytes(buf)).ok_or(io_error(TesError::DecodeFailed {
             description: String::from("Invalid record flags"),
             cause: None,
         }))?;
@@ -218,7 +218,7 @@ impl Record {
         // technically, if the record is compressed, we should do this check on the compressed data,
         // but I don't think this will ever happen anyway
         if size > MAX_DATA {
-            return Err(io_error(PluginError::LimitExceeded {
+            return Err(io_error(TesError::LimitExceeded {
                 description: String::from("Record data too long to be serialized"),
                 max_size: MAX_DATA,
                 actual_size: size,

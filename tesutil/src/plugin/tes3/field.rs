@@ -4,7 +4,6 @@ use std::mem::size_of;
 
 use crate::*;
 use crate::plugin::FieldInterface;
-use crate::plugin::{PluginError, check_size, MAX_DATA};
 
 /// An attribute of a record
 ///
@@ -38,7 +37,7 @@ impl FieldInterface for Field {
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"DATA", vec![/* binary gobbledygook */])?;
     /// # Ok(())
     /// # }
@@ -46,7 +45,7 @@ impl FieldInterface for Field {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
-    fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, PluginError> {
+    fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, TesError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         Ok(Field {
             name: name.clone(),
@@ -102,7 +101,7 @@ impl FieldInterface for Field {
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"NAME", vec![])?;
     /// assert_eq!(field.name(), b"NAME");
     /// # Ok(())
@@ -120,7 +119,7 @@ impl FieldInterface for Field {
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
     /// assert_eq!(*field.get(), [1, 2, 3]);
     /// # Ok(())
@@ -138,7 +137,7 @@ impl FieldInterface for Field {
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
     /// let data = field.consume();
     /// assert_eq!(data[..], [1, 2, 3]);
@@ -161,7 +160,7 @@ impl FieldInterface for Field {
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut field = Field::new(b"DATA", vec![])?;
     /// field.set(b"new data to use".to_vec())?;
     /// # Ok(())
@@ -170,7 +169,7 @@ impl FieldInterface for Field {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
-    fn set(&mut self, data: Vec<u8>) -> Result<(), PluginError> {
+    fn set(&mut self, data: Vec<u8>) -> Result<(), TesError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         self.data = data;
         Ok(())
@@ -184,7 +183,7 @@ impl FieldInterface for Field {
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
     /// assert_eq!(field.size(), 11); // 4 bytes for the name + 4 bytes for the length + 3 bytes of data
     /// # Ok(())

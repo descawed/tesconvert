@@ -4,7 +4,7 @@ use std::mem::size_of;
 use std::str;
 
 use crate::*;
-use crate::plugin::{PluginError, MAX_DATA, FieldInterface};
+use crate::plugin::FieldInterface;
 use super::field::Field;
 
 const FLAG_DELETED: u32 = 0x0020;
@@ -132,7 +132,7 @@ impl Record {
         let size = self.field_size();
 
         if size > MAX_DATA {
-            return Err(io_error(PluginError::LimitExceeded {
+            return Err(io_error(TesError::LimitExceeded {
                 description: String::from("Record data too long to be serialized"),
                 max_size: MAX_DATA,
                 actual_size: size,

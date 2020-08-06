@@ -78,10 +78,10 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
+    /// use tesutil::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// plugin.is_master = true;
     /// # Ok(())
@@ -93,7 +93,7 @@ impl Plugin {
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`AUTHOR_LENGTH`]: constant.AUTHOR_LENGTH.html
     /// [`DESCRIPTION_LENGTH`]: constant.DESCRIPTION_LENGTH.html
-    pub fn new(author: String, description: String) -> Result<Plugin, PluginError> {
+    pub fn new(author: String, description: String) -> Result<Plugin, TesError> {
         check_size(&author, AUTHOR_LENGTH, "author value too long")?;
         check_size(&description, DESCRIPTION_LENGTH, "description value too long")?;
         Ok(Plugin {
@@ -235,7 +235,7 @@ impl Plugin {
     pub fn load_file(path: &str) -> io::Result<Plugin> {
         let f = File::open(path)?;
         let mut reader = BufReader::new(f);
-        Plugin::read(&mut reader)
+        Plugin::read(reader)
     }
 
     /// Returns the plugin file version
@@ -247,10 +247,10 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
+    /// use tesutil::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// assert_eq!(plugin.version(), VERSION_1_3);
     /// # Ok(())
@@ -291,10 +291,10 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
+    /// use tesutil::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("wrong author"), String::from("some description"))?;
     /// plugin.set_author(String::from("correct author"))?;
     /// # Ok(())
@@ -303,7 +303,7 @@ impl Plugin {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`AUTHOR_LENGTH`]: constant.AUTHOR_LENGTH.html
-    pub fn set_author(&mut self, author: String) -> Result<(), PluginError> {
+    pub fn set_author(&mut self, author: String) -> Result<(), TesError> {
         check_size(&author, AUTHOR_LENGTH, "author value too long")?;
         self.author = author;
         Ok(())
@@ -336,10 +336,10 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
+    /// use tesutil::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("author"), String::from("some description"))?;
     /// plugin.set_description(String::from("updated description"))?;
     /// # Ok(())
@@ -348,7 +348,7 @@ impl Plugin {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`DESCRIPTION_LENGTH`]: constant.AUTHOR_LENGTH.html
-    pub fn set_description(&mut self, description: String) -> Result<(), PluginError> {
+    pub fn set_description(&mut self, description: String) -> Result<(), TesError> {
         check_size(&description, DESCRIPTION_LENGTH, "description value too long")?;
         self.description = description;
         Ok(())
@@ -369,10 +369,10 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
+    /// use tesutil::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("author"), String::from("some description"))?;
     /// plugin.add_master(String::from("Morrowind.esm"), 79837557)?;
     /// # Ok(())
@@ -380,7 +380,7 @@ impl Plugin {
     /// ```
     ///
     /// [`PluginError::DuplicateMaster`]: enum.PluginError.html#variant.DuplicateMaster
-    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), PluginError> {
+    pub fn add_master(&mut self, name: String, size: u64) -> Result<(), TesError> {
         // don't add it if it's already in the list
         // TODO: find out if doing a case-insensitive comparison is appropriate for OpenMW running
         //  on Linux
@@ -388,7 +388,7 @@ impl Plugin {
             self.masters.push((name, size));
             Ok(())
         } else {
-            Err(PluginError::DuplicateMaster(name))
+            Err(TesError::DuplicateMaster(name))
         }
     }
 
@@ -405,10 +405,11 @@ impl Plugin {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
-    /// # fn main() -> Result<(), PluginError> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// let mut record = Record::new(b"GMST");
     /// record.add_field(Field::new_string(b"NAME", String::from("iDispKilling"))?);
@@ -420,12 +421,12 @@ impl Plugin {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`PluginError::DuplicateId`]: enum.PluginError.html#variant.DuplicateId
-    pub fn add_record(&mut self, record: Record) -> Result<(), PluginError> {
+    pub fn add_record(&mut self, record: Record) -> Result<(), TesError> {
         let r = Rc::new(RefCell::new(record));
         if let Some(id) = r.borrow().id() {
             let key = String::from(id);
             if self.id_map.contains_key(id) {
-                return Err(PluginError::DuplicateId(key));
+                return Err(TesError::DuplicateId(key));
             }
 
             self.id_map.insert(key, Rc::clone(&r));
