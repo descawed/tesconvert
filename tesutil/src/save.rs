@@ -4,7 +4,7 @@ pub use change::*;
 use crate::*;
 use crate::plugin::tes4::Record;
 use std::io;
-use std::io::{Read, Write, BufReader};
+use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
 use std::fs::File;
 
 /// An Oblivion save game
@@ -56,6 +56,10 @@ pub const VERSION: (u8, u8) = (0, 125);
 
 impl Save {
     /// Read a save file from a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs or if the save format is invalid.
     pub fn read<T: Read>(mut f: T) -> io::Result<Save> {
         let mut magic = [0u8; 12];
         f.read_exact(&mut magic)?;
@@ -245,9 +249,155 @@ impl Save {
     }
 
     /// Load a save file
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file cannot be found or if [`Save::read`] fails.
+    ///
+    /// [`Save::read`]: #method.read
     pub fn load_file(path: &str) -> io::Result<Save> {
         let f = File::open(path)?;
         let mut reader = BufReader::new(f);
         Save::read(reader)
+    }
+
+    /// Write a save to a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs.
+    pub fn write<T: Write + Seek>(&self, mut f: T) -> io::Result<()> {
+        f.write_exact(b"TES4SAVEGAME")?;
+        f.write_exact(&[self.version.0, self.version.1])?;
+        f.write_exact(&self.exe_time)?;
+
+        // TODO: when this type is fully implemented, ensure that all setters do validation so we
+        //  don't have to do it here
+
+        serialize!(self.header_version => f)?;
+        // header size = screenshot size + hard-coded fields + name and location bzstrings
+        let header_size = self.screen_data.len() + 46 + self.player_name.len() + self.player_location.len();
+        serialize!(header_size as u32 => f)?;
+        serialize!(self.save_number => f)?;
+        serialize_bzstring(&mut f, &self.player_name)?;
+        serialize!(self.player_level => f)?;
+        serialize_bzstring(&mut f, &self.player_location)?;
+        serialize!(self.game_days => f)?;
+        serialize!(self.game_ticks => f)?;
+        f.write_exact(&self.game_time)?;
+        let screen_size = self.screen_data.len() + 8;
+        serialize!(screen_size => f)?;
+        serialize!(self.screen_width => f)?;
+        serialize!(self.screen_height => f)?;
+        f.write_exact(&self.screen_data)?;
+
+        serialize!(self.plugins.len() as u8 => f)?;
+        for plugin in self.plugins.iter() {
+            serialize_bstring(&mut f, plugin)?;
+        }
+
+        // we don't have this value yet, so record the current offset so we can come back later
+        let form_id_offset = f.seek(SeekFrom::Current(0))?;
+        // write dummy value
+        f.write_exact(b"\0\0\0\0")?;
+        serialize!(self.change_records.len() as u32 => f)?;
+        serialize!(self.next_form_id => f)?;
+        serialize!(self.world_id => f)?;
+        serialize!(self.world_x => f)?;
+        serialize!(self.world_y => f)?;
+        serialize!(self.player_cell => f)?;
+        serialize!(self.player_x => f)?;
+        serialize!(self.player_y => f)?;
+        serialize!(self.player_z => f)?;
+
+        serialize!(self.globals.len() as u16 => f)?;
+        for (iref, value) in self.globals.iter() {
+            serialize!(iref => f)?;
+            serialize!(value => f)?;
+        }
+
+        let tes_class_size = self.deaths.len()*6 + 8;
+        serialize!(tes_class_size as u16 => f)?;
+        serialize!(self.deaths.len() as u32 => f)?;
+        for (actor, count) in self.deaths.iter() {
+            serialize!(actor => f)?;
+            serialize!(count => f)?;
+        }
+
+        serialize!(self.game_seconds => f)?;
+
+        serialize!(self.processes_data.len() as u16 => f)?;
+        f.write_exact(&self.processes_data)?;
+
+        serialize!(self.spec_event_data.len() as u16 => f)?;
+        f.write_exact(&self.spec_event_data)?;
+
+        serialize!(self.weather_data.len() as u16 => f)?;
+        f.write_exact(&self.weather_data)?;
+
+        serialize!(self.player_combat_count => f)?;
+
+        serialize!(self.created_records.len() as u32 => f)?;
+        for record in self.created_records.iter() {
+            record.write(&mut f)?;
+        }
+
+        serialize!(self.quick_keys.len() as u16 => f)?;
+        for quick_key in self.quick_keys.iter() {
+            if let Some(setting) = quick_key {
+                serialize!(1u8 => f)?;
+                serialize!(setting => f)?;
+            } else {
+                serialize!(0u8 => f)?;
+            }
+        }
+
+        serialize!(self.reticle_data.len() as u16 => f)?;
+        f.write_exact(&self.reticle_data)?;
+
+        serialize!(self.interface_data.len() as u16 => f)?;
+        f.write_exact(&self.interface_data)?;
+
+        serialize!(self.regions.len() as u16 => f)?;
+        for (iref, unknown6) in self.regions.iter() {
+            serialize!(iref => f)?;
+            serialize!(unknown6 => f)?;
+        }
+
+        for change_record in self.change_records.iter() {
+            change_record.write(&mut f)?;
+        }
+
+        serialize!(self.temporary_effects.len() as u32 => f)?;
+        f.write_exact(&self.temporary_effects)?;
+
+        // now go back and fill in the form ID offset
+        let current_pos = f.seek(SeekFrom::Current(0))?;
+        f.seek(SeekFrom::Start(form_id_offset))?;
+        serialize!(current_pos as u32 => f)?;
+        f.seek(SeekFrom::Start(current_pos))?;
+
+        serialize!(self.form_ids.len() as u32 => f)?;
+        for form_id in self.form_ids.iter() {
+            serialize!(form_id => f)?;
+        }
+
+        serialize!(self.world_spaces.len() as u32 => f)?;
+        for world_space in self.world_spaces.iter() {
+            serialize!(world_space => f)?;
+        }
+
+        Ok(())
+    }
+
+    /// Write a save to a file
+    ///
+    /// # Errors
+    ///
+    /// Fails if the file cannot be created or if an I/O error occurs.
+    pub fn save_file(&self, path: &str) -> io::Result<()> {
+        let f = File::create(path)?;
+        let mut writer = BufWriter::new(f);
+        self.write(writer)
     }
 }

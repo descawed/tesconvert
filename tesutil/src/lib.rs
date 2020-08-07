@@ -135,6 +135,27 @@ fn extract_bzstring<T: Read>(mut f: T) -> io::Result<String> {
     }
 }
 
+fn serialize_bstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
+    if data.len() > u8::MAX as usize {
+        return Err(io_error("bstring too large"));
+    }
+
+    serialize!(data.len() as u8 => f)?;
+    f.write_exact(data.as_bytes())
+}
+
+fn serialize_bzstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
+    let size = data.len() + 1; // +1 for null
+    if size > u8::MAX as usize {
+        return Err(io_error("bstring too large"));
+    }
+
+    serialize!(size as u8 => f)?;
+    f.write_exact(data.as_bytes())?;
+    serialize!(0u8 => f)?;
+    Ok(())
+}
+
 fn io_error<E>(e: E) -> Error
 where E: Into<Box<dyn error::Error + Send + Sync>>
 {

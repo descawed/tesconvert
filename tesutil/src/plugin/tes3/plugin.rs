@@ -568,7 +568,7 @@ impl Plugin {
     pub fn save_file(&self, path: &str) -> io::Result<()> {
         let f = File::create(path)?;
         let mut writer = BufWriter::new(f);
-        self.write(&mut writer)
+        self.write(writer)
     }
 }
 
