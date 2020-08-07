@@ -257,7 +257,7 @@ impl Save {
     /// [`Save::read`]: #method.read
     pub fn load_file(path: &str) -> io::Result<Save> {
         let f = File::open(path)?;
-        let mut reader = BufReader::new(f);
+        let reader = BufReader::new(f);
         Save::read(reader)
     }
 
@@ -397,7 +397,7 @@ impl Save {
     /// Fails if the file cannot be created or if an I/O error occurs.
     pub fn save_file(&self, path: &str) -> io::Result<()> {
         let f = File::create(path)?;
-        let mut writer = BufWriter::new(f);
+        let writer = BufWriter::new(f);
         self.write(writer)
     }
 }
