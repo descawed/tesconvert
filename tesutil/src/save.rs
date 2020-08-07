@@ -281,7 +281,7 @@ impl Save {
         serialize!(self.game_ticks => f)?;
         f.write_exact(&self.game_time)?;
         let screen_size = self.screen_data.len() + 8;
-        serialize!(screen_size => f)?;
+        serialize!(screen_size as u32 => f)?;
         serialize!(self.screen_width => f)?;
         serialize!(self.screen_height => f)?;
         f.write_exact(&self.screen_data)?;
@@ -397,6 +397,7 @@ impl Save {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     static TEST_SAVE: &[u8] = include_bytes!("save/test/autosave.ess");
 
@@ -406,5 +407,15 @@ mod tests {
         assert_eq!(save.player_name, "test");
         assert_eq!(save.player_location, "Imperial Prison");
         assert_eq!(save.plugins.len(), 11);
+    }
+
+    #[test]
+    fn write_save() {
+        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut buf = vec![0u8; TEST_SAVE.len()];
+        let cursor = Cursor::new(&mut buf);
+        // FIXME: if this test fails, CLion gets confused about the results due to the large size of the output
+        save.write(cursor).unwrap();
+        assert_eq!(TEST_SAVE, buf.as_slice());
     }
 }
