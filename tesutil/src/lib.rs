@@ -136,7 +136,7 @@ fn extract_bzstring<T: Read>(f: T) -> io::Result<String> {
 }
 
 fn serialize_bstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
-    if data.len() > u8::MAX as usize {
+    if data.len() > MAX_BSTRING {
         return Err(io_error("bstring too large"));
     }
 
@@ -146,7 +146,7 @@ fn serialize_bstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
 
 fn serialize_bzstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
     let size = data.len() + 1; // +1 for null
-    if size > u8::MAX as usize {
+    if size > MAX_BSTRING {
         return Err(io_error("bstring too large"));
     }
 
@@ -164,6 +164,8 @@ where E: Into<Box<dyn error::Error + Send + Sync>>
 
 /// Maximum size in bytes of a record or field
 pub const MAX_DATA: usize = u32::MAX as usize;
+/// Maximum size of length-prefixed strings
+pub const MAX_BSTRING: usize = u8::MAX as usize;
 
 fn check_size<T: Len + ?Sized>(data: &T, max_size: usize, msg: &str) -> Result<(), TesError> {
     if data.len() > max_size {

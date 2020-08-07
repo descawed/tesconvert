@@ -256,6 +256,24 @@ impl Save {
         Save::read(reader)
     }
 
+    /// Gets the player's name
+    pub fn player_name(&self) -> &str {
+        &self.player_name
+    }
+
+    /// Sets the player's name
+    ///
+    /// # Errors
+    ///
+    /// Fails if the player's name is longer than [`MAX_BSTRING`].
+    ///
+    /// [`MAX_BSTRING`]: constant.MAX_BSTRING.html
+    pub fn set_player_name(&mut self, name: String) -> Result<(), TesError> {
+        check_size(&name, MAX_BSTRING, "Player name too long")?;
+        self.player_name = name;
+        Ok(())
+    }
+
     /// Write a save to a binary stream
     ///
     /// # Errors
@@ -407,6 +425,15 @@ mod tests {
         assert_eq!(save.player_name, "test");
         assert_eq!(save.player_location, "Imperial Prison");
         assert_eq!(save.plugins.len(), 11);
+    }
+
+    #[test]
+    fn set_name() {
+        let mut save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        save.set_player_name(String::from("short name")).unwrap();
+        save.set_player_name(
+            String::from("name that is too long oh nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
+        ).unwrap_err();
     }
 
     #[test]
