@@ -341,7 +341,7 @@ mod tests{
 
     #[test]
     fn read_record() {
-        let data = b"GLOB\x27\0\0\0\0\0\0\0\0\0\0\0NAME\x0a\0\0\0TimeScale\0FNAM\x01\0\0\0fFLTV\x04\0\0\0\0\0\x20\x41";
+        let data = b"GLOB\x21\0\0\0\0\0\0\0\x3a\0\0\0\0\0\0\0EDID\x0a\0TimeScale\0FNAM\x01\0sFLTV\x04\0\0\0\xf0\x41";
         let record = Record::read(&mut data.as_ref()).unwrap().unwrap().0;
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted());
@@ -351,21 +351,18 @@ mod tests{
     }
 
     #[test]
-    fn read_deleted_record() {
-        let data = b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0";
-        let record = Record::read(&mut data.as_ref()).unwrap().unwrap().0;
-        assert!(record.is_deleted());
-    }
-
-    #[test]
     fn write_record() {
         let mut record = Record::new(b"DIAL");
-        record.set_deleted(true);
-        record.add_field(Field::new(b"NAME", b"Berel Sala\0".to_vec()).unwrap());
-        record.add_field(Field::new(b"DATA", vec![0; 4]).unwrap());
+        record.form_id = 0xaa;
+        record.vcs_info = 0x181f1c;
+        record.add_field(Field::new(b"EDID", b"ADMIREHATE\0".to_vec()).unwrap());
+        record.add_field(Field::new_u32(b"QSTI", 0x1e722));
+        record.add_field(Field::new_u32(b"QSTI", 0x10602));
+        record.add_field(Field::new(b"FULL", b"ADMIRE_HATE\0".to_vec()).unwrap());
+        record.add_field(Field::new_u8(b"DATA", 3));
 
         let mut buf = vec![];
         record.write(&mut buf).unwrap();
-        assert_eq!(buf, b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0".to_vec());
+        assert_eq!(buf, b"DIAL\x3e\0\0\0\0\0\0\0\xaa\0\0\0\x1c\x1f\x18\0EDID\x0b\0ADMIREHATE\0QSTI\x04\0\x22\xe7\x01\0QSTI\x04\0\x02\x06\x01\0FULL\x0c\0ADMIRE_HATE\0DATA\x01\0\x03".to_vec());
     }
 }

@@ -53,18 +53,6 @@ pub trait FieldInterface: Sized {
     ///
     /// Returns a [`PluginError::LimitExceeded`] if `data` is larger than [`MAX_DATA`].
     ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    ///
-    /// # fn main() -> Result<(), TesError> {
-    /// let field = FieldInterface::new_string(b"NAME", String::from("Flora_kelp_01"))?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     fn new_string(name: &[u8; 4], data: String) -> Result<Self, TesError> {
@@ -80,17 +68,6 @@ pub trait FieldInterface: Sized {
     ///
     /// Returns a [`PluginError::LimitExceeded`] if `data` plus the terminating null byte is larger
     /// than [`MAX_DATA`]. Returns a [`std::ffi::NulError`] if `data` contains internal nulls.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use tesutil::plugin::*;
-    ///
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let field = FieldInterface::new_zstring(b"NAME", String::from("Flora_kelp_01"))?;
-    /// # Ok(())
-    /// # }
-    /// ```
     ///
     /// [`new_string`]: #method.new_string
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
@@ -109,19 +86,6 @@ pub trait FieldInterface: Sized {
     ///
     /// If the field name cannot be decoded as UTF-8 (which will never happen in a valid plugin
     /// file), the string `"<invalid>"` will be returned.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    ///
-    /// # fn main() -> Result<(), TesError> {
-    /// let field = FieldInterface::new(b"NAME", vec![])?;
-    /// assert_eq!(field.display_name(), "NAME");
-    /// # Ok(())
-    /// # }
-    /// ```
     fn display_name(&self) -> &str {
         str::from_utf8(self.name()).unwrap_or("<invalid>")
     }
@@ -143,20 +107,6 @@ pub trait FieldInterface: Sized {
     /// Returns a [`PluginError::DecodeFailed`] if the data is not valid UTF-8. This means that, currently,
     /// this function only works correctly with English versions of the game. This will be updated
     /// in the future.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use tesutil::plugin::*;
-    ///
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let data = b"NAME\x10\0\0\0sSkillClassMajor";
-    /// let field = FieldInterface::read(&mut data.as_ref())?;
-    /// let name = field.get_string()?;
-    /// assert_eq!(name, "sSkillClassMajor");
-    /// # Ok(())
-    /// # }
-    /// ```
     ///
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     // FIXME: the below string functions will fail on non-English versions of the game

@@ -34,6 +34,7 @@ impl FieldInterface for Field {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
@@ -98,6 +99,7 @@ impl FieldInterface for Field {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
@@ -116,6 +118,7 @@ impl FieldInterface for Field {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
@@ -134,6 +137,7 @@ impl FieldInterface for Field {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
@@ -157,6 +161,7 @@ impl FieldInterface for Field {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///
@@ -180,6 +185,7 @@ impl FieldInterface for Field {
     /// # Examples
     ///
     /// ```rust
+    /// use tesutil::*;
     /// use tesutil::plugin::*;
     /// use tesutil::plugin::tes3::*;
     ///

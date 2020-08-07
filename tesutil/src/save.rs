@@ -44,15 +44,15 @@ pub struct Save {
     quick_keys: Vec<Option<u32>>,
     reticle_data: Vec<u8>,
     interface_data: Vec<u8>,
-    regions: Vec<(u32, u32)>,
+    region_data: Vec<u8>,
     change_records: Vec<ChangeRecord>,
     temporary_effects: Vec<u8>,
     form_ids: Vec<u32>,
     world_spaces: Vec<u32>,
 }
 
-/// Current save version
-pub const VERSION: (u8, u8) = (0, 125);
+// creating a new save from scratch isn't currently supported, so no need for this
+// pub const VERSION: (u8, u8) = (0, 125);
 
 impl Save {
     /// Read a save file from a binary stream
@@ -107,7 +107,7 @@ impl Save {
         let player_y = extract!(f as f32)?;
         let player_z = extract!(f as f32)?;
         
-        let num_globals = extract!(f as u8)? as usize;
+        let num_globals = extract!(f as u16)? as usize;
         let mut globals = Vec::with_capacity(num_globals);
         for _ in 0..num_globals {
             let iref = extract!(f as u32)?;
@@ -152,7 +152,7 @@ impl Save {
         let mut i = 0;
         let mut quick_keys = vec![];
         while i < quick_keys_size {
-            let has_quick_key = quick_keys_data[i] == 0;
+            let has_quick_key = quick_keys_data[i] == 1;
             i += 1;
             if has_quick_key {
                 if i+4 <= quick_keys_size {
@@ -176,14 +176,9 @@ impl Save {
         let mut interface_data = vec![0u8; interface_size];
         f.read_exact(&mut interface_data)?;
 
-        extract!(f as u16)?; // region size
-        let num_regions = extract!(f as u16)? as usize;
-        let mut regions = Vec::with_capacity(num_regions);
-        for _ in 0..num_regions {
-            let iref = extract!(f as u32)?;
-            let unknown6 = extract!(f as u32)?;
-            regions.push((iref, unknown6));
-        }
+        let region_size = extract!(f as u16)? as usize;
+        let mut region_data = vec![0u8; region_size];
+        f.read_exact(&mut region_data)?;
 
         let mut change_records = Vec::with_capacity(num_change_records);
         for _ in 0..num_change_records {
@@ -191,7 +186,7 @@ impl Save {
         }
         
         let temp_effects_size = extract!(f as u32)? as usize;
-        let mut temporary_effects = Vec::with_capacity(temp_effects_size);
+        let mut temporary_effects = vec![0u8; temp_effects_size];
         f.read_exact(&mut temporary_effects)?;
         
         let num_form_ids = extract!(f as u32)? as usize;
@@ -240,7 +235,7 @@ impl Save {
             quick_keys,
             reticle_data,
             interface_data,
-            regions,
+            region_data,
             change_records,
             temporary_effects,
             form_ids,
@@ -358,11 +353,8 @@ impl Save {
         serialize!(self.interface_data.len() as u16 => f)?;
         f.write_exact(&self.interface_data)?;
 
-        serialize!(self.regions.len() as u16 => f)?;
-        for (iref, unknown6) in self.regions.iter() {
-            serialize!(iref => f)?;
-            serialize!(unknown6 => f)?;
-        }
+        serialize!(self.region_data.len() as u16 => f)?;
+        f.write_exact(&self.region_data)?;
 
         for change_record in self.change_records.iter() {
             change_record.write(&mut f)?;
@@ -399,5 +391,20 @@ impl Save {
         let f = File::create(path)?;
         let writer = BufWriter::new(f);
         self.write(writer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static TEST_SAVE: &[u8] = include_bytes!("save/test/autosave.ess");
+
+    #[test]
+    fn read_save() {
+        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        assert_eq!(save.player_name, "test");
+        assert_eq!(save.player_location, "Imperial Prison");
+        assert_eq!(save.plugins.len(), 11);
     }
 }

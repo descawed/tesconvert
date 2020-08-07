@@ -6,7 +6,7 @@
 //! potentially other formats as well.
 
 pub mod plugin;
-mod save;
+pub mod save;
 
 use std::error;
 use std::ffi::CStr;

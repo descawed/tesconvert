@@ -200,7 +200,7 @@ impl FieldInterface for Field {
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
-    /// assert_eq!(field.size(), 11); // 4 bytes for the name + 4 bytes for the length + 3 bytes of data
+    /// assert_eq!(field.size(), 9); // 4 bytes for the name + 2 bytes for the length + 3 bytes of data
     /// # Ok(())
     /// # }
     /// ```
