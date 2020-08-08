@@ -179,6 +179,19 @@ fn check_size<T: Len + ?Sized>(data: &T, max_size: usize, msg: &str) -> Result<(
     }
 }
 
+fn check_range<T: Into<f64> + PartialOrd>(value: T, min: T, max: T, msg: &str) -> Result<(), TesError> {
+    if value < min || value > max {
+        Err(TesError::OutOfRange {
+            description: String::from(msg),
+            min: min.into(),
+            max: max.into(),
+            actual: value.into(),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 // this answer has a good explanation for why the 'static lifetime is required here: https://users.rust-lang.org/t/box-with-a-trait-object-requires-static-lifetime/35261
 fn decode_failed<T: error::Error + Send + Sync + 'static>(msg: &str, e: T) -> TesError {
     TesError::DecodeFailed {
@@ -201,6 +214,8 @@ pub enum TesError {
     DuplicateMaster(String),
     /// A size limit, e.g. on a record or field, has been exceeded
     LimitExceeded { description: String, max_size: usize, actual_size: usize },
+    /// A value is not in the expected range
+    OutOfRange { description: String, min: f64, max: f64, actual: f64 },
     /// Failed to decode binary data as the expected type or format
     DecodeFailed { description: String, cause: Option<Box<dyn error::Error + Send + Sync>> },
 }
@@ -213,6 +228,9 @@ impl fmt::Display for TesError {
             TesError::LimitExceeded {
                 description, max_size, actual_size
             } => write!(f, "Limit exceeded: {}. Max size {}, actual size {}", description, max_size, actual_size),
+            TesError::OutOfRange {
+                description, min, max, actual,
+            } => write!(f, "Out of range: {}. Min: {}, max: {}, actual: {}", description, min, max, actual),
             TesError::DecodeFailed {
                 description, cause
             } => match cause {

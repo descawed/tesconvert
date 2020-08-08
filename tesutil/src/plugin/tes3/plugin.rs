@@ -11,6 +11,110 @@ use crate::plugin::*;
 use super::record::*;
 use super::field::*;
 
+/// Save game information
+///
+/// For saves (.ess files), this information is included in the TES3 record.
+#[derive(Debug)]
+pub struct SaveInfo {
+    current_health: f32,
+    max_health: f32,
+    hour: f32,
+    unknown1: [u8; 12],
+    current_cell: String,
+    unknown2: [u8; 4],
+    player_name: String,
+}
+
+impl SaveInfo {
+    /// Get the player's current health
+    pub fn current_health(&self) -> f32 {
+        self.current_health
+    }
+
+    /// Set the player's current health
+    ///
+    /// # Errors
+    ///
+    /// Fails if you attempt to set the player's current health greater than their maximum health or
+    /// to a negative value.
+    pub fn set_current_health(&mut self, value: f32) -> Result<(), TesError> {
+        check_range(value, 0., self.max_health, "current health must be between 0 and max health")?;
+        self.current_health = value;
+        Ok(())
+    }
+
+    /// Get the player's maximum health
+    pub fn max_health(&self) -> f32 {
+        self.max_health
+    }
+
+    /// Set the player's maximum health
+    ///
+    /// # Errors
+    ///
+    /// Fails if you attempt to set the player's maximum health lower than their current health.
+    pub fn set_max_health(&mut self, value: f32) -> Result<(), TesError> {
+        check_range(value, self.current_health, f32::MAX, "max health must be >= current health")?;
+        self.max_health = value;
+        Ok(())
+    }
+
+    /// Get the current hour of the day in the game
+    pub fn hour(&self) -> f32 {
+        self.hour
+    }
+
+    /// Set the current hour of the day in the game
+    ///
+    /// # Errors
+    ///
+    /// Fails if you attempt to set the hour to a value outside the range 0-24.
+    pub fn set_hour(&mut self, value: f32) -> Result<(), TesError> {
+        check_range(value, 0., 24., "hour must be between 0-24")?;
+        self.hour = value;
+        Ok(())
+    }
+
+    /// Gets the name of the player's current cell
+    pub fn current_cell(&self) -> &str {
+        &self.current_cell
+    }
+
+    /// Sets the name of the player's current cell
+    ///
+    /// # Errors
+    ///
+    /// Fails if the length of the name of the cell exceeds [`CELL_LENGTH`]
+    ///
+    /// [`CELL_LENGTH`]: constant.CELL_LENGTH.html
+    pub fn set_current_cell(&mut self, cell: String) -> Result<(), TesError> {
+        check_size(&cell, CELL_LENGTH, "cell name too long")?;
+        self.current_cell = cell;
+        Ok(())
+    }
+
+    /// Gets the player's name
+    pub fn player_name(&self) -> &str {
+        &self.player_name
+    }
+
+    /// Sets the player's name
+    ///
+    /// Note: this is only the name that shows up in the save menu. The name that will appear in
+    /// game is the name on the player's NPC record.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the length of the name exceeds [`NAME_LENGTH`].
+    ///
+    /// [`NAME_LENGTH`]: constant.NAME_LENGTH.html
+    pub fn set_player_name(&mut self, name: String) -> Result<(), TesError> {
+        check_size(&name, NAME_LENGTH, "player name too long")?;
+        self.player_name = name;
+        Ok(())
+    }
+}
+
 /// Represents a plugin file
 ///
 /// This type can be used to read and write plugin (mod) files. These include .esm files (masters,
@@ -41,6 +145,8 @@ pub struct Plugin {
     pub is_master: bool,
     author: String,
     description: String,
+    save: Option<SaveInfo>,
+    screen_data: Vec<u8>,
     masters: Vec<(String, u64)>,
     records: Vec<Rc<RefCell<Record>>>,
     id_map: HashMap<String, Rc<RefCell<Record>>>,
@@ -53,6 +159,10 @@ const FLAG_MASTER: u32 = 0x1;
 pub const AUTHOR_LENGTH: usize = 32;
 /// Maximum length of the plugin description string
 pub const DESCRIPTION_LENGTH: usize = 256;
+/// Maximum length of player name
+pub const NAME_LENGTH: usize = 32;
+/// Maximum length of player cell name
+pub const CELL_LENGTH: usize = 64;
 
 /// Morrowind version 1.2
 ///
@@ -101,6 +211,8 @@ impl Plugin {
             is_master: false,
             author,
             description,
+            save: None,
+            screen_data: vec![],
             masters: vec![],
             records: vec![],
             id_map: HashMap::new(),
@@ -162,6 +274,8 @@ impl Plugin {
             is_master: flags & FLAG_MASTER != 0,
             author,
             description,
+            save: None,
+            screen_data: vec![],
             masters: vec![],
             records: Vec::with_capacity(num_records),
             id_map: HashMap::with_capacity(num_records),
@@ -187,6 +301,32 @@ impl Plugin {
                         return Err(io_error("Data field without master"));
                     }
                 },
+                b"GMDT" => {
+                    // TODO: write a test for this part
+                    let data = field.consume();
+                    let mut reader: &mut &[u8] = &mut data.as_ref();
+                    let current_health = extract!(reader as f32)?;
+                    let max_health = extract!(reader as f32)?;
+                    let hour = extract!(reader as f32)?;
+                    let mut unknown1 = [0u8; 12];
+                    reader.read_exact(&mut unknown1)?;
+                    let current_cell = extract_string(CELL_LENGTH, &mut reader)?;
+                    let mut unknown2 = [0u8; 4];
+                    reader.read_exact(&mut unknown2)?;
+                    let player_name = extract_string(NAME_LENGTH, &mut reader)?;
+
+                    plugin.save = Some(SaveInfo {
+                        current_health,
+                        max_health,
+                        hour,
+                        unknown1,
+                        current_cell,
+                        unknown2,
+                        player_name,
+                    });
+                },
+                b"SCRD" => (),
+                b"SCRS" => plugin.screen_data = field.consume(),
                 _ => return Err(io_error(format!("Unexpected field in header: {}", field.display_name()))),
             }
         }
@@ -354,6 +494,22 @@ impl Plugin {
         Ok(())
     }
 
+    /// Get save game info if any is present
+    pub fn get_save_info(&self) -> Option<&SaveInfo> {
+        match self.save {
+            Some(ref info) => Some(info),
+            None => None,
+        }
+    }
+
+    /// Get save game info if any is present, mutably
+    pub fn get_save_info_mut(&mut self) -> Option<&mut SaveInfo> {
+        match self.save {
+            Some(ref mut info) => Some(info),
+            None => None,
+        }
+    }
+
     /// Adds a new master to this plugin
     ///
     /// Masters are other plugins that this plugin depends on. `name` should be the filename of the
@@ -425,9 +581,12 @@ impl Plugin {
         let r = Rc::new(RefCell::new(record));
         if let Some(id) = r.borrow().id() {
             let key = String::from(id);
-            if self.id_map.contains_key(id) {
+            // FIXME: the code below prevents loading saves because base records and change records
+            //  have the same IDs, so I've disabled it for now. however, we should restore this in
+            //  the future.
+            /*if self.id_map.contains_key(id) {
                 return Err(TesError::DuplicateId(key));
-            }
+            }*/
 
             self.id_map.insert(key, Rc::clone(&r));
         }
@@ -530,6 +689,26 @@ impl Plugin {
             let mast = Field::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(format!("Failed to encode master file name: {}", e)))?;
             header.add_field(mast);
             header.add_field(Field::new_u64(b"DATA", *size));
+        }
+
+        if let Some(ref save) = self.save {
+            let mut game_data = vec![0u8; 0x7c];
+            let mut writer = &mut &mut game_data;
+            serialize!(save.current_health => writer)?;
+            serialize!(save.max_health => writer)?;
+            serialize!(save.hour => writer)?;
+            writer.write_exact(&save.unknown1)?;
+            serialize_str(&save.current_cell, CELL_LENGTH, &mut writer)?;
+            writer.write_exact(&save.unknown2)?;
+            serialize_str(&save.player_name, NAME_LENGTH, &mut writer)?;
+
+            header.add_field(Field::new(b"GMDT", game_data).unwrap());
+        }
+
+        if self.screen_data.len() > 0 {
+            // as far as I can tell, the contents of this field are always the same
+            header.add_field(Field::new(b"SCRD", vec![0, 0, 0xff, 0, 0, 0xff, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0x20, 0, 0, 0]).unwrap());
+            header.add_field(Field::new(b"SCRS", self.screen_data.clone()).unwrap());
         }
 
         header.write(&mut f)?;
