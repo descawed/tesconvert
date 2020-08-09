@@ -6,3 +6,6 @@ pub use plugin::*;
 
 mod field;
 pub use field::*;
+
+mod npc;
+pub use npc::*;

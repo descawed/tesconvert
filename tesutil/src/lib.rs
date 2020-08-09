@@ -200,6 +200,11 @@ fn decode_failed<T: error::Error + Send + Sync + 'static>(msg: &str, e: T) -> Te
     }
 }
 
+fn wrap_decode<F>(msg: &str, mut f: F) -> Result<(), TesError>
+where F: FnMut() -> io::Result<()> {
+    f().map_err(|e| decode_failed(msg, e))
+}
+
 /// Error type for plugin errors
 ///
 /// A type for errors that may occur while reading or writing plugin files. Methods that return a
