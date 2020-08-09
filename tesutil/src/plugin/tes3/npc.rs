@@ -100,43 +100,43 @@ pub struct Npc {
     script: Option<String>,
     level: u16,
     // <attributes>
-    strength: u8,
-    intelligence: u8,
-    willpower: u8,
-    agility: u8,
-    speed: u8,
-    endurance: u8,
-    personality: u8,
-    luck: u8,
+    pub strength: u8,
+    pub intelligence: u8,
+    pub willpower: u8,
+    pub agility: u8,
+    pub speed: u8,
+    pub endurance: u8,
+    pub personality: u8,
+    pub luck: u8,
     // </attributes>
     // <skills>
-    block: u8,
-    armorer: u8,
-    medium_armor: u8,
-    heavy_armor: u8,
-    blunt: u8,
-    long_blade: u8,
-    axe: u8,
-    spear: u8,
-    athletics: u8,
-    enchant: u8,
-    destruction: u8,
-    alteration: u8,
-    illusion: u8,
-    conjuration: u8,
-    mysticism: u8,
-    restoration: u8,
-    alchemy: u8,
-    unarmored: u8,
-    security: u8,
-    sneak: u8,
-    acrobatics: u8,
-    light_armor: u8,
-    short_blade: u8,
-    marksman: u8,
-    mercantile: u8,
-    speechcraft: u8,
-    hand_to_hand: u8,
+    pub block: u8,
+    pub armorer: u8,
+    pub medium_armor: u8,
+    pub heavy_armor: u8,
+    pub blunt: u8,
+    pub long_blade: u8,
+    pub axe: u8,
+    pub spear: u8,
+    pub athletics: u8,
+    pub enchant: u8,
+    pub destruction: u8,
+    pub alteration: u8,
+    pub illusion: u8,
+    pub conjuration: u8,
+    pub mysticism: u8,
+    pub restoration: u8,
+    pub alchemy: u8,
+    pub unarmored: u8,
+    pub security: u8,
+    pub sneak: u8,
+    pub acrobatics: u8,
+    pub light_armor: u8,
+    pub short_blade: u8,
+    pub marksman: u8,
+    pub mercantile: u8,
+    pub speechcraft: u8,
+    pub hand_to_hand: u8,
     // </skills>
     health: u16,
     magicka: u16,
@@ -489,6 +489,42 @@ impl Npc {
         }
 
         Ok(npc)
+    }
+
+    /// Gets the character's name
+    pub fn name(&self) -> Option<&str> {
+        self.name.map(|v| &v)
+    }
+
+    /// Sets the character's name
+    pub fn set_name(&mut self, name: String) -> Result<(), TesError> {
+        check_size(&name, MAX_DATA, "NPC name too long")?;
+        self.name = Some(name);
+        Ok(())
+    }
+
+    /// Gets the character's class
+    pub fn class(&self) -> &str {
+        &self.class
+    }
+
+    /// Sets the character's class
+    pub fn set_class(&mut self, class: String) -> Result<(), TesError> {
+        check_size(&class, MAX_DATA, "NPC class too long")?;
+        self.class = class;
+        Ok(())
+    }
+
+    /// Gets the character's race
+    pub fn race(&self) -> &str {
+        &self.race
+    }
+
+    /// Sets the character's race
+    pub fn set_race(&mut self, race: String) -> Result<(), TesError> {
+        check_size(&race, MAX_DATA, "NPC race too long")?;
+        self.race = race;
+        Ok(())
     }
 }
 
