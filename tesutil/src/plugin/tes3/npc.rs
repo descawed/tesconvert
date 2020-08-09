@@ -491,3 +491,20 @@ impl Npc {
         Ok(npc)
     }
 }
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    static NPC_RECORD: &[u8] = include_bytes!("test/npc_record.bin");
+
+    #[test]
+    fn parse_record() {
+        let record = Record::read(&mut NPC_RECORD.as_ref()).unwrap().unwrap();
+        let npc = Npc::read(&record).unwrap();
+        assert_eq!(npc.id, "player");
+        assert_eq!(npc.name.unwrap(), "Cirfenath");
+        assert_eq!(npc.class, "NEWCLASSID_CHARGEN");
+        assert!(npc.inventory.len() > 0);
+    }
+}
