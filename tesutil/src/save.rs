@@ -1,6 +1,9 @@
 mod change;
 pub use change::*;
 
+mod actor;
+pub use actor::*;
+
 use crate::*;
 use crate::plugin::tes4::Record;
 use std::io;

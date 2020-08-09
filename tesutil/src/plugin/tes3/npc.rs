@@ -493,10 +493,16 @@ impl Npc {
 
     /// Gets the character's name
     pub fn name(&self) -> Option<&str> {
-        self.name.map(|v| &v)
+        self.name.as_ref().map(|v| &v[..])
     }
 
     /// Sets the character's name
+    ///
+    /// # Errors
+    ///
+    /// Fails if the string length exceeds [`MAX_DATA`]
+    ///
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn set_name(&mut self, name: String) -> Result<(), TesError> {
         check_size(&name, MAX_DATA, "NPC name too long")?;
         self.name = Some(name);
@@ -509,6 +515,12 @@ impl Npc {
     }
 
     /// Sets the character's class
+    ///
+    /// # Errors
+    ///
+    /// Fails if the string length exceeds [`MAX_DATA`]
+    ///
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn set_class(&mut self, class: String) -> Result<(), TesError> {
         check_size(&class, MAX_DATA, "NPC class too long")?;
         self.class = class;
@@ -521,6 +533,12 @@ impl Npc {
     }
 
     /// Sets the character's race
+    ///
+    /// # Errors
+    ///
+    /// Fails if the string length exceeds [`MAX_DATA`]
+    ///
+    /// [`MAX_DATA`]: constant.MAX_DATA.html
     pub fn set_race(&mut self, race: String) -> Result<(), TesError> {
         check_size(&race, MAX_DATA, "NPC race too long")?;
         self.race = race;
