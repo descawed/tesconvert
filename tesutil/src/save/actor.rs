@@ -1,6 +1,7 @@
 use bitflags;
 use crate::*;
 use crate::save::{ChangeRecord, ChangeType};
+use std::io;
 use std::io::Read;
 
 bitflags! {
@@ -281,5 +282,136 @@ impl ActorChange {
 
         self.full_name = name;
         Ok(())
+    }
+
+    /// Writes this actor change to the provided change record
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    // TODO: can an I/O error occur while writing to a vector like this?
+    pub fn write(&self, record: &mut ChangeRecord) -> io::Result<()> {
+        let mut buf: Vec<u8> = vec![];
+        let mut writer = &mut &mut buf;
+        let mut flags = ActorChangeFlags::empty();
+
+        if let Some(form_flags) = self.flags {
+            flags |= ActorChangeFlags::FORM_FLAGS;
+            serialize!(form_flags => writer)?;
+        }
+
+        if let Some(ref attributes) = self.attributes {
+            flags |= ActorChangeFlags::BASE_ATTRIBUTES;
+            serialize!(attributes.strength => writer)?;
+            serialize!(attributes.intelligence => writer)?;
+            serialize!(attributes.willpower => writer)?;
+            serialize!(attributes.agility => writer)?;
+            serialize!(attributes.speed => writer)?;
+            serialize!(attributes.endurance => writer)?;
+            serialize!(attributes.personality => writer)?;
+            serialize!(attributes.luck => writer)?;
+        }
+
+        if let Some(ref base_data) = self.base {
+            flags |= ActorChangeFlags::BASE_DATA;
+            serialize!(base_data.flags.bits => writer)?;
+            serialize!(base_data.magicka => writer)?;
+            serialize!(base_data.fatigue => writer)?;
+            serialize!(base_data.gold => writer)?;
+            serialize!(base_data.level => writer)?;
+            serialize!(base_data.calc_min => writer)?;
+            serialize!(base_data.calc_max => writer)?;
+        }
+
+        if self.factions.len() > 0 {
+            flags |= ActorChangeFlags::FACTIONS;
+            let len = self.factions.len() as u16;
+            serialize!(len => writer)?;
+            for faction in self.factions.iter() {
+                serialize!(faction.0 => writer)?;
+                serialize!(faction.1 => writer)?;
+            }
+        }
+
+        if self.spells.len() > 0 {
+            flags |= ActorChangeFlags::SPELL_LIST;
+            let len = self.spells.len() as u16;
+            serialize!(len => writer)?;
+            for spell in self.spells.iter() {
+                serialize!(spell => writer)?;
+            }
+        }
+
+        if let Some(ref ai_data) = self.ai_data {
+            flags |= ActorChangeFlags::AI_DATA;
+            writer.write_exact(ai_data)?;
+        }
+
+        if let Some(base_health) = self.base_health {
+            flags |= ActorChangeFlags::BASE_HEALTH;
+            serialize!(base_health => writer)?;
+        }
+
+        if self.modifiers.len() > 0 {
+            flags |= ActorChangeFlags::BASE_MODIFIERS;
+            let len = self.modifiers.len() as u16;
+            serialize!(len => writer)?;
+            for modifier in self.modifiers.iter() {
+                serialize!(modifier.0 => writer)?;
+                serialize!(modifier.1 => writer)?;
+            }
+        }
+
+        if let Some(ref name) = self.full_name {
+            flags |= ActorChangeFlags::FULL_NAME;
+            serialize_bstring(&mut writer, &name[..])?;
+        }
+
+        if let Some(ref skills) = self.skills {
+            flags |= ActorChangeFlags::SKILLS;
+            serialize!(skills.armorer => writer)?;
+            serialize!(skills.athletics => writer)?;
+            serialize!(skills.blade => writer)?;
+            serialize!(skills.block => writer)?;
+            serialize!(skills.blunt => writer)?;
+            serialize!(skills.hand_to_hand => writer)?;
+            serialize!(skills.heavy_armor => writer)?;
+            serialize!(skills.alchemy => writer)?;
+            serialize!(skills.alteration => writer)?;
+            serialize!(skills.conjuration => writer)?;
+            serialize!(skills.destruction => writer)?;
+            serialize!(skills.illusion => writer)?;
+            serialize!(skills.mysticism => writer)?;
+            serialize!(skills.restoration => writer)?;
+            serialize!(skills.acrobatics => writer)?;
+            serialize!(skills.light_armor => writer)?;
+            serialize!(skills.marksman => writer)?;
+            serialize!(skills.mercantile => writer)?;
+            serialize!(skills.security => writer)?;
+            serialize!(skills.sneak => writer)?;
+            serialize!(skills.speechcraft => writer)?;
+        }
+
+        if let Some(combat_style) = self.combat_style {
+            flags |= ActorChangeFlags::COMBAT_STYLE;
+            serialize!(combat_style => writer)?;
+        }
+
+        record.set_data(flags.bits, buf).map_err(|e| io_error(e))?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::save::*;
+
+    #[test]
+    fn read_actor_change() {
+        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let player = save.get_change_record(7).unwrap();
+        let actor_change = ActorChange::read(player).unwrap();
+        dbg!(actor_change);
     }
 }

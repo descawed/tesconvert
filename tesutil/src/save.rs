@@ -9,6 +9,7 @@ use crate::plugin::tes4::Record;
 use std::io;
 use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
 use std::fs::File;
+use std::collections::HashMap;
 
 /// An Oblivion save game
 ///
@@ -48,7 +49,8 @@ pub struct Save {
     reticle_data: Vec<u8>,
     interface_data: Vec<u8>,
     region_data: Vec<u8>,
-    change_records: Vec<ChangeRecord>,
+    change_ids: Vec<u32>,
+    change_records: HashMap<u32, ChangeRecord>,
     temporary_effects: Vec<u8>,
     form_ids: Vec<u32>,
     world_spaces: Vec<u32>,
@@ -183,9 +185,13 @@ impl Save {
         let mut region_data = vec![0u8; region_size];
         f.read_exact(&mut region_data)?;
 
-        let mut change_records = Vec::with_capacity(num_change_records);
+        let mut change_ids = Vec::with_capacity(num_change_records);
+        let mut change_records = HashMap::with_capacity(num_change_records);
         for _ in 0..num_change_records {
-            change_records.push(ChangeRecord::read(&mut f)?.0);
+            let record = ChangeRecord::read(&mut f)?.0;
+            let form_id = record.form_id();
+            change_ids.push(form_id);
+            change_records.insert(form_id, record);
         }
         
         let temp_effects_size = extract!(f as u32)? as usize;
@@ -239,6 +245,7 @@ impl Save {
             reticle_data,
             interface_data,
             region_data,
+            change_ids,
             change_records,
             temporary_effects,
             form_ids,
@@ -275,6 +282,20 @@ impl Save {
         check_size(&name, MAX_BSTRING, "Player name too long")?;
         self.player_name = name;
         Ok(())
+    }
+
+    /// Gets a change record by form ID
+    ///
+    /// Returns `None` if no change record exists for the given form ID.
+    pub fn get_change_record(&self, form_id: u32) -> Option<&ChangeRecord> {
+        self.change_records.get(&form_id)
+    }
+
+    /// Gets a change record by form ID, mutably
+    ///
+    /// Returns `None` if no change record exists for the given form ID.
+    pub fn get_change_record_mut(&mut self, form_id: u32) -> Option<&mut ChangeRecord> {
+        self.change_records.get_mut(&form_id)
     }
 
     /// Write a save to a binary stream
@@ -377,8 +398,10 @@ impl Save {
         serialize!(self.region_data.len() as u16 => f)?;
         f.write_exact(&self.region_data)?;
 
-        for change_record in self.change_records.iter() {
-            change_record.write(&mut f)?;
+        for id in self.change_ids.iter() {
+            if let Some(change_record) = self.change_records.get(id) {
+                change_record.write(&mut f)?;
+            }
         }
 
         serialize!(self.temporary_effects.len() as u32 => f)?;
@@ -416,11 +439,12 @@ impl Save {
 }
 
 #[cfg(test)]
+static TEST_SAVE: &[u8] = include_bytes!("save/test/autosave.ess");
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
-
-    static TEST_SAVE: &[u8] = include_bytes!("save/test/autosave.ess");
 
     #[test]
     fn read_save() {
