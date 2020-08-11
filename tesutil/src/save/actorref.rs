@@ -1,3 +1,5 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::convert::{Into, TryFrom};
 use std::io;
 
 use crate::*;
@@ -33,6 +35,17 @@ bitflags! {
         const ENABLED_DISABLED = 0x40000000;
         const CELL_CHANGED = 0x80000000;
     }
+}
+
+/// Determines an actor's processing priority
+#[derive(Copy, Clone, Debug, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum ActorFlag {
+    High = 0,
+    MidHigh = 1,
+    MidLow = 2,
+    Low = 3,
+    None = 0xff,
 }
 
 /// Value of a script variable
@@ -309,6 +322,38 @@ impl Property {
     }
 }
 
+/// An item in the player's inventory
+#[derive(Debug)]
+pub struct Item {
+    iref: u32,
+    stack_count: i32,
+    changes: Vec<Vec<Property>>,
+}
+
+/// An active magical effect being applied to the player
+#[derive(Debug)]
+pub struct ActiveEffect {
+    spell: u32,
+    effect: u8,
+    details: Vec<u8>,
+}
+
+/// A class, if the player created a custom class
+#[derive(Debug)]
+pub struct CustomClass {
+    // TODO: make these enums
+    favored_attributes: [u32; 2],
+    specialization: u32,
+    major_skills: [u32; 7],
+    flags: u32,
+    services: u32,
+    skill_trained: u8,
+    max_training: u8,
+    name: String,
+    icon: String,
+    unknown: u32,
+}
+
 /// Changes to the player
 ///
 /// This is a subset of the functionality for change records detailing changes to a placed instance
@@ -316,5 +361,61 @@ impl Property {
 /// documented, so for now we're focusing on just the player.
 #[derive(Debug)]
 pub struct PlayerReferenceChange {
-    
+    // location
+    cell: u32,
+    x: f32,
+    y: f32,
+    z: f32,
+    rx: f32,
+    ry: f32,
+    rz: f32,
+    // temporary attribute changes
+    temp_active_effects: [f32; 71],
+    tac_unknown: [f32; 71],
+    damage: [f32; 71],
+    health_delta: f32,
+    magicka_delta: f32,
+    fatigue_delta: f32,
+    // flag
+    actor_flag: ActorFlag,
+    // inventory
+    inventory: Vec<Item>,
+    // properties
+    properties: Vec<Property>,
+    // TODO: do we need to grab any of the modifier sections?
+    raw: Vec<u8>,
+    // player stats
+    statistics: [u32; 34],
+    stat_unknown1: [u8; 118],
+    birthsign: u32,
+    stat_unknown2: [u32; 13],
+    stat_unknown3: [u8; 2],
+    stat_unknown4: Vec<u32>,
+    stat_unknown5: [u8; 2],
+    oblivion_doors: Vec<(u32, u8)>,
+    stat_unknown6: [u8; 2],
+    stat_active_effects: Vec<ActiveEffect>,
+    skill_xp: [f32; 21],
+    advancements: Vec<[u8; 8]>,
+    spec_counts: [u8; 3],
+    skill_usage: [u32; 21],
+    major_skill_advancements: u32,
+    stat_unknown7: u8,
+    active_quest: u32,
+    known_topics: Vec<u32>,
+    open_quests: Vec<(u32, u8, u8)>,
+    known_magic_effects: Vec<[u8; 4]>,
+    facegen_symmetric: [u8; 200],
+    facegen_asymmetric: [u8; 120],
+    facegen_texture: [u8; 200],
+    race: u32,
+    hair: u32,
+    eyes: u32,
+    hair_length: f32,
+    hair_color: [u8; 3],
+    stat_unknown8: u8,
+    gender: u8,
+    name: String,
+    class: u32,
+    custom_class: Option<CustomClass>,
 }
