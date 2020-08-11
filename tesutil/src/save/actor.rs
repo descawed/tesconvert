@@ -397,7 +397,7 @@ impl ActorChange {
             serialize!(combat_style => writer)?;
         }
 
-        record.set_data(flags.bits, buf).map_err(|e| io_error(e))?;
+        record.set_data(flags.bits, buf).map_err(io_error)?;
         Ok(())
     }
 }
@@ -410,8 +410,9 @@ mod tests {
     #[test]
     fn read_actor_change() {
         let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
-        let player = save.get_change_record(7).unwrap();
+        let player = save.get_change_record(FORM_PLAYER).unwrap();
         let actor_change = ActorChange::read(player).unwrap();
         dbg!(actor_change);
+        // TODO: assert something
     }
 }

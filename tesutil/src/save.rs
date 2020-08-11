@@ -4,12 +4,20 @@ pub use change::*;
 mod actor;
 pub use actor::*;
 
+mod actorref;
+pub use actorref::*;
+
 use crate::*;
 use crate::plugin::tes4::Record;
 use std::io;
 use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
 use std::fs::File;
 use std::collections::HashMap;
+
+/// Form ID of the player's base record
+pub const FORM_PLAYER: u32 = 7;
+/// Form ID of the player's reference
+pub const FORM_PLAYER_REF: u32 = 0x14;
 
 /// An Oblivion save game
 ///
