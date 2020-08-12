@@ -465,9 +465,9 @@ pub struct PlayerReferenceChange {
     ry: f32,
     rz: f32,
     // temporary attribute changes
-    temp_active_effects: [f32; 71],
-    tac_unknown: [f32; 71],
-    damage: [f32; 71],
+    temp_active_effects: [f32; 72],
+    tac_unknown: [f32; 72],
+    damage: [f32; 72],
     health_delta: f32,
     magicka_delta: f32,
     fatigue_delta: f32,
@@ -549,9 +549,9 @@ impl PlayerReferenceChange {
         let ry = extract!(reader as f32)?;
         let rz = extract!(reader as f32)?;
 
-        let mut temp_active_effects = [0f32; 71];
-        let mut tac_unknown = [0f32; 71];
-        let mut damage = [0f32; 71];
+        let mut temp_active_effects = [0f32; 72];
+        let mut tac_unknown = [0f32; 72];
+        let mut damage = [0f32; 72];
 
         for i in 0..temp_active_effects.len() {
             temp_active_effects[i] = extract!(reader as f32)?;
@@ -571,7 +571,7 @@ impl PlayerReferenceChange {
 
         let actor_flag = ActorFlag::try_from(extract!(reader as u8)?).map_err(io_error)?;
 
-        // inventory
+        // inventory might not be present if the save is from the very beginning of the game
         let inventory = if record.flags() & 0x08000000 != 0 {
             let num_items = extract!(reader as u32)? as usize;
             let mut inventory = Vec::with_capacity(num_items);
@@ -612,6 +612,7 @@ impl PlayerReferenceChange {
         }
 
         let size = (end - start) as usize;
+        reader.seek(SeekFrom::Start(start))?;
         let mut raw = vec![0u8; size];
         reader.read_exact(&mut raw[..])?;
 
@@ -724,7 +725,7 @@ impl PlayerReferenceChange {
         let stat_unknown8 = extract!(reader as u8)?;
 
         let is_female = extract!(reader as u8)? != 0;
-        let name = extract_bstring(&mut reader)?;
+        let name = extract_bzstring(&mut reader)?;
         let class = extract!(reader as u32)?;
 
         let custom_class = if class == FORM_PLAYER_CUSTOM_CLASS {
@@ -781,5 +782,20 @@ impl PlayerReferenceChange {
             class,
             custom_class,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::save::{Save, TEST_SAVE};
+
+    #[test]
+    fn read_player_ref_change() {
+        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let player = save.get_change_record(FORM_PLAYER_REF).unwrap();
+        let player_change = PlayerReferenceChange::read(player).unwrap();
+        assert_eq!(player_change.name, "test");
+        assert!(!player_change.is_female);
     }
 }
