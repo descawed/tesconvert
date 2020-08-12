@@ -18,6 +18,8 @@ use std::collections::HashMap;
 pub const FORM_PLAYER: u32 = 7;
 /// Form ID of the player's reference
 pub const FORM_PLAYER_REF: u32 = 0x14;
+/// Form ID of the player's custom class
+pub const FORM_PLAYER_CUSTOM_CLASS: u32 = 0x00022843;
 
 /// An Oblivion save game
 ///

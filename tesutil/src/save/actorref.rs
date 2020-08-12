@@ -1,8 +1,10 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::{Into, TryFrom};
+use std::convert::TryFrom;
 use std::io;
+use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::*;
+use crate::save::{ChangeRecord, FORM_PLAYER_REF, ChangeType, FORM_PLAYER_CUSTOM_CLASS};
 
 use bitflags;
 
@@ -61,7 +63,7 @@ impl ScriptVariableValue {
     /// # Errors
     ///
     /// Fails if an I/O or decoding error occurs
-    pub fn read<T: Read>(f: T) -> io::Result<ScriptVariableValue> {
+    pub fn read<T: Read>(mut f: T) -> io::Result<ScriptVariableValue> {
         let var_type = extract!(f as u16)?;
         match var_type {
             0 => Ok(ScriptVariableValue::Number(extract!(f as f64)?)),
@@ -78,7 +80,7 @@ impl ScriptVariableValue {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         match self {
             ScriptVariableValue::Number(value) => {
                 serialize!(0u16 => f)?;
@@ -217,7 +219,7 @@ impl Property {
                 z: extract!(f as f32)?,
             }),
             0x47 => Ok(Property::CantWear),
-            0x48 => Ok(Property::Poision(extract!(f as u32)?)),
+            0x48 => Ok(Property::Poison(extract!(f as u32)?)),
             0x4f => Ok(Property::Unknown4f(extract!(f as u32)?)),
             0x50 => Ok(Property::BoundItem),
             0x55 => Ok(Property::ShortcutKey(extract!(f as u8)?)),
@@ -245,8 +247,12 @@ impl Property {
                 }
                 serialize!(unknown => f)?;
             },
-            Property::EquippedItem => serialize!(0x1bu8 => f)?,
-            Property::EquippedAccessory => serialize!(0x1cu8 => f)?,
+            Property::EquippedItem => {
+                serialize!(0x1bu8 => f)?;
+            },
+            Property::EquippedAccessory => {
+                serialize!(0x1cu8 => f)?;
+            },
             Property::Unknown22(value) => {
                 serialize!(0x22u8 => f)?;
                 serialize!(value => f)?;
@@ -302,7 +308,9 @@ impl Property {
                 serialize!(y => f)?;
                 serialize!(z => f)?;
             },
-            Property::CantWear => serialize!(0x47u8 => f)?,
+            Property::CantWear => {
+                serialize!(0x47u8 => f)?;
+            },
             Property::Poison(value) => {
                 serialize!(0x48u8 => f)?;
                 serialize!(value => f)?;
@@ -311,7 +319,9 @@ impl Property {
                 serialize!(0x4fu8 => f)?;
                 serialize!(value => f)?;
             },
-            Property::BoundItem => serialize!(0x50u8 => f)?,
+            Property::BoundItem => {
+                serialize!(0x50u8 => f)?;
+            },
             Property::ShortcutKey(key) => {
                 serialize!(0x55u8 => f)?;
                 serialize!(key => f)?;
@@ -330,12 +340,56 @@ pub struct Item {
     changes: Vec<Vec<Property>>,
 }
 
+impl Item {
+    /// Reads an item from a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn read<T: Read>(mut f: T) -> io::Result<Item> {
+        let iref = extract!(f as u32)?;
+        let stack_count = extract!(f as i32)?;
+        let num_changes = extract!(f as u32)? as usize;
+        let mut changes = Vec::with_capacity(num_changes);
+        for _ in 0..num_changes {
+            let num_properties = extract!(f as u16)? as usize;
+            let mut properties = Vec::with_capacity(num_properties);
+            for _ in 0..num_properties {
+                properties.push(Property::read(&mut f)?);
+            }
+            changes.push(properties);
+        }
+
+        Ok(Item { iref, stack_count, changes })
+    }
+}
+
 /// An active magical effect being applied to the player
 #[derive(Debug)]
 pub struct ActiveEffect {
     spell: u32,
     effect: u8,
     details: Vec<u8>,
+}
+
+impl ActiveEffect {
+    /// Reads an active effect from a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn read<T: Read>(mut f: T) -> io::Result<ActiveEffect> {
+        let size = extract!(f as u16)? as usize;
+        let spell = extract!(f as u32)?;
+        let effect = extract!(f as u8)?;
+        let mut details = vec![0u8; size];
+        f.read_exact(&mut details)?;
+        Ok(ActiveEffect {
+            spell,
+            effect,
+            details
+        })
+    }
 }
 
 /// A class, if the player created a custom class
@@ -354,12 +408,53 @@ pub struct CustomClass {
     unknown: u32,
 }
 
+impl CustomClass {
+    /// Reads a custom class from a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn read<T: Read>(mut f: T) -> io::Result<CustomClass> {
+        let mut favored_attributes = [0u32; 2];
+        for i in 0..favored_attributes.len() {
+            favored_attributes[i] = extract!(f as u32)?;
+        }
+
+        let specialization = extract!(f as u32)?;
+
+        let mut major_skills = [0u32; 7];
+        for i in 0..major_skills.len() {
+            major_skills[i] = extract!(f as u32)?;
+        }
+
+        let flags = extract!(f as u32)?;
+        let services = extract!(f as u32)?;
+        let skill_trained = extract!(f as u8)?;
+        let max_training = extract!(f as u8)?;
+        let name = extract_bstring(&mut f)?;
+        let icon = extract_bstring(&mut f)?;
+        let unknown = extract!(f as u32)?;
+
+        Ok(CustomClass {
+            favored_attributes,
+            specialization,
+            major_skills,
+            flags,
+            services,
+            skill_trained,
+            max_training,
+            name,
+            icon,
+            unknown,
+        })
+    }
+}
+
 /// Changes to the player
 ///
 /// This is a subset of the functionality for change records detailing changes to a placed instance
 /// of an NPC (ACHR) or creature (ACRE). However, these records are quite complex and not fully
 /// documented, so for now we're focusing on just the player.
-#[derive(Debug)]
 pub struct PlayerReferenceChange {
     // location
     cell: u32,
@@ -414,8 +509,277 @@ pub struct PlayerReferenceChange {
     hair_length: f32,
     hair_color: [u8; 3],
     stat_unknown8: u8,
-    gender: u8,
+    pub is_female: bool,
     name: String,
     class: u32,
     custom_class: Option<CustomClass>,
+}
+
+impl PlayerReferenceChange {
+    /// Reads a player reference change from a raw change record
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs or if the data is invalid
+    pub fn read(record: &ChangeRecord) -> io::Result<PlayerReferenceChange> {
+        if record.form_id() != FORM_PLAYER_REF {
+            return Err(io_error(TesError::DecodeFailed {
+                description: String::from("Only the player's change record may currently be decoded"),
+                cause: None,
+            }));
+        }
+
+        if record.change_type() != ChangeType::CharacterReference {
+            return Err(io_error(TesError::DecodeFailed {
+                description: String::from("Only character reference change record may currently be decoded"),
+                cause: None,
+            }));
+        }
+
+        let mut data = record.data();
+        let data_size = data.len();
+        let mut reader = Cursor::new(&mut data);
+
+        // location
+        let cell = extract!(reader as u32)?;
+        let x = extract!(reader as f32)?;
+        let y = extract!(reader as f32)?;
+        let z = extract!(reader as f32)?;
+        let rx = extract!(reader as f32)?;
+        let ry = extract!(reader as f32)?;
+        let rz = extract!(reader as f32)?;
+
+        let mut temp_active_effects = [0f32; 71];
+        let mut tac_unknown = [0f32; 71];
+        let mut damage = [0f32; 71];
+
+        for i in 0..temp_active_effects.len() {
+            temp_active_effects[i] = extract!(reader as f32)?;
+        }
+
+        for i in 0..tac_unknown.len() {
+            tac_unknown[i] = extract!(reader as f32)?;
+        }
+
+        for i in 0..damage.len() {
+            damage[i] = extract!(reader as f32)?;
+        }
+
+        let health_delta = extract!(reader as f32)?;
+        let magicka_delta = extract!(reader as f32)?;
+        let fatigue_delta = extract!(reader as f32)?;
+
+        let actor_flag = ActorFlag::try_from(extract!(reader as u8)?).map_err(io_error)?;
+
+        // inventory
+        let inventory = if record.flags() & 0x08000000 != 0 {
+            let num_items = extract!(reader as u32)? as usize;
+            let mut inventory = Vec::with_capacity(num_items);
+            for _ in 0..num_items {
+                inventory.push(Item::read(&mut reader)?);
+            }
+            inventory
+        } else {
+            vec![]
+        };
+
+        let num_properties = extract!(reader as u16)? as usize;
+        let mut properties = Vec::with_capacity(num_properties);
+        for _ in 0..num_properties {
+            properties.push(Property::read(&mut reader)?);
+        }
+
+        // the following data is not fully decoded and/or not relevant to us here, so we just grab
+        // it all raw so we can spit it back out later
+        let start = reader.seek(SeekFrom::Current(0))?;
+        let mut end = data_size as u64;
+        for _ in start..end-1 {
+            // scan for certain marker bytes to tell when we've reached the player statistics section
+            let landmark = (extract!(reader as u8)?, extract!(reader as u8)?);
+            if landmark == (0xec, 0x42) {
+                // we have a potential match; check for the next pair of landmark bytes
+                reader.seek(SeekFrom::Current(19))?;
+                let landmark = (extract!(reader as u8)?, extract!(reader as u8)?);
+                if landmark == (0x96, 0x42) {
+                    // we found it!
+                    end = reader.seek(SeekFrom::Current(0))? + 28;
+                    break;
+                }
+                reader.seek(SeekFrom::Current(-22))?;
+            } else {
+                reader.seek(SeekFrom::Current(-1))?;
+            }
+        }
+
+        let size = (end - start) as usize;
+        let mut raw = vec![0u8; size];
+        reader.read_exact(&mut raw[..])?;
+
+        // player statistics
+        let mut statistics = [0u32; 34];
+        for i in 0..statistics.len() {
+            statistics[i] = extract!(reader as u32)?;
+        }
+
+        let mut stat_unknown1 = [0u8; 118];
+        reader.read_exact(&mut stat_unknown1)?;
+
+        let birthsign = extract!(reader as u32)?;
+
+        let mut stat_unknown2 = [0u32; 13];
+        for i in 0..stat_unknown2.len() {
+            stat_unknown2[i] = extract!(reader as u32)?;
+        }
+
+        let num2 = extract!(reader as u16)? as usize;
+
+        let mut stat_unknown3 = [0u8; 2];
+        reader.read_exact(&mut stat_unknown3)?;
+
+        let mut stat_unknown4 = Vec::with_capacity(num2);
+        for _ in 0..num2 {
+            stat_unknown4.push(extract!(reader as u32)?);
+        }
+
+        let mut stat_unknown5 = [0u8; 2];
+        reader.read_exact(&mut stat_unknown5)?;
+
+        let num_doors = extract!(reader as u16)? as usize;
+        let mut oblivion_doors = Vec::with_capacity(num_doors);
+        for _ in 0..num_doors {
+            oblivion_doors.push((extract!(reader as u32)?, extract!(reader as u8)?));
+        }
+
+        let mut stat_unknown6 = [0u8; 2];
+        reader.read_exact(&mut stat_unknown6)?;
+
+        let num_active_effects = extract!(reader as u16)? as usize;
+        let mut stat_active_effects = Vec::with_capacity(num_active_effects);
+        for _ in 0..num_active_effects {
+            stat_active_effects.push(ActiveEffect::read(&mut reader)?);
+        }
+
+        let mut skill_xp = [0f32; 21];
+        for i in 0..skill_xp.len() {
+            skill_xp[i] = extract!(reader as f32)?;
+        }
+
+        let num_advancements = extract!(reader as u32)? as usize;
+        let mut advancements = Vec::with_capacity(num_advancements);
+        for _ in 0..num_advancements {
+            let mut buf = [0u8; 8];
+            reader.read_exact(&mut buf)?;
+            advancements.push(buf);
+        }
+
+        let mut spec_counts = [0u8; 3];
+        reader.read_exact(&mut spec_counts)?;
+
+        let mut skill_usage = [0u32; 21];
+        for i in 0..skill_usage.len() {
+            skill_usage[i] = extract!(reader as u32)?;
+        }
+
+        let major_skill_advancements = extract!(reader as u32)?;
+        let stat_unknown7 = extract!(reader as u8)?;
+        let active_quest = extract!(reader as u32)?;
+
+        let num_known_topics = extract!(reader as u16)? as usize;
+        let mut known_topics = Vec::with_capacity(num_known_topics);
+        for _ in 0..num_known_topics {
+            known_topics.push(extract!(reader as u32)?);
+        }
+
+        let num_open_quests = extract!(reader as u16)? as usize;
+        let mut open_quests = Vec::with_capacity(num_open_quests);
+        for _ in 0..num_open_quests {
+            open_quests.push((extract!(reader as u32)?, extract!(reader as u8)?, extract!(reader as u8)?));
+        }
+
+        let num_magic_effects = extract!(reader as u32)? as usize;
+        let mut known_magic_effects = Vec::with_capacity(num_magic_effects);
+        for _ in 0..num_magic_effects {
+            let mut buf = [0u8; 4];
+            reader.read_exact(&mut buf)?;
+            known_magic_effects.push(buf);
+        }
+
+        let mut facegen_symmetric = [0u8; 200];
+        reader.read_exact(&mut facegen_symmetric)?;
+
+        let mut facegen_asymmetric = [0u8; 120];
+        reader.read_exact(&mut facegen_asymmetric)?;
+
+        let mut facegen_texture = [0u8; 200];
+        reader.read_exact(&mut facegen_texture)?;
+
+        let race = extract!(reader as u32)?;
+        let hair = extract!(reader as u32)?;
+        let eyes = extract!(reader as u32)?;
+        let hair_length = extract!(reader as f32)?;
+
+        let mut hair_color = [0u8; 3];
+        reader.read_exact(&mut hair_color)?;
+
+        let stat_unknown8 = extract!(reader as u8)?;
+
+        let is_female = extract!(reader as u8)? != 0;
+        let name = extract_bstring(&mut reader)?;
+        let class = extract!(reader as u32)?;
+
+        let custom_class = if class == FORM_PLAYER_CUSTOM_CLASS {
+            Some(CustomClass::read(&mut reader)?)
+        } else {
+            None
+        };
+
+        Ok(PlayerReferenceChange {
+            cell,
+            x, y, z,
+            rx, ry, rz,
+            temp_active_effects,
+            tac_unknown,
+            damage,
+            health_delta,
+            magicka_delta,
+            fatigue_delta,
+            actor_flag,
+            inventory,
+            properties,
+            raw,
+            statistics,
+            stat_unknown1,
+            birthsign,
+            stat_unknown2,
+            stat_unknown3,
+            stat_unknown4,
+            stat_unknown5,
+            oblivion_doors,
+            stat_unknown6,
+            stat_active_effects,
+            skill_xp,
+            advancements,
+            spec_counts,
+            skill_usage,
+            major_skill_advancements,
+            stat_unknown7,
+            active_quest,
+            known_topics,
+            open_quests,
+            known_magic_effects,
+            facegen_symmetric,
+            facegen_asymmetric,
+            facegen_texture,
+            race,
+            hair,
+            eyes,
+            hair_length,
+            hair_color,
+            stat_unknown8,
+            is_female,
+            name,
+            class,
+            custom_class,
+        })
+    }
 }
