@@ -362,6 +362,25 @@ impl Item {
 
         Ok(Item { iref, stack_count, changes })
     }
+
+    /// Writes an item to a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+        serialize!(self.iref => f)?;
+        serialize!(self.stack_count => f)?;
+        serialize!(self.changes.len() as u16 => f)?;
+        for change in self.changes.iter() {
+            serialize!(change.len() as u16 => f)?;
+            for property in change.iter() {
+                property.write(&mut f)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// An active magical effect being applied to the player
@@ -389,6 +408,20 @@ impl ActiveEffect {
             effect,
             details
         })
+    }
+
+    /// Writes an active effect to a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+        serialize!(self.details.len() as u16 => f)?;
+        serialize!(self.spell => f)?;
+        serialize!(self.effect => f)?;
+        f.write_exact(&self.details[..])?;
+
+        Ok(())
     }
 }
 
@@ -447,6 +480,33 @@ impl CustomClass {
             icon,
             unknown,
         })
+    }
+
+    /// Writes a custom class to a binary stream
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+        for attribute in self.favored_attributes.iter() {
+            serialize!(attribute => f)?;
+        }
+
+        serialize!(self.specialization => f)?;
+
+        for skill in self.major_skills.iter() {
+            serialize!(skill => f)?;
+        }
+
+        serialize!(self.flags => f)?;
+        serialize!(self.services => f)?;
+        serialize!(self.skill_trained => f)?;
+        serialize!(self.max_training => f)?;
+        serialize_bstring(&mut f, &self.name)?;
+        serialize_bstring(&mut f, &self.icon)?;
+        serialize!(self.unknown => f)?;
+
+        Ok(())
     }
 }
 
