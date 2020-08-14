@@ -516,6 +516,7 @@ impl CustomClass {
 /// of an NPC (ACHR) or creature (ACRE). However, these records are quite complex and not fully
 /// documented, so for now we're focusing on just the player.
 pub struct PlayerReferenceChange {
+    flags: u32,
     // location
     cell: u32,
     x: f32,
@@ -600,6 +601,8 @@ impl PlayerReferenceChange {
         let data_size = data.len();
         let mut reader = Cursor::new(&mut data);
 
+        let flags = record.flags();
+
         // location
         let cell = extract!(reader as u32)?;
         let x = extract!(reader as f32)?;
@@ -632,7 +635,7 @@ impl PlayerReferenceChange {
         let actor_flag = ActorFlag::try_from(extract!(reader as u8)?).map_err(io_error)?;
 
         // inventory might not be present if the save is from the very beginning of the game
-        let inventory = if record.flags() & 0x08000000 != 0 {
+        let inventory = if flags & 0x08000000 != 0 {
             let num_items = extract!(reader as u32)? as usize;
             let mut inventory = Vec::with_capacity(num_items);
             for _ in 0..num_items {
@@ -795,6 +798,7 @@ impl PlayerReferenceChange {
         };
 
         Ok(PlayerReferenceChange {
+            flags,
             cell,
             x, y, z,
             rx, ry, rz,
@@ -842,6 +846,146 @@ impl PlayerReferenceChange {
             class,
             custom_class,
         })
+    }
+
+    /// Writes a player reference change to a raw change record
+    ///
+    /// # Errors
+    ///
+    /// Fails if an I/O error occurs
+    pub fn write(&self, record: &mut ChangeRecord) -> io::Result<()> {
+        let mut buf: Vec<u8> = vec![];
+        let mut writer = &mut &mut buf;
+
+        serialize!(self.cell => writer)?;
+        serialize!(self.x => writer)?;
+        serialize!(self.y => writer)?;
+        serialize!(self.z => writer)?;
+        serialize!(self.rx => writer)?;
+        serialize!(self.ry => writer)?;
+        serialize!(self.rz => writer)?;
+
+        for effect in self.temp_active_effects.iter() {
+            serialize!(effect => writer)?;
+        }
+
+        for unknown in self.tac_unknown.iter() {
+            serialize!(unknown => writer)?;
+        }
+
+        for damage in self.damage.iter() {
+            serialize!(damage => writer)?;
+        }
+
+        serialize!(self.health_delta => writer)?;
+        serialize!(self.magicka_delta => writer)?;
+        serialize!(self.fatigue_delta => writer)?;
+
+        serialize!(Into::<u8>::into(self.actor_flag) => writer)?;
+
+        if self.flags & 0x08000000 != 0 {
+            serialize!(self.inventory.len() as u16 => writer)?;
+            for item in self.inventory.iter() {
+                item.write(&mut writer)?;
+            }
+        }
+
+        serialize!(self.properties.len() as u16 => writer)?;
+        for property in self.properties.iter() {
+            property.write(&mut writer)?;
+        }
+
+        writer.write_exact(&self.raw)?;
+
+        for stat in self.statistics.iter() {
+            serialize!(stat => writer)?;
+        }
+
+        writer.write_exact(&self.stat_unknown1)?;
+        serialize!(self.birthsign => writer)?;
+        for unknown in self.stat_unknown2.iter() {
+            serialize!(unknown => writer)?;
+        }
+
+        serialize!(self.stat_unknown4.len() as u16 => writer)?;
+        writer.write_exact(&self.stat_unknown3)?;
+        for unknown in self.stat_unknown4.iter() {
+            serialize!(unknown => writer)?;
+        }
+        writer.write_exact(&self.stat_unknown5)?;
+
+        serialize!(self.oblivion_doors.len() as u16 => writer)?;
+        for (door, flag) in self.oblivion_doors.iter() {
+            serialize!(door => writer)?;
+            serialize!(flag => writer)?;
+        }
+
+        writer.write_exact(&self.stat_unknown6)?;
+
+        serialize!(self.stat_active_effects.len() as u16 => writer)?;
+        for effect in self.stat_active_effects.iter() {
+            effect.write(&mut writer)?;
+        }
+
+        for xp in self.skill_xp.iter() {
+            serialize!(xp => writer)?;
+        }
+
+        serialize!(self.advancements.len() as u32 => writer)?;
+        for adv in self.advancements.iter() {
+            writer.write_exact(adv)?;
+        }
+
+        for spec in self.spec_counts.iter() {
+            serialize!(spec => writer)?;
+        }
+
+        for usage in self.skill_usage.iter() {
+            serialize!(usage => writer)?;
+        }
+
+        serialize!(self.major_skill_advancements => writer)?;
+        serialize!(self.stat_unknown7 => writer)?;
+        serialize!(self.active_quest => writer)?;
+
+        serialize!(self.known_topics.len() as u16 => writer)?;
+        for topic in self.known_topics.iter() {
+            serialize!(topic => writer)?;
+        }
+
+        serialize!(self.open_quests.len() as u16 => writer)?;
+        for (quest, stage, log_entry) in self.open_quests.iter() {
+            serialize!(quest => writer)?;
+            serialize!(stage => writer)?;
+            serialize!(log_entry => writer)?;
+        }
+
+        serialize!(self.known_magic_effects.len() as u16 => writer)?;
+        for effect in self.known_magic_effects.iter() {
+            writer.write_exact(effect)?;
+        }
+
+        writer.write_exact(&self.facegen_symmetric)?;
+        writer.write_exact(&self.facegen_asymmetric)?;
+        writer.write_exact(&self.facegen_texture)?;
+
+        serialize!(self.race => writer)?;
+        serialize!(self.hair => writer)?;
+        serialize!(self.eyes => writer)?;
+        serialize!(self.hair_length => writer)?;
+        writer.write_exact(&self.hair_color)?;
+        serialize!(self.stat_unknown8 => writer)?;
+        serialize!(if self.is_female { 1u8 } else { 0u8 } => writer)?;
+        serialize_bzstring(&mut writer, &self.name)?;
+        serialize!(self.class => writer)?;
+
+        if let Some(ref custom_class) = self.custom_class {
+            custom_class.write(&mut writer)?;
+        }
+
+        record.set_data(self.flags, buf).map_err(io_error)?;
+
+        Ok(())
     }
 }
 
