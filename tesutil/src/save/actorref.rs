@@ -438,7 +438,6 @@ pub struct CustomClass {
     max_training: u8,
     name: String,
     icon: String,
-    unknown: u32,
 }
 
 impl CustomClass {
@@ -466,7 +465,6 @@ impl CustomClass {
         let max_training = extract!(f as u8)?;
         let name = extract_bstring(&mut f)?;
         let icon = extract_bstring(&mut f)?;
-        let unknown = extract!(f as u32)?;
 
         Ok(CustomClass {
             favored_attributes,
@@ -478,7 +476,6 @@ impl CustomClass {
             max_training,
             name,
             icon,
-            unknown,
         })
     }
 
@@ -504,7 +501,6 @@ impl CustomClass {
         serialize!(self.max_training => f)?;
         serialize_bstring(&mut f, &self.name)?;
         serialize_bstring(&mut f, &self.icon)?;
-        serialize!(self.unknown => f)?;
 
         Ok(())
     }
@@ -574,6 +570,7 @@ pub struct PlayerReferenceChange {
     name: String,
     class: u32,
     custom_class: Option<CustomClass>,
+    stat_unknown9: u32,
 }
 
 impl PlayerReferenceChange {
@@ -797,6 +794,8 @@ impl PlayerReferenceChange {
             None
         };
 
+        let stat_unknown9 = extract!(reader as u32)?;
+
         Ok(PlayerReferenceChange {
             flags,
             cell,
@@ -845,6 +844,7 @@ impl PlayerReferenceChange {
             name,
             class,
             custom_class,
+            stat_unknown9,
         })
     }
 
@@ -960,7 +960,7 @@ impl PlayerReferenceChange {
             serialize!(log_entry => writer)?;
         }
 
-        serialize!(self.known_magic_effects.len() as u16 => writer)?;
+        serialize!(self.known_magic_effects.len() as u32 => writer)?;
         for effect in self.known_magic_effects.iter() {
             writer.write_exact(effect)?;
         }
@@ -983,6 +983,8 @@ impl PlayerReferenceChange {
             custom_class.write(&mut writer)?;
         }
 
+        serialize!(self.stat_unknown9 => writer)?;
+
         record.set_data(self.flags, buf).map_err(io_error)?;
 
         Ok(())
@@ -1001,5 +1003,15 @@ mod tests {
         let player_change = PlayerReferenceChange::read(player).unwrap();
         assert_eq!(player_change.name, "test");
         assert!(!player_change.is_female);
+    }
+
+    #[test]
+    fn write_player_ref_change() {
+        let mut save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut player = save.get_change_record_mut(FORM_PLAYER_REF).unwrap();
+        let original = player.data().to_vec();
+        let player_change = PlayerReferenceChange::read(player).unwrap();
+        player_change.write(&mut player).unwrap();
+        assert_eq!(original, player.data());
     }
 }
