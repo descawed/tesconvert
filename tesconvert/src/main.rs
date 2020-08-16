@@ -1,11 +1,17 @@
-use tesutil::plugin::tes3::*;
-use tesutil::save::*;
+use std::env;
+use std::process;
+
+use tesconvert::*;
 
 fn main() {
-    let mw_save = Plugin::load_file(r"F:\Steam\steamapps\common\Morrowind\Saves\quiksave.ess").unwrap();
-    let mut ob_save = Save::load_file(r"C:\Users\Jacob\Documents\My Games\Oblivion\Saves\autosave.ess").unwrap();
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 4 {
+        eprintln!("Usage: tesconvert <mw save> <ob save> <output path>");
+        process::exit(1);
+    }
 
-    let mw_save_info = mw_save.get_save_info().unwrap();
-    ob_save.set_player_name(String::from(mw_save_info.player_name())).unwrap();
-    ob_save.save_file(r"C:\Users\Jacob\Documents\My Games\Oblivion\Saves\mwconvert.ess").unwrap();
+    if let Err(e) = morrowind_to_oblivion(&args[1], &args[2], &args[3]) {
+        eprintln!("Conversion failed: {}", e);
+        process::exit(2);
+    }
 }

@@ -848,6 +848,24 @@ impl PlayerReferenceChange {
         })
     }
 
+    /// Gets the player's name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Sets the player's name
+    ///
+    /// # Errors
+    ///
+    /// Fails if the player's name is longer than [`MAX_BSTRING`]
+    ///
+    /// [`MAX_BSTRING`]: constant.MAX_BSTRING.html
+    pub fn set_name(&mut self, name: String) -> Result<(), TesError> {
+        check_size(&name, MAX_BSTRING, "Player name too long")?;
+        self.name = name;
+        Ok(())
+    }
+
     /// Writes a player reference change to a raw change record
     ///
     /// # Errors
