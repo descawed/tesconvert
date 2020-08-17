@@ -308,6 +308,13 @@ impl Save {
         self.change_records.get_mut(&form_id)
     }
 
+    /// Gets the form ID for an iref, if one exists
+    ///
+    /// Returns `None` if there is no form ID for the given iref
+    pub fn iref(&self, iref: u32) -> Option<u32> {
+        self.form_ids.get(iref as usize).map(|v| *v)
+    }
+
     /// Write a save to a binary stream
     ///
     /// # Errors
@@ -389,7 +396,8 @@ impl Save {
             record.write(&mut f)?;
         }
 
-        serialize!(self.quick_keys.len() as u16 => f)?;
+        serialize!(0u16 => f)?;
+        let start = f.seek(SeekFrom::Current(0))?;
         for quick_key in self.quick_keys.iter() {
             if let Some(setting) = quick_key {
                 serialize!(1u8 => f)?;
@@ -398,6 +406,11 @@ impl Save {
                 serialize!(0u8 => f)?;
             }
         }
+        // calculate the number of bytes we just wrote and update the size at the beginning
+        let end = f.seek(SeekFrom::Current(0))?;
+        f.seek(SeekFrom::Start(start - 2))?;
+        serialize!((end - start) as u16 => f)?;
+        f.seek(SeekFrom::Start(end))?;
 
         serialize!(self.reticle_data.len() as u16 => f)?;
         f.write_exact(&self.reticle_data)?;
@@ -449,7 +462,7 @@ impl Save {
 }
 
 #[cfg(test)]
-static TEST_SAVE: &[u8] = include_bytes!("save/test/autosave.ess");
+static TEST_SAVE: &[u8] = include_bytes!("save/test/quicksave.ess");
 
 #[cfg(test)]
 mod tests {
@@ -460,7 +473,7 @@ mod tests {
     fn read_save() {
         let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
         assert_eq!(save.player_name, "test");
-        assert_eq!(save.player_location, "Imperial Prison");
+        assert_eq!(save.player_location, "Vilverin Canosel");
         assert_eq!(save.plugins.len(), 11);
     }
 

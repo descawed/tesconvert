@@ -4,7 +4,7 @@ use std::io;
 use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::*;
-use crate::save::{ChangeRecord, FORM_PLAYER_REF, ChangeType, FORM_PLAYER_CUSTOM_CLASS};
+use crate::save::{ChangeRecord, FORM_PLAYER_REF, ChangeType};
 
 use bitflags;
 
@@ -371,7 +371,7 @@ impl Item {
     pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
         serialize!(self.iref => f)?;
         serialize!(self.stack_count => f)?;
-        serialize!(self.changes.len() as u16 => f)?;
+        serialize!(self.changes.len() as u32 => f)?;
         for change in self.changes.iter() {
             serialize!(change.len() as u16 => f)?;
             for property in change.iter() {
@@ -463,6 +463,7 @@ impl CustomClass {
         let services = extract!(f as u32)?;
         let skill_trained = extract!(f as u8)?;
         let max_training = extract!(f as u8)?;
+        extract!(f as u16)?; // dummy
         let name = extract_bstring(&mut f)?;
         let icon = extract_bstring(&mut f)?;
 
@@ -499,6 +500,7 @@ impl CustomClass {
         serialize!(self.services => f)?;
         serialize!(self.skill_trained => f)?;
         serialize!(self.max_training => f)?;
+        serialize!(0u16 => f)?;
         serialize_bstring(&mut f, &self.name)?;
         serialize_bstring(&mut f, &self.icon)?;
 
@@ -633,7 +635,7 @@ impl PlayerReferenceChange {
 
         // inventory might not be present if the save is from the very beginning of the game
         let inventory = if flags & 0x08000000 != 0 {
-            let num_items = extract!(reader as u32)? as usize;
+            let num_items = extract!(reader as u16)? as usize;
             let mut inventory = Vec::with_capacity(num_items);
             for _ in 0..num_items {
                 inventory.push(Item::read(&mut reader)?);
@@ -788,7 +790,13 @@ impl PlayerReferenceChange {
         let name = extract_bzstring(&mut reader)?;
         let class = extract!(reader as u32)?;
 
-        let custom_class = if class == FORM_PLAYER_CUSTOM_CLASS {
+        // we could check if the form ID of the class was FORM_PLAYER_CUSTOM_CLASS, but that would
+        // require the save to be passed into this function so we could look up the iref. to avoid
+        // that, we just check if there are more bytes, and if so, assume there's a class
+        let here = reader.seek(SeekFrom::Current(0))?;
+        let there = reader.seek(SeekFrom::End(0))?;
+        reader.seek(SeekFrom::Start(here))?;
+        let custom_class = if there - here > 4 {
             Some(CustomClass::read(&mut reader)?)
         } else {
             None
