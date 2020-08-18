@@ -3,26 +3,17 @@ use crate::plugin::*;
 use crate::*;
 
 /// A statistic, such as an attribute, skill, health, etc.
-#[derive(Debug)]
-pub struct Stat {
-    pub current: f32,
-    pub base: f32,
-}
-
-impl Stat {
-    fn new() -> Stat {
-        Stat {
-            current: 0.,
-            base: 0.,
-        }
-    }
+#[derive(Debug, Default)]
+pub struct Stat<T> {
+    pub current: T,
+    pub base: T,
 }
 
 macro_rules! extract_stats {
-    ($f:ident, $p:ident, $($s:ident),+) => {
+    ($f:ident, $p:ident, $t:ty, $($s:ident),+) => {
         $({
-            $p.$s.current = extract!($f as f32).unwrap();
-            $p.$s.base = extract!($f as f32).unwrap();
+            $p.$s.current = extract!($f as $t).unwrap();
+            $p.$s.base = extract!($f as $t).unwrap();
         })*
     }
 }
@@ -46,50 +37,50 @@ pub struct PlayerReference {
     flags: u32,
     breath_meter: f32,
     unknown2: [u8; 20],
-    health: Stat,
-    fatigue: Stat,
-    magicka: Stat,
+    health: Stat<f32>,
+    fatigue: Stat<f32>,
+    magicka: Stat<f32>,
     unknown3: [u8; 16],
-    strength: Stat,
-    intelligence: Stat,
-    willpower: Stat,
-    agility: Stat,
-    speed: Stat,
-    endurance: Stat,
-    personality: Stat,
-    luck: Stat,
+    strength: Stat<f32>,
+    intelligence: Stat<f32>,
+    willpower: Stat<f32>,
+    agility: Stat<f32>,
+    speed: Stat<f32>,
+    endurance: Stat<f32>,
+    personality: Stat<f32>,
+    luck: Stat<f32>,
     magic_effects: [f32; 27],
     unknown4: [u8; 4],
     gold: u32,
     count_down: u8,
     unknown5: [u8; 3],
-    block: Stat,
-    armorer: Stat,
-    medium_armor: Stat,
-    heavy_armor: Stat,
-    blunt: Stat,
-    long_blade: Stat,
-    axe: Stat,
-    spear: Stat,
-    athletics: Stat,
-    enchant: Stat,
-    destruction: Stat,
-    alteration: Stat,
-    illusion: Stat,
-    conjuration: Stat,
-    mysticism: Stat,
-    restoration: Stat,
-    alchemy: Stat,
-    unarmored: Stat,
-    security: Stat,
-    sneak: Stat,
-    acrobatics: Stat,
-    light_armor: Stat,
-    short_blade: Stat,
-    marksman: Stat,
-    mercantile: Stat,
-    speechcraft: Stat,
-    hand_to_hand: Stat,
+    block: Stat<u32>,
+    armorer: Stat<u32>,
+    medium_armor: Stat<u32>,
+    heavy_armor: Stat<u32>,
+    blunt: Stat<u32>,
+    long_blade: Stat<u32>,
+    axe: Stat<u32>,
+    spear: Stat<u32>,
+    athletics: Stat<u32>,
+    enchant: Stat<u32>,
+    destruction: Stat<u32>,
+    alteration: Stat<u32>,
+    illusion: Stat<u32>,
+    conjuration: Stat<u32>,
+    mysticism: Stat<u32>,
+    restoration: Stat<u32>,
+    alchemy: Stat<u32>,
+    unarmored: Stat<u32>,
+    security: Stat<u32>,
+    sneak: Stat<u32>,
+    acrobatics: Stat<u32>,
+    light_armor: Stat<u32>,
+    short_blade: Stat<u32>,
+    marksman: Stat<u32>,
+    mercantile: Stat<u32>,
+    speechcraft: Stat<u32>,
+    hand_to_hand: Stat<u32>,
 }
 
 impl PlayerReference {
@@ -104,50 +95,50 @@ impl PlayerReference {
             flags: 0,
             breath_meter: 0.,
             unknown2: [0; 20],
-            health: Stat::new(),
-            fatigue: Stat::new(),
-            magicka: Stat::new(),
+            health: Stat::default(),
+            fatigue: Stat::default(),
+            magicka: Stat::default(),
             unknown3: [0; 16],
-            strength: Stat::new(),
-            intelligence: Stat::new(),
-            willpower: Stat::new(),
-            agility: Stat::new(),
-            speed: Stat::new(),
-            endurance: Stat::new(),
-            personality: Stat::new(),
-            luck: Stat::new(),
+            strength: Stat::default(),
+            intelligence: Stat::default(),
+            willpower: Stat::default(),
+            agility: Stat::default(),
+            speed: Stat::default(),
+            endurance: Stat::default(),
+            personality: Stat::default(),
+            luck: Stat::default(),
             magic_effects: [0.; 27],
             unknown4: [0; 4],
             gold: 0,
             count_down: 0,
             unknown5: [0; 3],
-            block: Stat::new(),
-            armorer: Stat::new(),
-            medium_armor: Stat::new(),
-            heavy_armor: Stat::new(),
-            blunt: Stat::new(),
-            long_blade: Stat::new(),
-            axe: Stat::new(),
-            spear: Stat::new(),
-            athletics: Stat::new(),
-            enchant: Stat::new(),
-            destruction: Stat::new(),
-            alteration: Stat::new(),
-            illusion: Stat::new(),
-            conjuration: Stat::new(),
-            mysticism: Stat::new(),
-            restoration: Stat::new(),
-            alchemy: Stat::new(),
-            unarmored: Stat::new(),
-            security: Stat::new(),
-            sneak: Stat::new(),
-            acrobatics: Stat::new(),
-            light_armor: Stat::new(),
-            short_blade: Stat::new(),
-            marksman: Stat::new(),
-            mercantile: Stat::new(),
-            speechcraft: Stat::new(),
-            hand_to_hand: Stat::new(),
+            block: Stat::default(),
+            armorer: Stat::default(),
+            medium_armor: Stat::default(),
+            heavy_armor: Stat::default(),
+            blunt: Stat::default(),
+            long_blade: Stat::default(),
+            axe: Stat::default(),
+            spear: Stat::default(),
+            athletics: Stat::default(),
+            enchant: Stat::default(),
+            destruction: Stat::default(),
+            alteration: Stat::default(),
+            illusion: Stat::default(),
+            conjuration: Stat::default(),
+            mysticism: Stat::default(),
+            restoration: Stat::default(),
+            alchemy: Stat::default(),
+            unarmored: Stat::default(),
+            security: Stat::default(),
+            sneak: Stat::default(),
+            acrobatics: Stat::default(),
+            light_armor: Stat::default(),
+            short_blade: Stat::default(),
+            marksman: Stat::default(),
+            mercantile: Stat::default(),
+            speechcraft: Stat::default(),
+            hand_to_hand: Stat::default(),
         };
         
         for field in record.iter() {
@@ -161,9 +152,9 @@ impl PlayerReference {
                         player.flags = extract!(reader as u32)?;
                         player.breath_meter = extract!(reader as f32)?;
                         reader.read_exact(&mut player.unknown2)?;
-                        extract_stats!(reader, player, health, fatigue, magicka);
+                        extract_stats!(reader, player, f32, health, fatigue, magicka);
                         reader.read_exact(&mut player.unknown3)?;
-                        extract_stats!(reader, player, strength, intelligence, willpower, agility, speed, personality, luck);
+                        extract_stats!(reader, player, f32, strength, intelligence, willpower, agility, speed, endurance, personality, luck);
                         for i in 0..player.magic_effects.len() {
                             player.magic_effects[i] = extract!(reader as f32)?;
                         }
@@ -179,7 +170,7 @@ impl PlayerReference {
                     let reader = &mut buf_ref;
 
                     wrap_decode("Failed to decode CHRD field", || {
-                        extract_stats!(reader, player, block, armorer, medium_armor, heavy_armor,
+                        extract_stats!(reader, player, u32, block, armorer, medium_armor, heavy_armor,
                             blunt, long_blade, axe, spear, athletics, enchant, destruction, alteration,
                             illusion, conjuration, mysticism, restoration, alchemy, unarmored, security,
                             sneak, acrobatics, light_armor, short_blade, marksman, mercantile, speechcraft, hand_to_hand
@@ -214,7 +205,7 @@ impl PlayerReference {
                     writer.write_exact(&self.unknown2).unwrap();
                     serialize_stats!(writer, self, health, fatigue, magicka);
                     writer.write_exact(&self.unknown3).unwrap();
-                    serialize_stats!(writer, self, strength, intelligence, willpower, agility, speed, personality, luck);
+                    serialize_stats!(writer, self, strength, intelligence, willpower, agility, speed, endurance, personality, luck);
                     for effect in self.magic_effects.iter() {
                         serialize!(effect => writer).unwrap();
                     }
@@ -242,5 +233,20 @@ impl PlayerReference {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static REFR_RECORD: &[u8] = include_bytes!("test/refr_record.bin");
+
+    #[test]
+    fn read() {
+        let record = Record::read(&mut REFR_RECORD.as_ref()).unwrap().unwrap();
+        let player = PlayerReference::read(&record).unwrap();
+        assert_eq!(player.strength.base, 38.);
+        assert_eq!(player.destruction.base, 91);
     }
 }
