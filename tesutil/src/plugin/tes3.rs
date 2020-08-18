@@ -9,3 +9,6 @@ pub use field::*;
 
 mod npc;
 pub use npc::*;
+
+mod reference;
+pub use reference::*;

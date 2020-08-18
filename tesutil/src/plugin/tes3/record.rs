@@ -162,7 +162,7 @@ impl Record {
     }
 
     /// Returns a reference to the record name
-    pub fn name(&self) -> &[u8] {
+    pub fn name(&self) -> &[u8; 4] {
         &self.name
     }
 

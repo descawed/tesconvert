@@ -149,7 +149,7 @@ pub struct Plugin {
     screen_data: Vec<u8>,
     masters: Vec<(String, u64)>,
     records: Vec<Rc<RefCell<Record>>>,
-    id_map: HashMap<String, Rc<RefCell<Record>>>,
+    id_map: HashMap<String, HashMap<[u8; 4], Rc<RefCell<Record>>>>,
 }
 
 const HEADER_LENGTH: usize = 300;
@@ -579,17 +579,18 @@ impl Plugin {
     /// [`PluginError::DuplicateId`]: enum.PluginError.html#variant.DuplicateId
     pub fn add_record(&mut self, record: Record) -> Result<(), TesError> {
         let r = Rc::new(RefCell::new(record));
-        if let Some(id) = r.borrow().id() {
+        let rb = r.borrow();
+        if let Some(id) = rb.id() {
             let key = String::from(id);
-            // FIXME: the code below prevents loading saves because base records and change records
-            //  have the same IDs, so I've disabled it for now. however, we should restore this in
-            //  the future.
-            /*if self.id_map.contains_key(id) {
+            let name = rb.name();
+            let type_map = self.id_map.entry(key.clone()).or_insert(HashMap::new());
+            if type_map.contains_key(name) {
                 return Err(TesError::DuplicateId(key));
-            }*/
+            }
 
-            self.id_map.insert(key, Rc::clone(&r));
+            type_map.insert(*name, Rc::clone(&r));
         }
+        drop(rb); // otherwise the compiler complains that r is still borrowed below
         self.records.push(r);
         Ok(())
     }
@@ -597,6 +598,10 @@ impl Plugin {
     /// Finds a record by ID
     ///
     /// If no record exists with the given ID, the return value will be `None`.
+    ///
+    /// # Errors
+    ///
+    /// Fails if there is more than one record with the given ID.
     ///
     /// # Examples
     ///
@@ -612,13 +617,36 @@ impl Plugin {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_record(&self, id: &str) -> Option<Ref<Record>> {
-        self.id_map.get(id).map(|r| r.borrow())
+    pub fn get_record(&self, id: &str) -> Result<Option<Ref<Record>>, TesError> {
+        if let Some(ref type_map) = self.id_map.get(id) {
+            if type_map.len() == 0 {
+                Ok(None)
+            } else if type_map.len() > 1 {
+                Err(TesError::LimitExceeded {
+                    description: format!("More than one record with ID {}", id),
+                    max_size: 1,
+                    actual_size: type_map.len(),
+                })
+            } else {
+                Ok(Some(type_map.values().next().unwrap().borrow()))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Finds a record by ID and type
+    pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Record>> {
+        self.id_map.get(id)?.get(name).map(|v| v.borrow())
     }
 
     /// Finds a record by ID and returns a mutable reference
     ///
     /// If no record exists with the given ID, the return value will be `None`.
+    ///
+    /// # Errors
+    ///
+    /// Fails if there is more than one record with the given ID.
     ///
     /// # Examples
     ///
@@ -627,15 +655,34 @@ impl Plugin {
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
-    /// let plugin = Plugin::load_file("Morrowind.esm")?;
+    /// let mut plugin = Plugin::load_file("Morrowind.esm")?;
     /// if let Some(mut record) = plugin.get_record_mut("HortatorVotes") {
     ///     // change something with record
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_record_mut(&self, id: &str) -> Option<RefMut<Record>> {
-        self.id_map.get(id).map(|r| r.borrow_mut())
+    pub fn get_record_mut(&mut self, id: &str) -> Result<Option<RefMut<Record>>, TesError> {
+        if let Some(type_map) = self.id_map.get_mut(id) {
+            if type_map.len() == 0 {
+                Ok(None)
+            } else if type_map.len() > 1 {
+                Err(TesError::LimitExceeded {
+                    description: format!("More than one record with ID {}", id),
+                    max_size: 1,
+                    actual_size: type_map.len(),
+                })
+            } else {
+                Ok(Some(type_map.values_mut().next().unwrap().borrow_mut()))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Finds a record by ID and type and returns a mutable reference
+    pub fn get_record_with_type_mut(&mut self, id: &str, name: &[u8; 4]) -> Option<RefMut<Record>> {
+        self.id_map.get_mut(id)?.get_mut(name).map(|v| v.borrow_mut())
     }
 
     /// Writes a plugin to the provided writer
@@ -789,7 +836,7 @@ mod tests {
     #[test]
     fn fetch_record() {
         let plugin = Plugin::read(&mut TEST_PLUGIN.as_ref()).unwrap();
-        let record = plugin.get_record("BM_wolf_grey_summon").unwrap();
+        let record = plugin.get_record("BM_wolf_grey_summon").unwrap().unwrap();
         assert_eq!(record.len(), 9);
         for field in record.iter() {
             if let Some(expected) = match field.name() {

@@ -23,8 +23,10 @@ pub fn morrowind_to_oblivion(mw_path: &str, ob_path: &str, output_path: &str) ->
     // set name that appears in the save list
     ob_save.set_player_name(String::from(mw_save_info.player_name()))?;
     // set name that appears in-game
-    let mw_record = mw_save.get_record("player")
+    let mw_record = mw_save.get_record("player")?
         .ok_or(ConversionError(String::from("Missing player record in Morrowind save")))?;
+    // TODO: need to grab PlayerSaveGame REFR to get skills and attributes and NPCC to get inventory
+    //  (going to need to update tes3::plugin to support multiple records with the same name)
     let mw_player = Npc::read(&mw_record)?;
 
     let mut ob_record = ob_save.get_change_record_mut(FORM_PLAYER_REF)
