@@ -412,7 +412,6 @@ mod tests {
         let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
         let player = save.get_change_record(FORM_PLAYER).unwrap();
         let actor_change = ActorChange::read(player).unwrap();
-        dbg!(actor_change);
-        // TODO: assert something
+        assert_eq!(actor_change.attributes.unwrap().intelligence, 40);
     }
 }

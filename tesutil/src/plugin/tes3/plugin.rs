@@ -584,9 +584,10 @@ impl Plugin {
             let key = String::from(id);
             let name = rb.name();
             let type_map = self.id_map.entry(key.clone()).or_insert(HashMap::new());
-            if type_map.contains_key(name) {
+            // FIXME: it appears there are duplicates in the save file even among the same type (specifically CREC records)
+            /*if type_map.contains_key(name) {
                 return Err(TesError::DuplicateId(key));
-            }
+            }*/
 
             type_map.insert(*name, Rc::clone(&r));
         }
