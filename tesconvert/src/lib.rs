@@ -3,6 +3,10 @@ use std::fmt;
 use tesutil::plugin::tes3::*;
 use tesutil::save::*;
 
+mod config;
+pub use config::*;
+use std::cmp;
+
 #[derive(Debug, Clone)]
 pub struct ConversionError(String);
 
@@ -14,9 +18,9 @@ impl fmt::Display for ConversionError {
 
 impl std::error::Error for ConversionError {}
 
-pub fn morrowind_to_oblivion(mw_path: &str, ob_path: &str, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mw_save = Plugin::load_file(mw_path)?;
-    let mut ob_save = Save::load_file(ob_path)?;
+pub fn morrowind_to_oblivion(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    let mw_save = Plugin::load_file(&config.mw_path)?;
+    let mut ob_save = Save::load_file(&config.ob_path)?;
 
     // set name that appears in the save list
     let mw_save_info = mw_save.get_save_info()
@@ -46,6 +50,44 @@ pub fn morrowind_to_oblivion(mw_path: &str, ob_path: &str, output_path: &str) ->
     attributes.endurance = mw_player_ref.endurance.base as u8;
     attributes.personality = mw_player_ref.personality.base as u8;
     attributes.luck = mw_player_ref.luck.base as u8;
+
+    // set skills
+    let mut skills = ob_player_base.skills_mut().ok_or(ConversionError(String::from("Oblivion player base has no skills")))?;
+    skills.armorer = mw_player_ref.armorer.base as u8;
+    skills.athletics = mw_player_ref.athletics.base as u8;
+    skills.block = mw_player_ref.block.base as u8;
+    skills.hand_to_hand = mw_player_ref.hand_to_hand.base as u8;
+    skills.heavy_armor = mw_player_ref.heavy_armor.base as u8;
+    skills.alchemy = mw_player_ref.alchemy.base as u8;
+    skills.alteration = mw_player_ref.alteration.base as u8;
+    skills.conjuration = mw_player_ref.conjuration.base as u8;
+    skills.destruction = mw_player_ref.destruction.base as u8;
+    skills.illusion = mw_player_ref.illusion.base as u8;
+    skills.mysticism = mw_player_ref.mysticism.base as u8;
+    skills.restoration = mw_player_ref.restoration.base as u8;
+    skills.acrobatics = mw_player_ref.acrobatics.base as u8;
+    skills.light_armor = mw_player_ref.light_armor.base as u8;
+    skills.marksman = mw_player_ref.marksman.base as u8;
+    skills.mercantile = mw_player_ref.mercantile.base as u8;
+    skills.security = mw_player_ref.security.base as u8;
+    skills.sneak = mw_player_ref.sneak.base as u8;
+    skills.speechcraft = mw_player_ref.speechcraft.base as u8;
+    match config.skill_combine_strategy {
+        SkillCombineStrategy::Highest => {
+            skills.blade = cmp::max(mw_player_ref.long_blade.base, mw_player_ref.short_blade.base) as u8;
+            skills.blunt = cmp::max(mw_player_ref.axe.base, mw_player_ref.blunt.base) as u8;
+        },
+        SkillCombineStrategy::Average => {
+            skills.blade = ((mw_player_ref.long_blade.base + mw_player_ref.short_blade.base)/2) as u8;
+            skills.blunt = ((mw_player_ref.axe.base + mw_player_ref.blunt.base)/2) as u8;
+        },
+        SkillCombineStrategy::Lowest => {
+            skills.blade = cmp::min(mw_player_ref.long_blade.base, mw_player_ref.short_blade.base) as u8;
+            skills.blunt = cmp::min(mw_player_ref.axe.base, mw_player_ref.blunt.base) as u8;
+        },
+    }
+
+    // save skills and attributes
     ob_player_base.write(&mut ob_record_base)?;
 
     // set name that appears in-game
@@ -56,7 +98,7 @@ pub fn morrowind_to_oblivion(mw_path: &str, ob_path: &str, output_path: &str) ->
     ob_player_ref.write(&mut ob_record_ref)?;
 
     // save all the changes
-    ob_save.save_file(output_path)?;
+    ob_save.save_file(&config.output_path)?;
     
     Ok(())
 }

@@ -1,16 +1,15 @@
-use std::env;
 use std::process;
 
 use tesconvert::*;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 4 {
-        eprintln!("Usage: tesconvert <mw save> <ob save> <output path>");
-        process::exit(1);
-    }
+    let config = Config::get_from_cli();
+    let result = match config.command {
+        Command::MorrowindToOblivion => morrowind_to_oblivion(&config),
+        _ => unimplemented!(),
+    };
 
-    if let Err(e) = morrowind_to_oblivion(&args[1], &args[2], &args[3]) {
+    if let Err(e) = result {
         eprintln!("Conversion failed: {}", e);
         process::exit(2);
     }

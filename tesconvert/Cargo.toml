@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 tesutil = { path = "../tesutil" }
+clap = "2.33.*"
