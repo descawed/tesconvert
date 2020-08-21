@@ -56,7 +56,7 @@ pub struct ActorBase {
     magicka: u16,
     fatigue: u16,
     gold: u16,
-    level: i16,
+    pub level: i16,
     calc_min: u16,
     calc_max: u16,
 }
@@ -266,6 +266,16 @@ impl ActorChange {
     /// Get the actor's full name
     pub fn full_name(&self) -> Option<&str> {
         self.full_name.as_ref().map(|v| &v[..])
+    }
+
+    /// Get the actor's base information
+    pub fn actor_base(&self) -> Option<&ActorBase> {
+        self.base.as_ref()
+    }
+
+    /// Get the actor's base information mutably
+    pub fn actor_base_mut(&mut self) -> Option<&mut ActorBase> {
+        self.base.as_mut()
     }
 
     /// Set the actor's full name

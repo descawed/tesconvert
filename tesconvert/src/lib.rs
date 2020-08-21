@@ -87,6 +87,11 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<(), Box<dyn std::error::
         },
     }
 
+    // set level
+    let mut base = ob_player_base.actor_base_mut().ok_or(ConversionError(String::from("Oblivion player base has no actor base")))?;
+    // TODO: add a warning here if mw_player_base.level exceeds i16::MAX? I don't think that will ever actually happen, though
+    base.level = mw_player_base.level as i16;
+
     // save skills and attributes
     ob_player_base.write(&mut ob_record_base)?;
 

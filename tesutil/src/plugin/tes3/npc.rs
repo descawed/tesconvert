@@ -98,7 +98,7 @@ pub struct Npc {
     head: String,
     hair: String,
     script: Option<String>,
-    level: u16,
+    pub level: u16,
     // <attributes>
     pub strength: u8,
     pub intelligence: u8,
