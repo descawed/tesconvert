@@ -19,8 +19,8 @@ impl fmt::Display for ConversionError {
 impl std::error::Error for ConversionError {}
 
 pub fn morrowind_to_oblivion(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let mw_save = Plugin::load_file(&config.mw_path)?;
-    let mut ob_save = Save::load_file(&config.ob_path)?;
+    let mw_save = Plugin::load_file(&config.source_path)?;
+    let mut ob_save = Save::load_file(&config.target_path)?;
 
     // set name that appears in the save list
     let mw_save_info = mw_save.get_save_info()
