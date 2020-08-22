@@ -1,6 +1,6 @@
 use bitflags;
 use crate::*;
-use crate::save::{ChangeRecord, ChangeType};
+use crate::save::{Attributes, ChangeRecord, ChangeType};
 use std::io;
 use std::io::Read;
 
@@ -18,19 +18,6 @@ bitflags! {
         const COMBAT_STYLE = 0x00000400;
         const BASE_MODIFIERS = 0x10000000;
     }
-}
-
-/// An actor's attributes
-#[derive(Debug)]
-pub struct Attributes {
-    pub strength: u8,
-    pub intelligence: u8,
-    pub willpower: u8,
-    pub agility: u8,
-    pub speed: u8,
-    pub endurance: u8,
-    pub personality: u8,
-    pub luck: u8,
 }
 
 bitflags! {
@@ -59,6 +46,20 @@ pub struct ActorBase {
     pub level: i16,
     calc_min: u16,
     calc_max: u16,
+}
+
+impl Default for ActorBase {
+    fn default() -> Self {
+        ActorBase {
+            flags: ActorFlags::empty(),
+            magicka: 0,
+            fatigue: 0,
+            gold: 0,
+            level: 0,
+            calc_min: 1,
+            calc_max: 0,
+        }
+    }
 }
 
 /// An actor's skills
@@ -145,16 +146,7 @@ impl ActorChange {
             }
 
             if change_flags.contains(ActorChangeFlags::BASE_ATTRIBUTES) {
-                actor_change.attributes = Some(Attributes {
-                    strength: extract!(reader as u8)?,
-                    intelligence: extract!(reader as u8)?,
-                    willpower: extract!(reader as u8)?,
-                    agility: extract!(reader as u8)?,
-                    speed: extract!(reader as u8)?,
-                    endurance: extract!(reader as u8)?,
-                    personality: extract!(reader as u8)?,
-                    luck: extract!(reader as u8)?,
-                });
+                actor_change.attributes = Some(Attributes::read(&mut reader)?);
             }
 
             if change_flags.contains(ActorChangeFlags::BASE_DATA) {
@@ -243,42 +235,47 @@ impl ActorChange {
         Ok(actor_change)
     }
 
-    /// Get the actor's attributes
+    /// Gets the actor's attributes
     pub fn attributes(&self) -> Option<&Attributes> {
         self.attributes.as_ref()
     }
 
-    /// Get the actor's attributes mutably
+    /// Gets the actor's attributes mutably
     pub fn attributes_mut(&mut self) -> Option<&mut Attributes> {
         self.attributes.as_mut()
     }
 
-    /// Get the actor's skills
+    /// Gets the actor's skills
     pub fn skills(&self) -> Option<&Skills> {
         self.skills.as_ref()
     }
 
-    /// Get the actor's skills mutably
+    /// Gets the actor's skills mutably
     pub fn skills_mut(&mut self) -> Option<&mut Skills> {
         self.skills.as_mut()
     }
 
-    /// Get the actor's full name
+    /// Gets the actor's full name
     pub fn full_name(&self) -> Option<&str> {
         self.full_name.as_ref().map(|v| &v[..])
     }
 
-    /// Get the actor's base information
+    /// Gets the actor's base information
     pub fn actor_base(&self) -> Option<&ActorBase> {
         self.base.as_ref()
     }
 
-    /// Get the actor's base information mutably
+    /// Gets the actor's base information mutably
     pub fn actor_base_mut(&mut self) -> Option<&mut ActorBase> {
         self.base.as_mut()
     }
 
-    /// Set the actor's full name
+    /// Sets the actor's base data
+    pub fn set_actor_base(&mut self, base: Option<ActorBase>) {
+        self.base = base;
+    }
+
+    /// Sets the actor's full name
     ///
     /// # Errors
     ///
@@ -312,14 +309,7 @@ impl ActorChange {
 
         if let Some(ref attributes) = self.attributes {
             flags |= ActorChangeFlags::BASE_ATTRIBUTES;
-            serialize!(attributes.strength => writer)?;
-            serialize!(attributes.intelligence => writer)?;
-            serialize!(attributes.willpower => writer)?;
-            serialize!(attributes.agility => writer)?;
-            serialize!(attributes.speed => writer)?;
-            serialize!(attributes.endurance => writer)?;
-            serialize!(attributes.personality => writer)?;
-            serialize!(attributes.luck => writer)?;
+            attributes.write(&mut writer)?;
         }
 
         if let Some(ref base_data) = self.base {

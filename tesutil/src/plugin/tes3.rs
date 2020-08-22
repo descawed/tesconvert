@@ -1,3 +1,6 @@
+mod player;
+pub use player::*;
+
 mod record;
 pub use record::*;
 

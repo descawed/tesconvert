@@ -90,6 +90,10 @@ impl PlayerReference {
     /// 
     /// Fails if an I/O error occurs or if the data is invalid
     pub fn read(record: &Record) -> Result<PlayerReference, TesError> {
+        if record.name() != b"REFR" {
+            return Err(TesError::DecodeFailed { description: String::from("Record was not a REFR record"), cause: None });
+        }
+
         let mut player = PlayerReference {
             unknown1: [0; 12],
             flags: 0,

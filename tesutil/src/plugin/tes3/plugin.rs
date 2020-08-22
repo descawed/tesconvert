@@ -150,6 +150,7 @@ pub struct Plugin {
     masters: Vec<(String, u64)>,
     records: Vec<Rc<RefCell<Record>>>,
     id_map: HashMap<String, HashMap<[u8; 4], Rc<RefCell<Record>>>>,
+    type_map: HashMap<[u8; 4], Vec<Rc<RefCell<Record>>>>,
 }
 
 const HEADER_LENGTH: usize = 300;
@@ -216,6 +217,7 @@ impl Plugin {
             masters: vec![],
             records: vec![],
             id_map: HashMap::new(),
+            type_map: HashMap::new(),
         })
     }
 
@@ -279,6 +281,7 @@ impl Plugin {
             masters: vec![],
             records: Vec::with_capacity(num_records),
             id_map: HashMap::with_capacity(num_records),
+            type_map: HashMap::new(),
         };
 
         let mut master_name = None;
@@ -336,12 +339,8 @@ impl Plugin {
         }
 
         // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
-        loop {
-            if let Some(record) = Record::read(&mut f)? {
-                plugin.add_record(record).map_err(|e| io_error(e))?;
-            } else {
-                break;
-            }
+        while let Some(record) = Record::read(&mut f)? {
+            plugin.add_record(record).map_err(|e| io_error(e))?;
         }
 
         Ok(plugin)
@@ -591,7 +590,10 @@ impl Plugin {
 
             type_map.insert(*name, Rc::clone(&r));
         }
+        let key = rb.name().clone();
         drop(rb); // otherwise the compiler complains that r is still borrowed below
+        let records = self.type_map.entry(key).or_insert(Vec::new());
+        records.push(Rc::clone(&r));
         self.records.push(r);
         Ok(())
     }
@@ -639,6 +641,11 @@ impl Plugin {
     /// Finds a record by ID and type
     pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Record>> {
         self.id_map.get(id)?.get(name).map(|v| v.borrow())
+    }
+
+    /// Gets an iterator over fields with a particular type
+    pub fn get_records_by_type(&self, name: &[u8; 4]) -> Option<impl Iterator<Item = Ref<Record>>> {
+        self.type_map.get(name).map(|v| v.iter().map(|r| r.borrow()))
     }
 
     /// Finds a record by ID and returns a mutable reference

@@ -36,6 +36,11 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<(), Box<dyn std::error::
         .ok_or(ConversionError(String::from("Missing player reference record in Morrowind save")))?;
     let mw_player_ref = PlayerReference::read(&mw_record)?;
 
+    let mw_record = mw_save.get_records_by_type(b"PCDT")
+        .ok_or(ConversionError(String::from("Missing player data record (PCDT) in Morrowind save")))?
+        .next().ok_or(ConversionError(String::from("Missing player data record (PCDT) in Morrowind save")))?;
+    let mw_player_data = PlayerData::read(&mw_record)?;
+
     // get Oblivion player information
     let mut ob_record_base = ob_save.get_change_record_mut(FORM_PLAYER)
         .ok_or(ConversionError(String::from("Missing player change record in Oblivion save")))?;
@@ -88,18 +93,71 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<(), Box<dyn std::error::
     }
 
     // set level
-    let mut base = ob_player_base.actor_base_mut().ok_or(ConversionError(String::from("Oblivion player base has no actor base")))?;
-    // TODO: add a warning here if mw_player_base.level exceeds i16::MAX? I don't think that will ever actually happen, though
+    if ob_player_base.actor_base().is_none() {
+        // can happen if the player is level 1
+        let base = ActorBase::default();
+        ob_player_base.set_actor_base(Some(base));
+    }
+
+    let mut base = ob_player_base.actor_base_mut().unwrap();
     base.level = mw_player_base.level as i16;
 
     // save skills and attributes
     ob_player_base.write(&mut ob_record_base)?;
 
-    // set name that appears in-game
+    // set name and level/skill progress
     let mut ob_record_ref = ob_save.get_change_record_mut(FORM_PLAYER_REF)
         .ok_or(ConversionError(String::from("Missing player reference change record in Oblivion save")))?;
     let mut ob_player_ref = PlayerReferenceChange::read(&ob_record_ref)?;
     ob_player_ref.set_name(String::from(mw_player_base.name().unwrap_or("")))?;
+
+    ob_player_ref.major_skill_advancements = mw_player_data.level_progress;
+
+    ob_player_ref.combat_increases = mw_player_data.combat_increases;
+    ob_player_ref.magic_increases = mw_player_data.magic_increases;
+    ob_player_ref.stealth_increases = mw_player_data.stealth_increases;
+
+    let mut advancements = vec![];
+    // Morrowind doesn't track advancements by level like Oblivion does, so we have to fake it here.
+    // I don't actually know how Oblivion would handle an advancement greater than 10, but it never
+    // happens in normal gameplay, so I figure it's best to enforce it here.
+    let mut attributes = Attributes {
+        strength: mw_player_data.strength_progress,
+        intelligence: mw_player_data.intelligence_progress,
+        willpower: mw_player_data.willpower_progress,
+        agility: mw_player_data.agility_progress,
+        endurance: mw_player_data.endurance_progress,
+        speed: mw_player_data.speed_progress,
+        personality: mw_player_data.personality_progress,
+        luck: mw_player_data.luck_progress,
+    };
+    while !attributes.are_all_zero() {
+        let advancement = Attributes {
+            strength: attributes.strength % 10,
+            intelligence: attributes.intelligence % 10,
+            willpower: attributes.willpower % 10,
+            agility: attributes.agility % 10,
+            endurance: attributes.endurance % 10,
+            speed: attributes.speed % 10,
+            personality: attributes.personality % 10,
+            luck: attributes.luck % 10,
+        };
+
+        attributes.strength -= advancement.strength;
+        attributes.intelligence -= advancement.intelligence;
+        attributes.willpower -= advancement.willpower;
+        attributes.agility -= advancement.agility;
+        attributes.endurance -= advancement.endurance;
+        attributes.speed -= advancement.speed;
+        attributes.personality -= advancement.personality;
+        attributes.luck -= advancement.luck;
+
+        advancements.push(advancement);
+    }
+    ob_player_ref.advancements = advancements;
+
+    // TODO: skill usage and XP
+
     ob_player_ref.write(&mut ob_record_ref)?;
 
     // save all the changes
