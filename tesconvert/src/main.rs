@@ -1,16 +1,11 @@
-use std::process;
+use anyhow::*;
 
 use tesconvert::*;
 
-fn main() {
+fn main() -> Result<()> {
     let config = Config::get_from_cli();
-    let result = match config.command {
+    match config.command {
         Command::MorrowindToOblivion => morrowind_to_oblivion(&config),
         _ => unimplemented!(),
-    };
-
-    if let Err(e) = result {
-        eprintln!("Conversion failed: {}", e);
-        process::exit(2);
     }
 }
