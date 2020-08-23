@@ -5,7 +5,6 @@ use tesutil::save::*;
 
 mod config;
 pub use config::*;
-use std::cmp;
 
 pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     let mw_save = Plugin::load_file(&config.source_path)?;
@@ -49,7 +48,9 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     let mut skills = ob_player_base.skills_mut().ok_or(anyhow!("Oblivion player base has no skills"))?;
     skills.armorer = mw_player_ref.armorer.base as u8;
     skills.athletics = mw_player_ref.athletics.base as u8;
+    skills.blade = config.skill_combine_strategy.combine(mw_player_ref.long_blade.base, mw_player_ref.short_blade.base) as u8;
     skills.block = mw_player_ref.block.base as u8;
+    skills.blunt = config.skill_combine_strategy.combine(mw_player_ref.axe.base, mw_player_ref.blunt.base) as u8;
     skills.hand_to_hand = mw_player_ref.hand_to_hand.base as u8;
     skills.heavy_armor = mw_player_ref.heavy_armor.base as u8;
     skills.alchemy = mw_player_ref.alchemy.base as u8;
@@ -66,20 +67,6 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     skills.security = mw_player_ref.security.base as u8;
     skills.sneak = mw_player_ref.sneak.base as u8;
     skills.speechcraft = mw_player_ref.speechcraft.base as u8;
-    match config.skill_combine_strategy {
-        SkillCombineStrategy::Highest => {
-            skills.blade = cmp::max(mw_player_ref.long_blade.base, mw_player_ref.short_blade.base) as u8;
-            skills.blunt = cmp::max(mw_player_ref.axe.base, mw_player_ref.blunt.base) as u8;
-        },
-        SkillCombineStrategy::Average => {
-            skills.blade = ((mw_player_ref.long_blade.base + mw_player_ref.short_blade.base)/2) as u8;
-            skills.blunt = ((mw_player_ref.axe.base + mw_player_ref.blunt.base)/2) as u8;
-        },
-        SkillCombineStrategy::Lowest => {
-            skills.blade = cmp::min(mw_player_ref.long_blade.base, mw_player_ref.short_blade.base) as u8;
-            skills.blunt = cmp::min(mw_player_ref.axe.base, mw_player_ref.blunt.base) as u8;
-        },
-    }
 
     // set level
     if ob_player_base.actor_base().is_none() {

@@ -1,5 +1,9 @@
+use std::cmp;
+use std::ops::{Add, Div};
+
 use clap::*;
 use clap::Result as ClapResult;
+use num::One;
 
 /// The command to be executed
 #[derive(Debug, PartialEq)]
@@ -24,6 +28,21 @@ pub enum SkillCombineStrategy {
     Average,
     /// Use the value of the lowest skill
     Lowest,
+}
+
+impl SkillCombineStrategy {
+    /// Combines two skills using the appropriate strategy
+    pub fn combine<T: Ord + Add<Output=T> + Div<Output=T> + One>(&self, x: T, y: T) -> T {
+        match self {
+            SkillCombineStrategy::Highest => cmp::max(x, y),
+            // I wasn't able to find a better way to do this. Using a literal 2 fails because
+            // there's no way to constrain T to a type that we can convert a literal 2 to. The
+            // Google results I found indicated that you generally can't do math involving a literal
+            // and a generic type and all recommended to use the num crate.
+            SkillCombineStrategy::Average => (x + y)/(T::one() + T::one()),
+            SkillCombineStrategy::Lowest => cmp::min(x, y),
+        }
+    }
 }
 
 /// Configuration options for a conversion

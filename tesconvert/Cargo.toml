@@ -10,3 +10,4 @@ edition = "2018"
 tesutil = { path = "../tesutil" }
 clap = "2.33"
 anyhow = "1.0"
+num = "0.3"
