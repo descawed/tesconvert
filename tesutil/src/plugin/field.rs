@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
 
-use crate::{TesError, decode_failed};
+use crate::{TesError, decode_failed_because, decode_failed};
 
 // unfortunately, to_le_bytes and from_le_bytes are not trait methods, but instead are implemented
 // directly on the integer types, which means we can't use generics to write a single method for
@@ -17,10 +17,7 @@ macro_rules! to_num {
         fn $name(&self) -> Result<$type, TesError> {
             let data = self.get();
             if data.len() != size_of::<$type>() {
-                return Err(TesError::DecodeFailed {
-                    description: format!("expected {} bytes for {}, found {}", size_of::<$type>(), stringify!($type), data.len()),
-                    cause: None,
-                });
+                return Err(decode_failed(format!("expected {} bytes for {}, found {}", size_of::<$type>(), stringify!($type), data.len())));
             }
             let mut buf = [0u8; size_of::<$type>()];
             buf.copy_from_slice(&data[..]);
@@ -74,7 +71,7 @@ pub trait FieldInterface: Sized {
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     /// [`std::ffi::NulError`]: https://doc.rust-lang.org/std/ffi/struct.NulError.html
     fn new_zstring(name: &[u8; 4], data: String) -> Result<Self, TesError> {
-        let zstr = CString::new(data).map_err(|e| decode_failed("Failed to decode as zstring", e))?;
+        let zstr = CString::new(data).map_err(|e| decode_failed_because("Failed to decode as zstring", e))?;
         Self::new(name, zstr.into_bytes_with_nul())
     }
 
@@ -111,7 +108,7 @@ pub trait FieldInterface: Sized {
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     // FIXME: the below string functions will fail on non-English versions of the game
     fn get_string(&self) -> Result<&str, TesError> {
-        str::from_utf8(&self.get()[..]).map_err(|e| decode_failed("failed to decode string", e))
+        str::from_utf8(&self.get()[..]).map_err(|e| decode_failed_because("failed to decode string", e))
     }
 
     /// Sets the field's data from a string
@@ -135,8 +132,8 @@ pub trait FieldInterface: Sized {
     ///
     /// Returns an error if the data includes internal null bytes or if the data is not valid UTF-8.
     fn get_zstring(&self) -> Result<&str, TesError> {
-        let zstr = CStr::from_bytes_with_nul(&self.get()[..]).map_err(|e| decode_failed("string contained internal nulls", e))?;
-        zstr.to_str().map_err(|e| decode_failed("failed to decode string", e))
+        let zstr = CStr::from_bytes_with_nul(&self.get()[..]).map_err(|e| decode_failed_because("string contained internal nulls", e))?;
+        zstr.to_str().map_err(|e| decode_failed_because("failed to decode string", e))
     }
 
     /// Sets the field's data as a string
@@ -154,7 +151,7 @@ pub trait FieldInterface: Sized {
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     fn set_zstring(&mut self, data: String) -> Result<(), TesError> {
-        let zstr = CString::new(data).map_err(|e| decode_failed("string contained internal nulls", e))?;
+        let zstr = CString::new(data).map_err(|e| decode_failed_because("string contained internal nulls", e))?;
         self.set(zstr.into_bytes_with_nul())
     }
 

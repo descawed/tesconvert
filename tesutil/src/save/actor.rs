@@ -1,7 +1,6 @@
 use bitflags;
 use crate::*;
 use crate::save::{Attributes, ChangeRecord, ChangeType};
-use std::io;
 use std::io::Read;
 
 bitflags! {
@@ -114,12 +113,12 @@ impl ActorChange {
     pub fn read(record: &ChangeRecord) -> Result<ActorChange, TesError> {
         let change_type = record.change_type();
         if change_type != ChangeType::Npc && change_type != ChangeType::Creature {
-            return Err(TesError::DecodeFailed { description: String::from("ActorChange expects an NPC or creature change record"), cause: None });
+            return Err(TesError::DecodeFailed { description: String::from("ActorChange expects an NPC or creature change record"), source: None });
         }
 
         let change_flags = ActorChangeFlags::from_bits(record.flags()).ok_or(TesError::DecodeFailed {
             description: String::from("Invalid actor change flags"),
-            cause: None,
+            source: None,
         })?;
 
         let mut actor_change = ActorChange {
@@ -140,97 +139,93 @@ impl ActorChange {
         let mut data = record.data();
         let mut reader = &mut data;
 
-        wrap_decode("Failed to decode actor change record", || {
-            if change_flags.contains(ActorChangeFlags::FORM_FLAGS) {
-                actor_change.flags = Some(extract!(reader as u32)?);
-            }
+        if change_flags.contains(ActorChangeFlags::FORM_FLAGS) {
+            actor_change.flags = Some(extract!(reader as u32)?);
+        }
 
-            if change_flags.contains(ActorChangeFlags::BASE_ATTRIBUTES) {
-                actor_change.attributes = Some(Attributes::read(&mut reader)?);
-            }
+        if change_flags.contains(ActorChangeFlags::BASE_ATTRIBUTES) {
+            actor_change.attributes = Some(Attributes::read(&mut reader)?);
+        }
 
-            if change_flags.contains(ActorChangeFlags::BASE_DATA) {
-                actor_change.base = Some(ActorBase {
-                    flags: ActorFlags::from_bits(extract!(reader as u32)?).ok_or(io_error(TesError::DecodeFailed {
-                        description: String::from("Invalid actor flags"),
-                        cause: None,
-                    }))?,
-                    magicka: extract!(reader as u16)?,
-                    fatigue: extract!(reader as u16)?,
-                    gold: extract!(reader as u16)?,
-                    level: extract!(reader as i16)?,
-                    calc_min: extract!(reader as u16)?,
-                    calc_max: extract!(reader as u16)?,
-                });
-            }
+        if change_flags.contains(ActorChangeFlags::BASE_DATA) {
+            actor_change.base = Some(ActorBase {
+                flags: ActorFlags::from_bits(extract!(reader as u32)?).ok_or(io_error(TesError::DecodeFailed {
+                    description: String::from("Invalid actor flags"),
+                    source: None,
+                }))?,
+                magicka: extract!(reader as u16)?,
+                fatigue: extract!(reader as u16)?,
+                gold: extract!(reader as u16)?,
+                level: extract!(reader as i16)?,
+                calc_min: extract!(reader as u16)?,
+                calc_max: extract!(reader as u16)?,
+            });
+        }
 
-            if change_flags.contains(ActorChangeFlags::FACTIONS) {
-                let num_factions = extract!(reader as u16)?;
-                for _ in 0..num_factions {
-                    actor_change.factions.push((extract!(reader as u32)?, extract!(reader as i8)?));
-                }
+        if change_flags.contains(ActorChangeFlags::FACTIONS) {
+            let num_factions = extract!(reader as u16)?;
+            for _ in 0..num_factions {
+                actor_change.factions.push((extract!(reader as u32)?, extract!(reader as i8)?));
             }
+        }
 
-            if change_flags.contains(ActorChangeFlags::SPELL_LIST) {
-                let num_spells = extract!(reader as u16)?;
-                for _ in 0..num_spells {
-                    actor_change.spells.push(extract!(reader as u32)?);
-                }
+        if change_flags.contains(ActorChangeFlags::SPELL_LIST) {
+            let num_spells = extract!(reader as u16)?;
+            for _ in 0..num_spells {
+                actor_change.spells.push(extract!(reader as u32)?);
             }
+        }
 
-            if change_flags.contains(ActorChangeFlags::AI_DATA) {
-                let mut buf = [0u8; 4];
-                reader.read_exact(&mut buf)?;
-                actor_change.ai_data = Some(buf);
+        if change_flags.contains(ActorChangeFlags::AI_DATA) {
+            let mut buf = [0u8; 4];
+            reader.read_exact(&mut buf)?;
+            actor_change.ai_data = Some(buf);
+        }
+
+        if change_flags.contains(ActorChangeFlags::BASE_HEALTH) {
+            actor_change.base_health = Some(extract!(reader as u32)?);
+        }
+
+        if change_flags.contains(ActorChangeFlags::BASE_MODIFIERS) {
+            let num_modifiers = extract!(reader as u16)?;
+            for _ in 0..num_modifiers {
+                actor_change.modifiers.push((extract!(reader as u8)?, extract!(reader as f32)?));
             }
+        }
 
-            if change_flags.contains(ActorChangeFlags::BASE_HEALTH) {
-                actor_change.base_health = Some(extract!(reader as u32)?);
-            }
+        if change_flags.contains(ActorChangeFlags::FULL_NAME) {
+            actor_change.full_name = Some(extract_bstring(&mut reader)?);
+        }
 
-            if change_flags.contains(ActorChangeFlags::BASE_MODIFIERS) {
-                let num_modifiers = extract!(reader as u16)?;
-                for _ in 0..num_modifiers {
-                    actor_change.modifiers.push((extract!(reader as u8)?, extract!(reader as f32)?));
-                }
-            }
+        if change_flags.contains(ActorChangeFlags::SKILLS) {
+            actor_change.skills = Some(Skills {
+                armorer: extract!(reader as u8)?,
+                athletics: extract!(reader as u8)?,
+                blade: extract!(reader as u8)?,
+                block: extract!(reader as u8)?,
+                blunt: extract!(reader as u8)?,
+                hand_to_hand: extract!(reader as u8)?,
+                heavy_armor: extract!(reader as u8)?,
+                alchemy: extract!(reader as u8)?,
+                alteration: extract!(reader as u8)?,
+                conjuration: extract!(reader as u8)?,
+                destruction: extract!(reader as u8)?,
+                illusion: extract!(reader as u8)?,
+                mysticism: extract!(reader as u8)?,
+                restoration: extract!(reader as u8)?,
+                acrobatics: extract!(reader as u8)?,
+                light_armor: extract!(reader as u8)?,
+                marksman: extract!(reader as u8)?,
+                mercantile: extract!(reader as u8)?,
+                security: extract!(reader as u8)?,
+                sneak: extract!(reader as u8)?,
+                speechcraft: extract!(reader as u8)?,
+            });
+        }
 
-            if change_flags.contains(ActorChangeFlags::FULL_NAME) {
-                actor_change.full_name = Some(extract_bstring(&mut reader)?);
-            }
-
-            if change_flags.contains(ActorChangeFlags::SKILLS) {
-                actor_change.skills = Some(Skills {
-                    armorer: extract!(reader as u8)?,
-                    athletics: extract!(reader as u8)?,
-                    blade: extract!(reader as u8)?,
-                    block: extract!(reader as u8)?,
-                    blunt: extract!(reader as u8)?,
-                    hand_to_hand: extract!(reader as u8)?,
-                    heavy_armor: extract!(reader as u8)?,
-                    alchemy: extract!(reader as u8)?,
-                    alteration: extract!(reader as u8)?,
-                    conjuration: extract!(reader as u8)?,
-                    destruction: extract!(reader as u8)?,
-                    illusion: extract!(reader as u8)?,
-                    mysticism: extract!(reader as u8)?,
-                    restoration: extract!(reader as u8)?,
-                    acrobatics: extract!(reader as u8)?,
-                    light_armor: extract!(reader as u8)?,
-                    marksman: extract!(reader as u8)?,
-                    mercantile: extract!(reader as u8)?,
-                    security: extract!(reader as u8)?,
-                    sneak: extract!(reader as u8)?,
-                    speechcraft: extract!(reader as u8)?,
-                });
-            }
-
-            if change_flags.contains(ActorChangeFlags::COMBAT_STYLE) {
-                actor_change.combat_style = Some(extract!(reader as u32)?);
-            }
-
-            Ok(())
-        })?;
+        if change_flags.contains(ActorChangeFlags::COMBAT_STYLE) {
+            actor_change.combat_style = Some(extract!(reader as u32)?);
+        }
 
         Ok(actor_change)
     }
@@ -296,8 +291,7 @@ impl ActorChange {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    // TODO: can an I/O error occur while writing to a vector like this?
-    pub fn write(&self, record: &mut ChangeRecord) -> io::Result<()> {
+    pub fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
         let mut buf: Vec<u8> = vec![];
         let mut writer = &mut &mut buf;
         let mut flags = ActorChangeFlags::empty();
@@ -397,7 +391,7 @@ impl ActorChange {
             serialize!(combat_style => writer)?;
         }
 
-        record.set_data(flags.bits, buf).map_err(io_error)?;
+        record.set_data(flags.bits, buf)?;
         Ok(())
     }
 }

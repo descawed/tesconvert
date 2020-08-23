@@ -170,7 +170,7 @@ impl Npc {
     /// Fails if the provided record is not an `b"NPC_"` record or if the record data is invalid.
     pub fn read(record: &Record) -> Result<Npc, TesError> {
         if record.name() != b"NPC_" {
-            return Err(TesError::DecodeFailed { description: String::from("Record was not an NPC_ record"), cause: None });
+            return Err(decode_failed("Record was not an NPC_ record"));
         }
 
         // initialize an empty struct which we'll fill in based on what's available
@@ -263,228 +263,201 @@ impl Npc {
                     let mut data = field.get();
                     let len = data.len();
                     let reader = &mut data;
-                    wrap_decode("Could not parse NPDT", || {
-                        npc.level = extract!(reader as u16)?;
-                        if len == 12 {
-                            // auto-calculated; many fields are not present
-                            npc.disposition = extract!(reader as u8)?;
-                            npc.reputation = extract!(reader as u8)?;
-                            npc.rank = extract!(reader as u8)?;
-                            // UESP says these next 3 bytes are junk and OpenMW labels them as unknown,
-                            // so we're going to ignore them
-                            let mut buf = [0u8; 3];
-                            reader.read_exact(&mut buf)?;
-                            npc.gold = extract!(reader as u32)?;
-                        } else {
-                            // not auto-calculated; all fields are present
-                            npc.strength = extract!(reader as u8)?;
-                            npc.intelligence = extract!(reader as u8)?;
-                            npc.willpower = extract!(reader as u8)?;
-                            npc.agility = extract!(reader as u8)?;
-                            npc.speed = extract!(reader as u8)?;
-                            npc.endurance = extract!(reader as u8)?;
-                            npc.personality = extract!(reader as u8)?;
-                            npc.luck = extract!(reader as u8)?;
+                    npc.level = extract!(reader as u16)?;
+                    if len == 12 {
+                        // auto-calculated; many fields are not present
+                        npc.disposition = extract!(reader as u8)?;
+                        npc.reputation = extract!(reader as u8)?;
+                        npc.rank = extract!(reader as u8)?;
+                        // UESP says these next 3 bytes are junk and OpenMW labels them as unknown,
+                        // so we're going to ignore them
+                        let mut buf = [0u8; 3];
+                        reader.read_exact(&mut buf)?;
+                        npc.gold = extract!(reader as u32)?;
+                    } else {
+                        // not auto-calculated; all fields are present
+                        npc.strength = extract!(reader as u8)?;
+                        npc.intelligence = extract!(reader as u8)?;
+                        npc.willpower = extract!(reader as u8)?;
+                        npc.agility = extract!(reader as u8)?;
+                        npc.speed = extract!(reader as u8)?;
+                        npc.endurance = extract!(reader as u8)?;
+                        npc.personality = extract!(reader as u8)?;
+                        npc.luck = extract!(reader as u8)?;
 
-                            npc.block = extract!(reader as u8)?;
-                            npc.armorer = extract!(reader as u8)?;
-                            npc.medium_armor = extract!(reader as u8)?;
-                            npc.heavy_armor = extract!(reader as u8)?;
-                            npc.blunt = extract!(reader as u8)?;
-                            npc.long_blade = extract!(reader as u8)?;
-                            npc.axe = extract!(reader as u8)?;
-                            npc.spear = extract!(reader as u8)?;
-                            npc.athletics = extract!(reader as u8)?;
-                            npc.enchant = extract!(reader as u8)?;
-                            npc.destruction = extract!(reader as u8)?;
-                            npc.alteration = extract!(reader as u8)?;
-                            npc.illusion = extract!(reader as u8)?;
-                            npc.conjuration = extract!(reader as u8)?;
-                            npc.mysticism = extract!(reader as u8)?;
-                            npc.restoration = extract!(reader as u8)?;
-                            npc.alchemy = extract!(reader as u8)?;
-                            npc.unarmored = extract!(reader as u8)?;
-                            npc.security = extract!(reader as u8)?;
-                            npc.sneak = extract!(reader as u8)?;
-                            npc.acrobatics = extract!(reader as u8)?;
-                            npc.light_armor = extract!(reader as u8)?;
-                            npc.short_blade = extract!(reader as u8)?;
-                            npc.marksman = extract!(reader as u8)?;
-                            npc.mercantile = extract!(reader as u8)?;
-                            npc.speechcraft = extract!(reader as u8)?;
-                            npc.hand_to_hand = extract!(reader as u8)?;
+                        npc.block = extract!(reader as u8)?;
+                        npc.armorer = extract!(reader as u8)?;
+                        npc.medium_armor = extract!(reader as u8)?;
+                        npc.heavy_armor = extract!(reader as u8)?;
+                        npc.blunt = extract!(reader as u8)?;
+                        npc.long_blade = extract!(reader as u8)?;
+                        npc.axe = extract!(reader as u8)?;
+                        npc.spear = extract!(reader as u8)?;
+                        npc.athletics = extract!(reader as u8)?;
+                        npc.enchant = extract!(reader as u8)?;
+                        npc.destruction = extract!(reader as u8)?;
+                        npc.alteration = extract!(reader as u8)?;
+                        npc.illusion = extract!(reader as u8)?;
+                        npc.conjuration = extract!(reader as u8)?;
+                        npc.mysticism = extract!(reader as u8)?;
+                        npc.restoration = extract!(reader as u8)?;
+                        npc.alchemy = extract!(reader as u8)?;
+                        npc.unarmored = extract!(reader as u8)?;
+                        npc.security = extract!(reader as u8)?;
+                        npc.sneak = extract!(reader as u8)?;
+                        npc.acrobatics = extract!(reader as u8)?;
+                        npc.light_armor = extract!(reader as u8)?;
+                        npc.short_blade = extract!(reader as u8)?;
+                        npc.marksman = extract!(reader as u8)?;
+                        npc.mercantile = extract!(reader as u8)?;
+                        npc.speechcraft = extract!(reader as u8)?;
+                        npc.hand_to_hand = extract!(reader as u8)?;
 
-                            npc.health = extract!(reader as u16)?;
-                            npc.magicka = extract!(reader as u16)?;
-                            npc.fatigue = extract!(reader as u16)?;
+                        npc.health = extract!(reader as u16)?;
+                        npc.magicka = extract!(reader as u16)?;
+                        npc.fatigue = extract!(reader as u16)?;
 
-                            npc.disposition = extract!(reader as u8)?;
-                            npc.reputation = extract!(reader as u8)?;
-                            npc.rank = extract!(reader as u8)?;
-                            extract!(reader as u8)?; // skip dummy byte
-                            npc.gold = extract!(reader as u32)?;
-                        }
-                        Ok(())
-                    })?;
+                        npc.disposition = extract!(reader as u8)?;
+                        npc.reputation = extract!(reader as u8)?;
+                        npc.rank = extract!(reader as u8)?;
+                        extract!(reader as u8)?; // skip dummy byte
+                        npc.gold = extract!(reader as u32)?;
+                    }
                 },
-                b"FLAG" => npc.flags = NpcFlags::from_bits(field.get_u32()?).ok_or(TesError::DecodeFailed { description: String::from("Invalid NPC flags"), cause: None })?,
+                b"FLAG" => npc.flags = NpcFlags::from_bits(field.get_u32()?).ok_or(TesError::DecodeFailed { description: String::from("Invalid NPC flags"), source: None })?,
                 b"NPCO" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
-                    wrap_decode("Could not parse NPCO", || {
-                        let count = extract!(reader as u32)?;
-                        let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
-                        npc.inventory.insert(id, count);
-                        Ok(())
-                    })?;
+                    let count = extract!(reader as u32)?;
+                    let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
+                    npc.inventory.insert(id, count);
                 },
                 b"NPCS" => {
-                    let spell = extract_string(NPC_STRING_LENGTH, &mut field.get()).map_err(|e| decode_failed("Could not parse NPCS", e))?;
+                    let spell = extract_string(NPC_STRING_LENGTH, &mut field.get()).map_err(|e| decode_failed_because("Could not parse NPCS", e))?;
                     npc.spells.push(spell);
                 },
                 b"AIDT" => {
                     let mut data = field.get();
                     let reader = &mut data;
-                    wrap_decode("Could not parse AIDT", || {
-                        npc.hello = extract!(reader as u16)?;
-                        npc.fight = extract!(reader as u8)?;
-                        npc.flee = extract!(reader as u8)?;
-                        npc.alarm = extract!(reader as u8)?;
-                        npc.ai_unknown1 = extract!(reader as u8)?;
-                        npc.ai_unknown2 = extract!(reader as u8)?;
-                        npc.ai_unknown3 = extract!(reader as u8)?;
-                        // according to UESP, the remaining flag bits are "filled with junk data",
-                        // so we mask them out to prevent an error when reading the flags
-                        let flags = extract!(reader as u32)? & 0x3ffff;
-                        npc.services = ServiceFlags::from_bits(flags).unwrap();
-                        Ok(())
-                    })?;
+                    npc.hello = extract!(reader as u16)?;
+                    npc.fight = extract!(reader as u8)?;
+                    npc.flee = extract!(reader as u8)?;
+                    npc.alarm = extract!(reader as u8)?;
+                    npc.ai_unknown1 = extract!(reader as u8)?;
+                    npc.ai_unknown2 = extract!(reader as u8)?;
+                    npc.ai_unknown3 = extract!(reader as u8)?;
+                    // according to UESP, the remaining flag bits are "filled with junk data",
+                    // so we mask them out to prevent an error when reading the flags
+                    let flags = extract!(reader as u32)? & 0x3ffff;
+                    npc.services = ServiceFlags::from_bits(flags).unwrap();
                 },
                 b"DODT" => {
                     let mut data = field.get();
                     let reader = &mut data;
-                    wrap_decode("Could not parse DODT", || {
-                        let pos_x = extract!(reader as f32)?;
-                        let pos_y = extract!(reader as f32)?;
-                        let pos_z = extract!(reader as f32)?;
-                        let rot_x = extract!(reader as f32)?;
-                        let rot_y = extract!(reader as f32)?;
-                        let rot_z = extract!(reader as f32)?;
-                        npc.destinations.push(Destination {
-                            position: (pos_x, pos_y, pos_z),
-                            rotation: (rot_x, rot_y, rot_z),
-                            cell_name: None,
-                        });
-                        Ok(())
-                    })?;
+                    let pos_x = extract!(reader as f32)?;
+                    let pos_y = extract!(reader as f32)?;
+                    let pos_z = extract!(reader as f32)?;
+                    let rot_x = extract!(reader as f32)?;
+                    let rot_y = extract!(reader as f32)?;
+                    let rot_z = extract!(reader as f32)?;
+                    npc.destinations.push(Destination {
+                        position: (pos_x, pos_y, pos_z),
+                        rotation: (rot_x, rot_y, rot_z),
+                        cell_name: None,
+                    });
                 },
                 b"DNAM" => {
                     if let Some(last_destination) = npc.destinations.last_mut() {
                         if last_destination.cell_name == None {
                             last_destination.cell_name = Some(String::from(field.get_zstring()?));
                         } else {
-                            return Err(TesError::DecodeFailed { description: String::from("Orphaned DNAM field"), cause: None });
+                            return Err(TesError::DecodeFailed { description: String::from("Orphaned DNAM field"), source: None });
                         }
                     } else {
-                        return Err(TesError::DecodeFailed { description: String::from("Orphaned DNAM field"), cause: None });
+                        return Err(TesError::DecodeFailed { description: String::from("Orphaned DNAM field"), source: None });
                     }
                 },
                 b"AI_A" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
-                    wrap_decode("Could not parse AI_A", || {
-                        npc.packages.push(Package::Activate(extract_string(NPC_STRING_LENGTH, &mut reader)?));
-                        Ok(())
-                    })?;
+                    npc.packages.push(Package::Activate(extract_string(NPC_STRING_LENGTH, &mut reader)?));
                 },
                 b"AI_E" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
-                    wrap_decode("Could not parse AI_E", || {
-                        let x = extract!(reader as f32)?;
-                        let y = extract!(reader as f32)?;
-                        let z = extract!(reader as f32)?;
-                        let duration = extract!(reader as u16)?;
-                        let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
-                        npc.packages.push(Package::Escort {
-                            x,
-                            y,
-                            z,
-                            duration,
-                            id,
-                            cell: None,
-                        });
-                        Ok(())
-                    })?;
+                    let x = extract!(reader as f32)?;
+                    let y = extract!(reader as f32)?;
+                    let z = extract!(reader as f32)?;
+                    let duration = extract!(reader as u16)?;
+                    let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
+                    npc.packages.push(Package::Escort {
+                        x,
+                        y,
+                        z,
+                        duration,
+                        id,
+                        cell: None,
+                    });
                 },
                 b"AI_F" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
-                    wrap_decode("Could not parse AI_F", || {
-                        let x = extract!(reader as f32)?;
-                        let y = extract!(reader as f32)?;
-                        let z = extract!(reader as f32)?;
-                        let duration = extract!(reader as u16)?;
-                        let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
-                        npc.packages.push(Package::Follow {
-                            x,
-                            y,
-                            z,
-                            duration,
-                            id,
-                            cell: None,
-                        });
-                        Ok(())
-                    })?;
+                    let x = extract!(reader as f32)?;
+                    let y = extract!(reader as f32)?;
+                    let z = extract!(reader as f32)?;
+                    let duration = extract!(reader as u16)?;
+                    let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
+                    npc.packages.push(Package::Follow {
+                        x,
+                        y,
+                        z,
+                        duration,
+                        id,
+                        cell: None,
+                    });
                 },
                 b"AI_T" => {
                     let mut data = field.get();
                     let reader = &mut data;
-                    wrap_decode("Could not parse AI_T", || {
-                        let x = extract!(reader as f32)?;
-                        let y = extract!(reader as f32)?;
-                        let z = extract!(reader as f32)?;
-                        npc.packages.push(Package::Travel { x, y, z });
-                        Ok(())
-                    })?;
+                    let x = extract!(reader as f32)?;
+                    let y = extract!(reader as f32)?;
+                    let z = extract!(reader as f32)?;
+                    npc.packages.push(Package::Travel { x, y, z });
                 },
                 b"AI_W" => {
                     let mut data = field.get();
                     let reader = &mut data;
-                    wrap_decode("Could not parse AI_W", || {
-                        let distance = extract!(reader as u16)?;
-                        let duration = extract!(reader as u16)?;
-                        let time_of_day = extract!(reader as u8)?;
-                        let mut idles = [0u8; 8];
-                        reader.read_exact(&mut idles)?;
-                        npc.packages.push(Package::Wander {
-                            distance,
-                            duration,
-                            time_of_day,
-                            idles,
-                        });
-                        Ok(())
-                    })?;
+                    let distance = extract!(reader as u16)?;
+                    let duration = extract!(reader as u16)?;
+                    let time_of_day = extract!(reader as u8)?;
+                    let mut idles = [0u8; 8];
+                    reader.read_exact(&mut idles)?;
+                    npc.packages.push(Package::Wander {
+                        distance,
+                        duration,
+                        time_of_day,
+                        idles,
+                    });
                 },
                 b"CNDT" => {
                     if let Some(last_package) = npc.packages.last_mut() {
                         let cell_field = Some(String::from(field.get_zstring()?));
                         match last_package {
                             Package::Escort { ref mut cell, .. } => match *cell {
-                                Some(_) => return Err(TesError::DecodeFailed { description: String::from("Extraneous CNDT field"), cause: None }),
+                                Some(_) => return Err(TesError::DecodeFailed { description: String::from("Extraneous CNDT field"), source: None }),
                                 None => *cell = cell_field,
                             },
                             Package::Follow { ref mut cell, .. } => match *cell {
-                                Some(_) => return Err(TesError::DecodeFailed { description: String::from("Extraneous CNDT field"), cause: None }),
+                                Some(_) => return Err(TesError::DecodeFailed { description: String::from("Extraneous CNDT field"), source: None }),
                                 None => *cell = cell_field,
                             },
-                            _ => return Err(TesError::DecodeFailed { description: String::from("Orphaned CNDT field"), cause: None }),
+                            _ => return Err(TesError::DecodeFailed { description: String::from("Orphaned CNDT field"), source: None }),
                         }
                     } else {
-                        return Err(TesError::DecodeFailed { description: String::from("Orphaned CNDT field"), cause: None });
+                        return Err(TesError::DecodeFailed { description: String::from("Orphaned CNDT field"), source: None });
                     }
                 },
-                _ => return Err(TesError::DecodeFailed { description: format!("Unexpected field {}", field.display_name()), cause: None }),
+                _ => return Err(TesError::DecodeFailed { description: format!("Unexpected field {}", field.display_name()), source: None }),
             }
         }
 

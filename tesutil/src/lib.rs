@@ -10,13 +10,13 @@ pub mod save;
 
 use std::error;
 use std::ffi::CStr;
-use std::fmt;
 use std::io;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::iter;
 use std::str;
 
 use len_trait::len::Len;
+use thiserror::*;
 
 #[macro_use]
 extern crate bitflags;
@@ -53,7 +53,7 @@ impl<T: Write> WriteExact for T {
             Ok(num_bytes) => if num_bytes == buf.len() {
                 Ok(())
             } else {
-                Err(Error::new(ErrorKind::UnexpectedEof, format!("Attempted to write {} bytes but could only write {}", buf.len(), num_bytes)))
+                Err(io::Error::new(ErrorKind::UnexpectedEof, format!("Attempted to write {} bytes but could only write {}", buf.len(), num_bytes)))
             },
             Err(e) => Err(e),
         }
@@ -84,7 +84,7 @@ impl<T: Read> ReadAllOrNone for T {
                 if total_bytes_read == 0 {
                     return Ok(false);
                 } else if total_bytes_read < buf.len() {
-                    return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
+                    return Err(io::Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
                 }
             }
 
@@ -159,7 +159,7 @@ fn serialize_bzstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
 fn io_error<E>(e: E) -> Error
 where E: Into<Box<dyn error::Error + Send + Sync>>
 {
-    Error::new(ErrorKind::InvalidData, e)
+    io::Error::new(ErrorKind::InvalidData, e)
 }
 
 /// Maximum size in bytes of a record or field
@@ -193,60 +193,44 @@ fn check_range<T: Into<f64> + PartialOrd>(value: T, min: T, max: T, msg: &str) -
 }
 
 // this answer has a good explanation for why the 'static lifetime is required here: https://users.rust-lang.org/t/box-with-a-trait-object-requires-static-lifetime/35261
-fn decode_failed<T: error::Error + Send + Sync + 'static>(msg: &str, e: T) -> TesError {
+fn decode_failed_because<T: Into<String>, E: error::Error + Send + Sync + 'static>(msg: T, e: E) -> TesError {
     TesError::DecodeFailed {
-        description: String::from(msg),
-        cause: Some(Box::new(e)),
+        description: msg.into(),
+        source: Some(Box::new(e)),
     }
 }
 
-fn wrap_decode<F>(msg: &str, mut f: F) -> Result<(), TesError>
-where F: FnMut() -> io::Result<()> {
-    f().map_err(|e| decode_failed(msg, e))
+fn decode_failed<T: Into<String>>(msg: T) -> TesError {
+    TesError::DecodeFailed {
+        description: msg.into(),
+        source: None,
+    }
 }
 
-/// Error type for plugin errors
+/// Error type for utility errors
 ///
-/// A type for errors that may occur while reading or writing plugin files. Methods that return a
-/// [`std::io::Error`] will sometimes wrap a `PluginError` in that error.
-///
-/// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-#[derive(Debug)]
+/// A type for errors that may occur while manipulating game files.
+#[derive(Error, Debug)]
 pub enum TesError {
     /// Multiple records in the plugin have the same ID string
+    #[error("ID {0} already in use")]
     DuplicateId(String),
     /// The same master file is referenced by the plugin multiple times
+    #[error("Master {0} already present")]
     DuplicateMaster(String),
     /// A size limit, e.g. on a record or field, has been exceeded
+    #[error("Limit exceeded: {description}. Max size {max_size}, actual size {actual_size}")]
     LimitExceeded { description: String, max_size: usize, actual_size: usize },
     /// A value is not in the expected range
+    #[error("Out of range: {description}. Min: {min}, max: {max}, actual: {actual}")]
     OutOfRange { description: String, min: f64, max: f64, actual: f64 },
     /// Failed to decode binary data as the expected type or format
-    DecodeFailed { description: String, cause: Option<Box<dyn error::Error + Send + Sync>> },
+    #[error("Decode failed: {description}")]
+    DecodeFailed { description: String, #[source] source: Option<Box<dyn error::Error + Send + Sync>> },
+    /// Unexpected I/O error
+    #[error(transparent)]
+    IoError(#[from] io::Error),
 }
-
-impl fmt::Display for TesError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TesError::DuplicateId(id) => write!(f, "ID {} already in use", id),
-            TesError::DuplicateMaster(name) => write!(f, "Master {} already present", name),
-            TesError::LimitExceeded {
-                description, max_size, actual_size
-            } => write!(f, "Limit exceeded: {}. Max size {}, actual size {}", description, max_size, actual_size),
-            TesError::OutOfRange {
-                description, min, max, actual,
-            } => write!(f, "Out of range: {}. Min: {}, max: {}, actual: {}", description, min, max, actual),
-            TesError::DecodeFailed {
-                description, cause
-            } => match cause {
-                Some(cause) => write!(f, "Decode failed: {}. Caused by: {}", description, cause),
-                None => write!(f, "Decode failed: {}", description),
-            },
-        }
-    }
-}
-
-impl error::Error for TesError {}
 
 #[cfg(test)]
 mod tests {

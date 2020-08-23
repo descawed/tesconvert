@@ -157,7 +157,7 @@ impl PlayerData {
     /// Fails if an I/O error occurs or the data is not valid
     pub fn read(record: &Record) -> Result<PlayerData, TesError> {
         if record.name() != b"PCDT" {
-            return Err(TesError::DecodeFailed { description: String::from("Record was not a PCDT record"), cause: None });
+            return Err(decode_failed("Record was not a PCDT record"));
         }
 
         let mut player_data = PlayerData::default();
@@ -166,86 +166,79 @@ impl PlayerData {
                 b"DNAM" => player_data.known_topics.push(String::from(field.get_zstring()?)),
                 b"MNAM" => player_data.mark_cell = Some(String::from(field.get_zstring()?)),
                 b"PNAM" => {
-                    wrap_decode("Failed to decode PNAM", ||{
-                        let mut reader = field.reader();
+                    let mut reader = field.reader();
 
-                        player_data.player_flags = extract!(reader as u32)?;
-                        player_data.level_progress = extract!(reader as u32)?;
+                    player_data.player_flags = extract!(reader as u32)?;
+                    player_data.level_progress = extract!(reader as u32)?;
 
-                        player_data.block_progress = extract!(reader as f32)?;
-                        player_data.armorer_progress = extract!(reader as f32)?;
-                        player_data.medium_armor_progress = extract!(reader as f32)?;
-                        player_data.heavy_armor_progress = extract!(reader as f32)?;
-                        player_data.blunt_progress = extract!(reader as f32)?;
-                        player_data.long_blade_progress = extract!(reader as f32)?;
-                        player_data.axe_progress = extract!(reader as f32)?;
-                        player_data.spear_progress = extract!(reader as f32)?;
-                        player_data.athletics_progress = extract!(reader as f32)?;
-                        player_data.enchant_progress = extract!(reader as f32)?;
-                        player_data.destruction_progress = extract!(reader as f32)?;
-                        player_data.alteration_progress = extract!(reader as f32)?;
-                        player_data.illusion_progress = extract!(reader as f32)?;
-                        player_data.conjuration_progress = extract!(reader as f32)?;
-                        player_data.mysticism_progress = extract!(reader as f32)?;
-                        player_data.restoration_progress = extract!(reader as f32)?;
-                        player_data.alchemy_progress = extract!(reader as f32)?;
-                        player_data.unarmored_progress = extract!(reader as f32)?;
-                        player_data.security_progress = extract!(reader as f32)?;
-                        player_data.sneak_progress = extract!(reader as f32)?;
-                        player_data.acrobatics_progress = extract!(reader as f32)?;
-                        player_data.light_armor_progress = extract!(reader as f32)?;
-                        player_data.short_blade_progress = extract!(reader as f32)?;
-                        player_data.marksman_progress = extract!(reader as f32)?;
-                        player_data.mercantile_progress = extract!(reader as f32)?;
-                        player_data.speechcraft_progress = extract!(reader as f32)?;
-                        player_data.hand_to_hand_progress = extract!(reader as f32)?;
+                    player_data.block_progress = extract!(reader as f32)?;
+                    player_data.armorer_progress = extract!(reader as f32)?;
+                    player_data.medium_armor_progress = extract!(reader as f32)?;
+                    player_data.heavy_armor_progress = extract!(reader as f32)?;
+                    player_data.blunt_progress = extract!(reader as f32)?;
+                    player_data.long_blade_progress = extract!(reader as f32)?;
+                    player_data.axe_progress = extract!(reader as f32)?;
+                    player_data.spear_progress = extract!(reader as f32)?;
+                    player_data.athletics_progress = extract!(reader as f32)?;
+                    player_data.enchant_progress = extract!(reader as f32)?;
+                    player_data.destruction_progress = extract!(reader as f32)?;
+                    player_data.alteration_progress = extract!(reader as f32)?;
+                    player_data.illusion_progress = extract!(reader as f32)?;
+                    player_data.conjuration_progress = extract!(reader as f32)?;
+                    player_data.mysticism_progress = extract!(reader as f32)?;
+                    player_data.restoration_progress = extract!(reader as f32)?;
+                    player_data.alchemy_progress = extract!(reader as f32)?;
+                    player_data.unarmored_progress = extract!(reader as f32)?;
+                    player_data.security_progress = extract!(reader as f32)?;
+                    player_data.sneak_progress = extract!(reader as f32)?;
+                    player_data.acrobatics_progress = extract!(reader as f32)?;
+                    player_data.light_armor_progress = extract!(reader as f32)?;
+                    player_data.short_blade_progress = extract!(reader as f32)?;
+                    player_data.marksman_progress = extract!(reader as f32)?;
+                    player_data.mercantile_progress = extract!(reader as f32)?;
+                    player_data.speechcraft_progress = extract!(reader as f32)?;
+                    player_data.hand_to_hand_progress = extract!(reader as f32)?;
 
-                        player_data.strength_progress = extract!(reader as u8)?;
-                        player_data.intelligence_progress = extract!(reader as u8)?;
-                        player_data.willpower_progress = extract!(reader as u8)?;
-                        player_data.agility_progress = extract!(reader as u8)?;
-                        player_data.speed_progress = extract!(reader as u8)?;
-                        player_data.endurance_progress = extract!(reader as u8)?;
-                        player_data.personality_progress = extract!(reader as u8)?;
-                        player_data.luck_progress = extract!(reader as u8)?;
+                    player_data.strength_progress = extract!(reader as u8)?;
+                    player_data.intelligence_progress = extract!(reader as u8)?;
+                    player_data.willpower_progress = extract!(reader as u8)?;
+                    player_data.agility_progress = extract!(reader as u8)?;
+                    player_data.speed_progress = extract!(reader as u8)?;
+                    player_data.endurance_progress = extract!(reader as u8)?;
+                    player_data.personality_progress = extract!(reader as u8)?;
+                    player_data.luck_progress = extract!(reader as u8)?;
 
-                        player_data.telekinesis_range_bonus = extract!(reader as i32)?;
-                        player_data.vision_bonus = extract!(reader as f32)?;
-                        player_data.detect_key_magnitude = extract!(reader as i32)?;
-                        player_data.detect_enchantment_magnitude = extract!(reader as i32)?;
-                        player_data.detect_animal_magnitude = extract!(reader as i32)?;
+                    player_data.telekinesis_range_bonus = extract!(reader as i32)?;
+                    player_data.vision_bonus = extract!(reader as f32)?;
+                    player_data.detect_key_magnitude = extract!(reader as i32)?;
+                    player_data.detect_enchantment_magnitude = extract!(reader as i32)?;
+                    player_data.detect_animal_magnitude = extract!(reader as i32)?;
 
-                        player_data.mark_x = extract!(reader as f32)?;
-                        player_data.mark_y = extract!(reader as f32)?;
-                        player_data.mark_z = extract!(reader as f32)?;
-                        player_data.mark_rot = extract!(reader as f32)?;
-                        player_data.mark_grid_x = extract!(reader as i32)?;
-                        player_data.mark_grid_y = extract!(reader as i32)?;
+                    player_data.mark_x = extract!(reader as f32)?;
+                    player_data.mark_y = extract!(reader as f32)?;
+                    player_data.mark_z = extract!(reader as f32)?;
+                    player_data.mark_rot = extract!(reader as f32)?;
+                    player_data.mark_grid_x = extract!(reader as i32)?;
+                    player_data.mark_grid_y = extract!(reader as i32)?;
 
-                        player_data.unknown1 = vec![0u8; 40];
-                        reader.read_exact(player_data.unknown1.as_mut())?;
+                    player_data.unknown1 = vec![0u8; 40];
+                    reader.read_exact(player_data.unknown1.as_mut())?;
 
-                        player_data.combat_increases = extract!(reader as u8)?;
-                        player_data.magic_increases = extract!(reader as u8)?;
-                        player_data.stealth_increases = extract!(reader as u8)?;
-                        player_data.unknown2 = extract!(reader as u8)?;
-
-                        Ok(())
-                    })?;
+                    player_data.combat_increases = extract!(reader as u8)?;
+                    player_data.magic_increases = extract!(reader as u8)?;
+                    player_data.stealth_increases = extract!(reader as u8)?;
+                    player_data.unknown2 = extract!(reader as u8)?;
                 },
                 b"SNAM" => player_data.snam = field.get().to_vec(),
                 b"NAM9" => player_data.nam9 = Some(field.get_u32()?),
                 b"RNAM" => {
-                    wrap_decode("Failed to decode RNAM", ||{
-                        let mut reader = field.reader();
-                        player_data.rest_state = Some(RestState {
-                            hours_left: extract!(reader as i32)?,
-                            x: extract!(reader as f32)?,
-                            y: extract!(reader as f32)?,
-                            z: extract!(reader as f32)?,
-                        });
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    player_data.rest_state = Some(RestState {
+                        hours_left: extract!(reader as i32)?,
+                        x: extract!(reader as f32)?,
+                        y: extract!(reader as f32)?,
+                        z: extract!(reader as f32)?,
+                    });
                 },
                 b"CNAM" => player_data.bounty = Some(field.get_i32()?),
                 b"BNAM" => player_data.birthsign = Some(String::from(field.get_zstring()?)),
@@ -254,76 +247,57 @@ impl PlayerData {
                 b"NAM2" => player_data.alchemy_equipment[2] = Some(String::from(field.get_zstring()?)),
                 b"NAM3" => player_data.alchemy_equipment[3] = Some(String::from(field.get_zstring()?)),
                 b"ENAM" => {
-                    wrap_decode("Failed to decode ENAM", ||{
-                        let mut reader = field.reader();
-                        player_data.exterior = Some(ExteriorLocation {
-                            x: extract!(reader as i32)?,
-                            y: extract!(reader as i32)?,
-                        });
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    player_data.exterior = Some(ExteriorLocation {
+                        x: extract!(reader as i32)?,
+                        y: extract!(reader as i32)?,
+                    });
                 },
                 b"LNAM" => {
-                    wrap_decode("Failed to decode LNAM", ||{
-                        let mut reader = field.reader();
-                        player_data.lnam = Some(Lnam {
-                            unknown1: extract!(reader as i32)?,
-                            unknown2: extract!(reader as i32)?,
-                        });
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    player_data.lnam = Some(Lnam {
+                        unknown1: extract!(reader as i32)?,
+                        unknown2: extract!(reader as i32)?,
+                    });
                 },
                 b"FNAM" => {
-                    wrap_decode("Failed to decode FNAM", ||{
-                        let mut reader = field.reader();
-                        player_data.factions.push(Faction {
-                            rank: extract!(reader as u32)?,
-                            reputation: extract!(reader as i32)?,
-                            flags: extract!(reader as u32)?,
-                            name: String::from(extract_string(32, &mut reader)?),
-                        });
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    player_data.factions.push(Faction {
+                        rank: extract!(reader as u32)?,
+                        reputation: extract!(reader as i32)?,
+                        flags: extract!(reader as u32)?,
+                        name: String::from(extract_string(32, &mut reader)?),
+                    });
                 },
                 b"AADT" => {
-                    wrap_decode("Failed to decode AADT", ||{
-                        let mut reader = field.reader();
-                        let anim_group_index = extract!(reader as i32)?;
-                        let mut buf = vec![0u8; 40];
-                        reader.read_exact(buf.as_mut())?;
-                        player_data.animation_data = Some(AnimationData {
-                            anim_group_index,
-                            unknown: buf,
-                        });
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    let anim_group_index = extract!(reader as i32)?;
+                    let mut buf = vec![0u8; 40];
+                    reader.read_exact(buf.as_mut())?;
+                    player_data.animation_data = Some(AnimationData {
+                        anim_group_index,
+                        unknown: buf,
+                    });
                 },
                 b"KNAM" => {
-                    wrap_decode("Failed to decode KNAM", ||{
-                        let mut reader = field.reader();
-                        player_data.quick_keys.reserve(10);
-                        for _ in 0..10 {
-                            player_data.quick_keys.push(QuickKey {
-                                bind_type: extract!(reader as u8)?,
-                                bound_form: String::from(extract_string(35, &mut reader)?),
-                                unknown: extract!(reader as i32)?,
-                            });
-                        }
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    player_data.quick_keys.reserve(10);
+                    for _ in 0..10 {
+                        player_data.quick_keys.push(QuickKey {
+                            bind_type: extract!(reader as u8)?,
+                            bound_form: String::from(extract_string(35, &mut reader)?),
+                            unknown: extract!(reader as i32)?,
+                        });
+                    }
                 },
                 b"ANIS" => {
-                    wrap_decode("Failed to decode ANIS", ||{
-                        let mut reader = field.reader();
-                        let mut buf = [0u8; 16];
-                        reader.read_exact(&mut buf)?;
-                        player_data.anis = Some(buf);
-
-                        Ok(())
-                    })?;
+                    let mut reader = field.reader();
+                    let mut buf = [0u8; 16];
+                    reader.read_exact(&mut buf)?;
+                    player_data.anis = Some(buf);
                 },
                 b"WERE" => player_data.werewolf_data = field.get().to_vec(),
-                _ => return Err(TesError::DecodeFailed { description: format!("Unexpected field {}", field.display_name()), cause: None }),
+                _ => return Err(TesError::DecodeFailed { description: format!("Unexpected field {}", field.display_name()), source: None }),
             }
         }
 

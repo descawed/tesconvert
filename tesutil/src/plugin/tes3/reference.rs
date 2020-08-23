@@ -91,7 +91,7 @@ impl PlayerReference {
     /// Fails if an I/O error occurs or if the data is invalid
     pub fn read(record: &Record) -> Result<PlayerReference, TesError> {
         if record.name() != b"REFR" {
-            return Err(TesError::DecodeFailed { description: String::from("Record was not a REFR record"), cause: None });
+            return Err(TesError::DecodeFailed { description: String::from("Record was not a REFR record"), source: None });
         }
 
         let mut player = PlayerReference {
@@ -151,36 +151,30 @@ impl PlayerReference {
                     let mut buf_ref = field.get();
                     let reader = &mut buf_ref;
 
-                    wrap_decode("Failed to decode ACDT field", || {
-                        reader.read_exact(&mut player.unknown1)?;
-                        player.flags = extract!(reader as u32)?;
-                        player.breath_meter = extract!(reader as f32)?;
-                        reader.read_exact(&mut player.unknown2)?;
-                        extract_stats!(reader, player, f32, health, fatigue, magicka);
-                        reader.read_exact(&mut player.unknown3)?;
-                        extract_stats!(reader, player, f32, strength, intelligence, willpower, agility, speed, endurance, personality, luck);
-                        for i in 0..player.magic_effects.len() {
-                            player.magic_effects[i] = extract!(reader as f32)?;
-                        }
-                        reader.read_exact(&mut player.unknown4)?;
-                        player.gold = extract!(reader as u32)?;
-                        player.count_down = extract!(reader as u8)?;
-                        reader.read_exact(&mut player.unknown5)?;
-                        Ok(())
-                    })?;
+                    reader.read_exact(&mut player.unknown1)?;
+                    player.flags = extract!(reader as u32)?;
+                    player.breath_meter = extract!(reader as f32)?;
+                    reader.read_exact(&mut player.unknown2)?;
+                    extract_stats!(reader, player, f32, health, fatigue, magicka);
+                    reader.read_exact(&mut player.unknown3)?;
+                    extract_stats!(reader, player, f32, strength, intelligence, willpower, agility, speed, endurance, personality, luck);
+                    for i in 0..player.magic_effects.len() {
+                        player.magic_effects[i] = extract!(reader as f32)?;
+                    }
+                    reader.read_exact(&mut player.unknown4)?;
+                    player.gold = extract!(reader as u32)?;
+                    player.count_down = extract!(reader as u8)?;
+                    reader.read_exact(&mut player.unknown5)?;
                 },
                 b"CHRD" => {
                     let mut buf_ref = field.get();
                     let reader = &mut buf_ref;
 
-                    wrap_decode("Failed to decode CHRD field", || {
-                        extract_stats!(reader, player, u32, block, armorer, medium_armor, heavy_armor,
-                            blunt, long_blade, axe, spear, athletics, enchant, destruction, alteration,
-                            illusion, conjuration, mysticism, restoration, alchemy, unarmored, security,
-                            sneak, acrobatics, light_armor, short_blade, marksman, mercantile, speechcraft, hand_to_hand
-                        );
-                        Ok(())
-                    })?;
+                    extract_stats!(reader, player, u32, block, armorer, medium_armor, heavy_armor,
+                        blunt, long_blade, axe, spear, athletics, enchant, destruction, alteration,
+                        illusion, conjuration, mysticism, restoration, alchemy, unarmored, security,
+                        sneak, acrobatics, light_armor, short_blade, marksman, mercantile, speechcraft, hand_to_hand
+                    );
                 },
                 _ => (),
             }

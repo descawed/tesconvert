@@ -1,6 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::{Into, TryFrom};
-use std::io;
 use std::io::{Read, Write};
 use crate::*;
 
@@ -43,9 +42,9 @@ pub struct ChangeRecord {
 
 impl ChangeRecord {
     /// Reads a change record from a binary stream
-    pub fn read<T: Read>(mut f: T) -> io::Result<(ChangeRecord, usize)> {
+    pub fn read<T: Read>(mut f: T) -> Result<(ChangeRecord, usize), TesError> {
         let form_id = extract!(f as u32)?;
-        let change_type = ChangeType::try_from(extract!(f as u8)?).map_err(|e| io_error(e))?;
+        let change_type = ChangeType::try_from(extract!(f as u8)?).map_err(|e| decode_failed_because("Invalid change type", e))?;
         let flags = extract!(f as u32)?;
         let version = extract!(f as u8)?;
         let data_size = extract!(f as u16)? as usize;
@@ -100,7 +99,7 @@ impl ChangeRecord {
     }
 
     /// Writes a change record to a binary stream
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         serialize!(self.form_id => f)?;
         serialize!(Into::<u8>::into(self.change_type) => f)?;
         serialize!(self.flags => f)?;

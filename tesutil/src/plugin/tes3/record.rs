@@ -1,4 +1,3 @@
-use std::io;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
@@ -70,11 +69,10 @@ impl Record {
     ///
     /// # Errors
     ///
-    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    /// Returns an error if an I/O error occurs.
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn read<T: Read>(mut f: T) -> io::Result<Option<Record>> {
+    pub fn read<T: Read>(mut f: T) -> Result<Option<Record>, TesError> {
         let mut name = [0u8; 4];
         if !f.read_all_or_none(&mut name)? {
             return Ok(None);
@@ -108,7 +106,7 @@ impl Record {
             let field = Field::read(&mut data_ref)?;
             let field_size = field.size();
             if field_size > size {
-                return Err(io_error("Field size exceeds record size"));
+                return Err(decode_failed("Field size exceeds record size"));
             }
 
             size -= field.size();
@@ -124,19 +122,18 @@ impl Record {
     ///
     /// # Errors
     ///
-    /// Returns a [`std::io::Error`] if an I/O error occurs.
+    /// Returns an error if an I/O error occurs.
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         let size = self.field_size();
 
         if size > MAX_DATA {
-            return Err(io_error(TesError::LimitExceeded {
+            return Err(TesError::LimitExceeded {
                 description: String::from("Record data too long to be serialized"),
                 max_size: MAX_DATA,
                 actual_size: size,
-            }));
+            });
         }
 
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }

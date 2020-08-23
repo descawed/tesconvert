@@ -1,4 +1,3 @@
-use std::io;
 use std::io::{Read, Write};
 use std::str;
 
@@ -97,16 +96,14 @@ impl Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    pub fn read_with_name<T: Read>(mut f: T, name: [u8; 4]) -> io::Result<(Record, usize)> {
+    pub fn read_with_name<T: Read>(mut f: T, name: [u8; 4]) -> Result<(Record, usize), TesError> {
         let size = extract!(f as u32)? as usize;
 
         let mut buf = [0u8; 4];
         f.read_exact(&mut buf)?;
 
-        let flags = RecordFlags::from_bits(u32::from_le_bytes(buf)).ok_or(io_error(TesError::DecodeFailed {
-            description: String::from("Invalid record flags"),
-            cause: None,
-        }))?;
+        let flags = RecordFlags::from_bits(u32::from_le_bytes(buf))
+            .ok_or(decode_failed("Invalid record flags"))?;
 
         let form_id = extract!(f as u32)?;
         let vcs_info = extract!(f as u32)?;
@@ -149,25 +146,25 @@ impl Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    pub fn read<T: Read>(mut f: T) -> io::Result<Option<(Record, usize)>> {
+    pub fn read<T: Read>(mut f: T) -> Result<Option<(Record, usize)>, TesError> {
         let mut name = [0u8; 4];
         if !f.read_all_or_none(&mut name)? {
             return Ok(None);
         }
 
         if name == *b"GRUP" {
-            return Err(io_error("Expected record, found group"));
+            return Err(decode_failed("Expected record, found group"));
         }
 
         Ok(Some(Record::read_with_name(f, name)?))
     }
 
-    fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> io::Result<()> {
+    fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> Result<(), TesError> {
         while size > 0 {
             let field = Field::read(&mut f)?;
             let field_size = field.size();
             if field_size > size {
-                return Err(io_error("Field size exceeds record size"));
+                return Err(decode_failed("Field size exceeds record size"));
             }
 
             size -= field.size();
@@ -212,17 +209,17 @@ impl Record {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<usize> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<usize, TesError> {
         let size = self.field_size();
 
         // technically, if the record is compressed, we should do this check on the compressed data,
         // but I don't think this will ever happen anyway
         if size > MAX_DATA {
-            return Err(io_error(TesError::LimitExceeded {
+            return Err(TesError::LimitExceeded {
                 description: String::from("Record data too long to be serialized"),
                 max_size: MAX_DATA,
                 actual_size: size,
-            }));
+            });
         }
 
         f.write_exact(&self.name)?;

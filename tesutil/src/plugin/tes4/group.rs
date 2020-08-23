@@ -21,7 +21,7 @@ pub enum GroupKind {
 }
 
 impl GroupKind {
-    fn read<T: Read>(mut f: T) -> io::Result<GroupKind> {
+    fn read<T: Read>(mut f: T) -> Result<GroupKind, TesError> {
         let mut label = [0u8; 4];
         f.read_exact(&mut label)?;
         match extract!(f as u32)? {
@@ -48,7 +48,7 @@ impl GroupKind {
             8 => Ok(GroupKind::CellPersistentChildren(u32::from_le_bytes(label))),
             9 => Ok(GroupKind::CellTemporaryChildren(u32::from_le_bytes(label))),
             10 => Ok(GroupKind::CellVisibleDistantChildren(u32::from_le_bytes(label))),
-            kind @ _ => Err(io_error(format!("Unexpected group type {}", kind))),
+            kind @ _ => Err(TesError::DecodeFailed { description: format!("Unexpected group type {}", kind), source: None }),
         }
     }
 
@@ -136,7 +136,7 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
-    pub fn read_without_name<T: Read>(mut f: T) -> io::Result<(Group, usize)> {
+    pub fn read_without_name<T: Read>(mut f: T) -> Result<(Group, usize), TesError> {
         let full_size = extract!(f as u32)? as usize;
         // size includes this header, so subtract that
         let mut size = full_size - 20;
@@ -151,7 +151,7 @@ impl Group {
             if name == *b"GRUP" {
                 let (group, group_size) = Group::read_without_name(&mut f)?;
                 if group_size > size {
-                    return Err(io_error("Sub-group size exceeds group size"));
+                    return Err(decode_failed("Sub-group size exceeds group size"));
                 }
                 size -= group_size;
 
@@ -163,7 +163,7 @@ impl Group {
             } else {
                 let (record, record_size) = Record::read_with_name(&mut f, name)?;
                 if record_size > size {
-                    return Err(io_error("Record size exceeds group size"));
+                    return Err(decode_failed("Record size exceeds group size"));
                 }
                 size -= record_size;
                 records.push(record);
@@ -183,14 +183,14 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
-    pub fn read<T: Read>(mut f: T) -> io::Result<Option<(Group, usize)>> {
+    pub fn read<T: Read>(mut f: T) -> Result<Option<(Group, usize)>, TesError> {
         let mut name = [0u8; 4];
         if !f.read_all_or_none(&mut name)? {
             return Ok(None);
         }
 
         if name != *b"GRUP" {
-            return Err(io_error(format!("Expected GRUP, found {:?}", name)));
+            return Err(decode_failed(format!("Expected GRUP, found {:?}", name)));
         }
 
         Ok(Some(Group::read_without_name(f)?))
@@ -201,7 +201,7 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<usize> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<usize, TesError> {
         f.write_exact(b"GRUP")?;
 
         // FIXME: currently, to calculate the group size, we have to write the whole group to a

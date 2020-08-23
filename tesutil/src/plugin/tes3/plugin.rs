@@ -1,7 +1,6 @@
 use std::cell::{Ref, RefMut, RefCell};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io;
 use std::io::{BufReader, Error, ErrorKind, Read, Write, BufWriter};
 use std::rc::Rc;
 use std::str;
@@ -227,7 +226,7 @@ impl Plugin {
     ///
     /// # Errors
     ///
-    /// Returns a [`std::io::Error`] if the format of the plugin data is invalid or if an I/O error
+    /// Returns an error if the format of the plugin data is invalid or if an I/O error
     /// occurs while reading the plugin data.
     ///
     /// # Examples
@@ -244,22 +243,21 @@ impl Plugin {
     /// ```
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn read<T: Read>(mut f: T) -> io::Result<Plugin> {
+    pub fn read<T: Read>(mut f: T) -> Result<Plugin, TesError> {
         let header = Record::read(&mut f)?.ok_or(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"))?;
         if header.name() != b"TES3" {
-            return Err(io_error(format!("Expected TES3 record, got {}", header.display_name())));
+            return Err(decode_failed(format!("Expected TES3 record, got {}", header.display_name())));
         }
 
         let mut fields = header.into_iter();
         let header = match fields.next() {
             Some(field) if field.name() == b"HEDR" => field,
-            _ => return Err(io_error("Missing HEDR field")),
+            _ => return Err(decode_failed("Missing HEDR field")),
         };
 
         let header_data = header.consume();
         if header_data.len() != HEADER_LENGTH {
-            return Err(io_error("Invalid HEDR field"));
+            return Err(decode_failed("Invalid HEDR field"));
         }
 
         // decode header structure
@@ -289,19 +287,19 @@ impl Plugin {
             match field.name() {
                 b"MAST" => {
                     if let Some(name) = master_name {
-                        return Err(io_error(format!("Missing size for master {}", name)));
+                        return Err(decode_failed(format!("Missing size for master {}", name)));
                     }
 
-                    let string_name = field.get_zstring().map_err(|e| io_error(e))?;
+                    let string_name = field.get_zstring()?;
                     master_name = Some(String::from(string_name));
                 },
                 b"DATA" => {
                     if let Some(name) = master_name {
-                        let size = field.get_u64().map_err(|e| io_error(e))?;
-                        plugin.add_master(name, size).map_err(|e| io_error(format!("Duplicate masters: {}", e)))?;
+                        let size = field.get_u64()?;
+                        plugin.add_master(name, size)?;
                         master_name = None;
                     } else {
-                        return Err(io_error("Data field without master"));
+                        return Err(decode_failed("Data field without master"));
                     }
                 },
                 b"GMDT" => {
@@ -330,17 +328,17 @@ impl Plugin {
                 },
                 b"SCRD" => (),
                 b"SCRS" => plugin.screen_data = field.consume(),
-                _ => return Err(io_error(format!("Unexpected field in header: {}", field.display_name()))),
+                _ => return Err(decode_failed(format!("Unexpected field in header: {}", field.display_name()))),
             }
         }
 
         if let Some(name) = master_name {
-            return Err(io_error(format!("Missing size for master {}", name)));
+            return Err(decode_failed(format!("Missing size for master {}", name)));
         }
 
         // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
         while let Some(record) = Record::read(&mut f)? {
-            plugin.add_record(record).map_err(|e| io_error(e))?;
+            plugin.add_record(record)?;
         }
 
         Ok(plugin)
@@ -371,7 +369,7 @@ impl Plugin {
     ///
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Plugin::read`]: #method.read
-    pub fn load_file(path: &str) -> io::Result<Plugin> {
+    pub fn load_file(path: &str) -> Result<Plugin, TesError> {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
         Plugin::read(reader)
@@ -719,7 +717,7 @@ impl Plugin {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         let mut header = Record::new(b"TES3");
         let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LENGTH);
         let mut buf_writer = &mut buf;
@@ -741,7 +739,7 @@ impl Plugin {
         header.add_field(Field::new(b"HEDR", buf).unwrap());
 
         for (name, size) in self.masters.iter() {
-            let mast = Field::new_zstring(b"MAST", name.clone()).map_err(|e| io_error(format!("Failed to encode master file name: {}", e)))?;
+            let mast = Field::new_zstring(b"MAST", name.clone())?;
             header.add_field(mast);
             header.add_field(Field::new_u64(b"DATA", *size));
         }
@@ -781,15 +779,16 @@ impl Plugin {
     ///
     /// # Errors
     ///
-    /// Returns a [`std::io::Error`] if the file cannot be created or if [`Plugin::write`] fails;
+    /// Returns an error if the file cannot be created or if [`Plugin::write`] fails;
     /// refer to that method for more information.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use tesutil::plugin::tes3::*;
+    /// use tesutil::TesError;
     ///
-    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// plugin.is_master = true;
     /// plugin.save_file("sample.esm")?;
@@ -797,9 +796,8 @@ impl Plugin {
     /// # }
     /// ```
     ///
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Plugin::write`]: #method.write
-    pub fn save_file(&self, path: &str) -> io::Result<()> {
+    pub fn save_file(&self, path: &str) -> Result<(), TesError> {
         let f = File::create(path)?;
         let writer = BufWriter::new(f);
         self.write(writer)

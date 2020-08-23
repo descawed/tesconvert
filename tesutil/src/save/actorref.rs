@@ -1,6 +1,5 @@
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
-use std::io;
 use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::*;
@@ -63,15 +62,12 @@ impl ScriptVariableValue {
     /// # Errors
     ///
     /// Fails if an I/O or decoding error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<ScriptVariableValue> {
+    pub fn read<T: Read>(mut f: T) -> Result<ScriptVariableValue, TesError> {
         let var_type = extract!(f as u16)?;
         match var_type {
             0 => Ok(ScriptVariableValue::Number(extract!(f as f64)?)),
             0xF000 => Ok(ScriptVariableValue::Reference(extract!(f as u32)?)),
-            _ => Err(io_error(TesError::DecodeFailed {
-                description: format!("Unexpected variable type {}", var_type),
-                cause: None,
-            })),
+            _ => Err(decode_failed(format!("Unexpected variable type {}", var_type))),
         }
     }
 
@@ -80,7 +76,7 @@ impl ScriptVariableValue {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         match self {
             ScriptVariableValue::Number(value) => {
                 serialize!(0u16 => f)?;
@@ -109,7 +105,7 @@ impl ScriptVariable {
     /// # Errors
     ///
     /// Fails if an I/O or decoding error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<ScriptVariable> {
+    pub fn read<T: Read>(mut f: T) -> Result<ScriptVariable, TesError> {
         let index = extract!(f as u16)?;
         let value = ScriptVariableValue::read(&mut f)?;
         Ok(ScriptVariable { index, value })
@@ -120,7 +116,7 @@ impl ScriptVariable {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         serialize!(self.index => f)?;
         self.value.write(&mut f)?;
         Ok(())
@@ -169,7 +165,7 @@ impl Property {
     /// # Errors
     ///
     /// Fails if an I/O or decoding error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<Property> {
+    pub fn read<T: Read>(mut f: T) -> Result<Property, TesError> {
         let id = extract!(f as u8)?;
         match id {
             0x12 => {
@@ -223,10 +219,7 @@ impl Property {
             0x4f => Ok(Property::Unknown4f(extract!(f as u32)?)),
             0x50 => Ok(Property::BoundItem),
             0x55 => Ok(Property::ShortcutKey(extract!(f as u8)?)),
-            _ => Err(io_error(TesError::DecodeFailed {
-                description: format!("Unimplemented property type {}", id),
-                cause :None,
-            })),
+            _ => Err(decode_failed(format!("Unimplemented property type {}", id))),
         }
     }
 
@@ -235,10 +228,10 @@ impl Property {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         match self {
             Property::Script { script, variables, unknown } => {
-                check_size(variables, u16::MAX as usize, "Too many script variables").map_err(io_error)?;
+                check_size(variables, u16::MAX as usize, "Too many script variables")?;
                 serialize!(0x12u8 => f)?;
                 serialize!(script => f)?;
                 serialize!(variables.len() as u16 => f)?;
@@ -258,7 +251,7 @@ impl Property {
                 serialize!(value => f)?;
             },
             Property::Unknown23(values) => {
-                check_size(values, u16::MAX as usize, "Too many Unknown23 values").map_err(io_error)?;
+                check_size(values, u16::MAX as usize, "Too many Unknown23 values")?;
                 serialize!(0x23u8 => f)?;
                 serialize!(values.len() as u16 => f)?;
                 for value in values.iter() {
@@ -346,7 +339,7 @@ impl Item {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<Item> {
+    pub fn read<T: Read>(mut f: T) -> Result<Item, TesError> {
         let iref = extract!(f as u32)?;
         let stack_count = extract!(f as i32)?;
         let num_changes = extract!(f as u32)? as usize;
@@ -368,7 +361,7 @@ impl Item {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         serialize!(self.iref => f)?;
         serialize!(self.stack_count => f)?;
         serialize!(self.changes.len() as u32 => f)?;
@@ -397,7 +390,7 @@ impl ActiveEffect {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<ActiveEffect> {
+    pub fn read<T: Read>(mut f: T) -> Result<ActiveEffect, TesError> {
         let size = extract!(f as u16)? as usize;
         let spell = extract!(f as u32)?;
         let effect = extract!(f as u8)?;
@@ -415,7 +408,7 @@ impl ActiveEffect {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         serialize!(self.details.len() as u16 => f)?;
         serialize!(self.spell => f)?;
         serialize!(self.effect => f)?;
@@ -446,7 +439,7 @@ impl CustomClass {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<CustomClass> {
+    pub fn read<T: Read>(mut f: T) -> Result<CustomClass, TesError> {
         let mut favored_attributes = [0u32; 2];
         for i in 0..favored_attributes.len() {
             favored_attributes[i] = extract!(f as u32)?;
@@ -485,7 +478,7 @@ impl CustomClass {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         for attribute in self.favored_attributes.iter() {
             serialize!(attribute => f)?;
         }
@@ -623,19 +616,13 @@ impl PlayerReferenceChange {
     /// # Errors
     ///
     /// Fails if an I/O error occurs or if the data is invalid
-    pub fn read(record: &ChangeRecord) -> io::Result<PlayerReferenceChange> {
+    pub fn read(record: &ChangeRecord) -> Result<PlayerReferenceChange, TesError> {
         if record.form_id() != FORM_PLAYER_REF {
-            return Err(io_error(TesError::DecodeFailed {
-                description: String::from("Only the player's change record may currently be decoded"),
-                cause: None,
-            }));
+            return Err(decode_failed("Only the player's change record may currently be decoded"));
         }
 
         if record.change_type() != ChangeType::CharacterReference {
-            return Err(io_error(TesError::DecodeFailed {
-                description: String::from("Only character reference change record may currently be decoded"),
-                cause: None,
-            }));
+            return Err(decode_failed("Only character reference change record may currently be decoded"));
         }
 
         let mut data = record.data();
@@ -673,7 +660,7 @@ impl PlayerReferenceChange {
         let magicka_delta = extract!(reader as f32)?;
         let fatigue_delta = extract!(reader as f32)?;
 
-        let actor_flag = ActorFlag::try_from(extract!(reader as u8)?).map_err(io_error)?;
+        let actor_flag = ActorFlag::try_from(extract!(reader as u8)?).map_err(|e| decode_failed_because("Invalid actor flags", e))?;
 
         // inventory might not be present if the save is from the very beginning of the game
         let inventory = if flags & 0x08000000 != 0 {
@@ -996,7 +983,7 @@ impl PlayerReferenceChange {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write(&self, record: &mut ChangeRecord) -> io::Result<()> {
+    pub fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
         let mut buf: Vec<u8> = vec![];
         let mut writer = &mut &mut buf;
 
@@ -1164,7 +1151,7 @@ impl PlayerReferenceChange {
 
         serialize!(self.stat_unknown9 => writer)?;
 
-        record.set_data(self.flags, buf).map_err(io_error)?;
+        record.set_data(self.flags, buf)?;
 
         Ok(())
     }

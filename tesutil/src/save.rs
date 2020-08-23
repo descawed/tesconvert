@@ -9,7 +9,6 @@ pub use actorref::*;
 
 use crate::*;
 use crate::plugin::tes4::Record;
-use std::io;
 use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
 use std::fs::File;
 use std::collections::HashMap;
@@ -33,7 +32,7 @@ impl Attributes {
     /// # Errors
     /// 
     /// Fails if an I/O error occurs
-    pub fn read<T: Read>(mut f: T) -> io::Result<Attributes> {
+    pub fn read<T: Read>(mut f: T) -> Result<Attributes, TesError> {
         Ok(Attributes {
             strength: extract!(f as u8)?,
             intelligence: extract!(f as u8)?,
@@ -51,7 +50,7 @@ impl Attributes {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         serialize!(self.strength => f)?;
         serialize!(self.intelligence => f)?;
         serialize!(self.willpower => f)?;
@@ -131,11 +130,11 @@ impl Save {
     /// # Errors
     ///
     /// Fails if an I/O error occurs or if the save format is invalid.
-    pub fn read<T: Read>(mut f: T) -> io::Result<Save> {
+    pub fn read<T: Read>(mut f: T) -> Result<Save, TesError> {
         let mut magic = [0u8; 12];
         f.read_exact(&mut magic)?;
         if magic != *b"TES4SAVEGAME" {
-            return Err(io_error("Not a valid Oblivion save"));
+            return Err(decode_failed("Not a valid Oblivion save"));
         }
 
         let version = (extract!(f as u8)?, extract!(f as u8)?);
@@ -214,7 +213,7 @@ impl Save {
         let num_created = extract!(f as u32)? as usize;
         let mut created_records = Vec::with_capacity(num_created);
         for _ in 0..num_created {
-            created_records.push(Record::read(&mut f)?.ok_or(io_error("Expected created record"))?.0);
+            created_records.push(Record::read(&mut f)?.ok_or(decode_failed("Expected created record"))?.0);
         }
 
         let quick_keys_size = extract!(f as u16)? as usize;
@@ -232,7 +231,7 @@ impl Save {
                     quick_keys.push(Some(u32::from_le_bytes(buf)));
                     i += 4;
                 } else {
-                    return Err(io_error(format!("Invalid quick key data at index {}", i)));
+                    return Err(TesError::DecodeFailed { description: format!("Invalid quick key data at index {}", i), source: None });
                 }
             } else {
                 quick_keys.push(None);
@@ -326,7 +325,7 @@ impl Save {
     /// Fails if the file cannot be found or if [`Save::read`] fails.
     ///
     /// [`Save::read`]: #method.read
-    pub fn load_file(path: &str) -> io::Result<Save> {
+    pub fn load_file(path: &str) -> Result<Save, TesError> {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
         Save::read(reader)
@@ -376,13 +375,10 @@ impl Save {
     /// # Errors
     ///
     /// Fails if an I/O error occurs.
-    pub fn write<T: Write + Seek>(&self, mut f: T) -> io::Result<()> {
+    pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
         f.write_exact(b"TES4SAVEGAME")?;
         f.write_exact(&[self.version.0, self.version.1])?;
         f.write_exact(&self.exe_time)?;
-
-        // TODO: when this type is fully implemented, ensure that all setters do validation so we
-        //  don't have to do it here
 
         serialize!(self.header_version => f)?;
         // header size = screenshot size + hard-coded fields + name and location bzstrings
@@ -510,7 +506,7 @@ impl Save {
     /// # Errors
     ///
     /// Fails if the file cannot be created or if an I/O error occurs.
-    pub fn save_file(&self, path: &str) -> io::Result<()> {
+    pub fn save_file(&self, path: &str) -> Result<(), TesError> {
         let f = File::create(path)?;
         let writer = BufWriter::new(f);
         self.write(writer)
