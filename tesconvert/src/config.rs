@@ -201,4 +201,22 @@ mod tests {
     fn test_insufficient_args() {
         assert!(Config::get(Some(vec!["tesconvert", "mw2ob", "source"]), true).is_err());
     }
+
+    #[test]
+    fn combine_highest() {
+        let strat = SkillCombineStrategy::Highest;
+        assert_eq!(strat.combine(32, 47), 47);
+    }
+
+    #[test]
+    fn combine_lowest() {
+        let strat = SkillCombineStrategy::Lowest;
+        assert_eq!(strat.combine(32, 47), 32);
+    }
+
+    #[test]
+    fn combine_average() {
+        let strat = SkillCombineStrategy::Average;
+        assert_eq!(strat.combine(32, 47), 39);
+    }
 }
