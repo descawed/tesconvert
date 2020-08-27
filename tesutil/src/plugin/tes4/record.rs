@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek};
 use std::str;
 
 use crate::*;
@@ -200,7 +200,7 @@ impl Record {
 
     /// Writes the record to the provided writer
     ///
-    /// Writes a record to any type that implements [`Write`] or a mutable reference to such a type.
+    /// Writes a record to any type that implements [`Write`] and [`Seek`] or a mutable reference to such a type.
     /// On success, returns number of bytes written.
     ///
     /// # Errors
@@ -208,8 +208,9 @@ impl Record {
     /// Returns a [`std::io::Error`] if an I/O error occurs.
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+    /// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> Result<usize, TesError> {
+    pub fn write<T: Write + Seek>(&self, f: &mut T) -> Result<usize, TesError> {
         let size = self.field_size();
 
         // technically, if the record is compressed, we should do this check on the compressed data,
@@ -251,7 +252,7 @@ impl Record {
             f.write_exact(&self.vcs_info.to_le_bytes())?;
 
             for field in self.fields.iter() {
-                field.write(&mut f)?;
+                field.write(&mut *f)?;
             }
 
             // 20 = name + size + flags + form ID + VCS info
@@ -259,7 +260,7 @@ impl Record {
         };
 
         for group in self.groups.iter() {
-            full_size += group.write(&mut f)?;
+            full_size += group.write(&mut *f)?;
         }
 
         Ok(full_size)
@@ -335,6 +336,7 @@ impl Record {
 #[cfg(test)]
 mod tests{
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn read_record() {
@@ -358,8 +360,8 @@ mod tests{
         record.add_field(Field::new(b"FULL", b"ADMIRE_HATE\0".to_vec()).unwrap());
         record.add_field(Field::new_u8(b"DATA", 3));
 
-        let mut buf = vec![];
-        record.write(&mut buf).unwrap();
-        assert_eq!(buf, b"DIAL\x3e\0\0\0\0\0\0\0\xaa\0\0\0\x1c\x1f\x18\0EDID\x0b\0ADMIREHATE\0QSTI\x04\0\x22\xe7\x01\0QSTI\x04\0\x02\x06\x01\0FULL\x0c\0ADMIRE_HATE\0DATA\x01\0\x03".to_vec());
+        let mut writer = Cursor::new(vec![]);
+        record.write(&mut writer).unwrap();
+        assert_eq!(writer.into_inner(), b"DIAL\x3e\0\0\0\0\0\0\0\xaa\0\0\0\x1c\x1f\x18\0EDID\x0b\0ADMIREHATE\0QSTI\x04\0\x22\xe7\x01\0QSTI\x04\0\x02\x06\x01\0FULL\x0c\0ADMIRE_HATE\0DATA\x01\0\x03".to_vec());
     }
 }

@@ -543,7 +543,6 @@ mod tests {
         let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
         let mut buf = vec![0u8; TEST_SAVE.len()];
         let cursor = Cursor::new(&mut buf);
-        // FIXME: if this test fails, CLion gets confused about the results due to the large size of the output
         save.write(cursor).unwrap();
         assert_eq!(TEST_SAVE, buf.as_slice());
     }

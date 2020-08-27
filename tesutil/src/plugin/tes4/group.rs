@@ -1,5 +1,5 @@
 use std::io;
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
 
 use crate::*;
 use super::record::Record;
@@ -201,27 +201,35 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails
-    pub fn write<T: Write>(&self, mut f: T) -> Result<usize, TesError> {
+    // FIXME: this interface violates Rust API guideline C-RW-VALUE, but if we accept `mut f: T`
+    //  instead of `f: &mut T`, we have to make our recursive call as group.write(&mut f), which
+    //  creates an infinite number of versions of this method each with an extra `&mut` at the
+    //  beginning, which fails to compile. With `f: &mut T`, we can pass group.write(&mut *f), which
+    //  ensures each recursive call sees the same type for T. Is there a better way?
+    pub fn write<T: Write + Seek>(&self, f: &mut T) -> Result<usize, TesError> {
         f.write_exact(b"GRUP")?;
 
-        // FIXME: currently, to calculate the group size, we have to write the whole group to a
-        //  buffer, which sucks
-        let mut buf = vec![];
-        for record in self.records.iter() {
-            record.write(&mut &mut buf)?;
-        }
-
-        for group in self.groups.iter() {
-            group.write(&mut &mut buf)?;
-        }
-
-        // 20 = GRUP + size + label + type + stamp
-        let total_size = buf.len() + 20;
-        serialize!(total_size => f)?;
-        self.kind.write(&mut f)?;
+        let len_offset = f.seek(SeekFrom::Current(0))?;
+        serialize!(0u32 => f)?;
+        self.kind.write(&mut *f)?;
         serialize!(self.stamp => f)?;
-        f.write_exact(&buf)?;
 
-        Ok(total_size)
+        for record in &self.records {
+            record.write(&mut *f)?;
+        }
+
+        for group in &self.groups {
+            group.write(&mut *f)?;
+        }
+
+        let end_offset = f.seek(SeekFrom::Current(0))?;
+        // write the group size now that we know how much we wrote
+        f.seek(SeekFrom::Start(len_offset))?;
+        // 4 = GRUP characters
+        let total_size = (end_offset - len_offset) + 4;
+        serialize!(total_size as u32 => f)?;
+        f.seek(SeekFrom::Start(end_offset))?; // return to where we were
+
+        Ok(total_size as usize)
     }
 }
