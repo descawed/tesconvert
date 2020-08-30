@@ -1,6 +1,6 @@
-use crate::*;
 use super::*;
 use crate::plugin::FieldInterface;
+use crate::*;
 
 /// Information about the state of a resting player
 #[derive(Debug)]
@@ -163,7 +163,9 @@ impl PlayerData {
         let mut player_data = PlayerData::default();
         for field in record.iter() {
             match field.name() {
-                b"DNAM" => player_data.known_topics.push(String::from(field.get_zstring()?)),
+                b"DNAM" => player_data
+                    .known_topics
+                    .push(String::from(field.get_zstring()?)),
                 b"MNAM" => player_data.mark_cell = Some(String::from(field.get_zstring()?)),
                 b"PNAM" => {
                     let mut reader = field.reader();
@@ -228,7 +230,7 @@ impl PlayerData {
                     player_data.magic_increases = extract!(reader as u8)?;
                     player_data.stealth_increases = extract!(reader as u8)?;
                     player_data.unknown2 = extract!(reader as u8)?;
-                },
+                }
                 b"SNAM" => player_data.snam = field.get().to_vec(),
                 b"NAM9" => player_data.nam9 = Some(field.get_u32()?),
                 b"RNAM" => {
@@ -239,27 +241,35 @@ impl PlayerData {
                         y: extract!(reader as f32)?,
                         z: extract!(reader as f32)?,
                     });
-                },
+                }
                 b"CNAM" => player_data.bounty = Some(field.get_i32()?),
                 b"BNAM" => player_data.birthsign = Some(String::from(field.get_zstring()?)),
-                b"NAM0" => player_data.alchemy_equipment[0] = Some(String::from(field.get_zstring()?)),
-                b"NAM1" => player_data.alchemy_equipment[1] = Some(String::from(field.get_zstring()?)),
-                b"NAM2" => player_data.alchemy_equipment[2] = Some(String::from(field.get_zstring()?)),
-                b"NAM3" => player_data.alchemy_equipment[3] = Some(String::from(field.get_zstring()?)),
+                b"NAM0" => {
+                    player_data.alchemy_equipment[0] = Some(String::from(field.get_zstring()?))
+                }
+                b"NAM1" => {
+                    player_data.alchemy_equipment[1] = Some(String::from(field.get_zstring()?))
+                }
+                b"NAM2" => {
+                    player_data.alchemy_equipment[2] = Some(String::from(field.get_zstring()?))
+                }
+                b"NAM3" => {
+                    player_data.alchemy_equipment[3] = Some(String::from(field.get_zstring()?))
+                }
                 b"ENAM" => {
                     let mut reader = field.reader();
                     player_data.exterior = Some(ExteriorLocation {
                         x: extract!(reader as i32)?,
                         y: extract!(reader as i32)?,
                     });
-                },
+                }
                 b"LNAM" => {
                     let mut reader = field.reader();
                     player_data.lnam = Some(Lnam {
                         unknown1: extract!(reader as i32)?,
                         unknown2: extract!(reader as i32)?,
                     });
-                },
+                }
                 b"FNAM" => {
                     let mut reader = field.reader();
                     player_data.factions.push(Faction {
@@ -268,7 +278,7 @@ impl PlayerData {
                         flags: extract!(reader as u32)?,
                         name: String::from(extract_string(32, &mut reader)?),
                     });
-                },
+                }
                 b"AADT" => {
                     let mut reader = field.reader();
                     let anim_group_index = extract!(reader as i32)?;
@@ -278,7 +288,7 @@ impl PlayerData {
                         anim_group_index,
                         unknown: buf,
                     });
-                },
+                }
                 b"KNAM" => {
                     let mut reader = field.reader();
                     player_data.quick_keys.reserve(10);
@@ -289,15 +299,20 @@ impl PlayerData {
                             unknown: extract!(reader as i32)?,
                         });
                     }
-                },
+                }
                 b"ANIS" => {
                     let mut reader = field.reader();
                     let mut buf = [0u8; 16];
                     reader.read_exact(&mut buf)?;
                     player_data.anis = Some(buf);
-                },
+                }
                 b"WERE" => player_data.werewolf_data = field.get().to_vec(),
-                _ => return Err(TesError::DecodeFailed { description: format!("Unexpected field {}", field.display_name()), source: None }),
+                _ => {
+                    return Err(TesError::DecodeFailed {
+                        description: format!("Unexpected field {}", field.display_name()),
+                        source: None,
+                    })
+                }
             }
         }
 

@@ -2,9 +2,9 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
 
-use crate::*;
-use crate::plugin::FieldInterface;
 use super::field::Field;
+use crate::plugin::FieldInterface;
+use crate::*;
 
 const FLAG_DELETED: u32 = 0x0020;
 const FLAG_PERSISTENT: u32 = 0x0400;
@@ -23,7 +23,7 @@ const FLAG_BLOCKED: u32 = 0x2000;
 ///
 /// [`Field::new`]: #method.new
 #[derive(Debug)]
-pub struct Record{
+pub struct Record {
     name: [u8; 4],
     /// Whether the record is deleted
     ///
@@ -135,8 +135,16 @@ impl Record {
         }
 
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
-            | if self.is_persistent { FLAG_PERSISTENT } else { 0 }
-            | if self.is_initially_disabled { FLAG_INITIALLY_DISABLED } else { 0 }
+            | if self.is_persistent {
+                FLAG_PERSISTENT
+            } else {
+                0
+            }
+            | if self.is_initially_disabled {
+                FLAG_INITIALLY_DISABLED
+            } else {
+                0
+            }
             | if self.is_blocked { FLAG_BLOCKED } else { 0 };
 
         f.write_exact(&self.name)?;
@@ -176,7 +184,8 @@ impl Record {
     /// containing the ID has not yet been added to the record.
     pub fn id(&self) -> Option<&str> {
         match &self.name {
-            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL" | b"SSCR" | b"TES3" => None,
+            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL"
+            | b"SSCR" | b"TES3" => None,
             _ => {
                 let mut id = None;
                 for field in self.fields.iter() {
@@ -189,7 +198,7 @@ impl Record {
                     }
                 }
                 id
-            },
+            }
         }
     }
 
@@ -212,7 +221,11 @@ impl Record {
 
     fn field_size(&self) -> usize {
         self.fields.iter().map(|f| f.size()).sum::<usize>()
-            + if self.is_deleted { DELETED_FIELD_SIZE } else { 0 }
+            + if self.is_deleted {
+                DELETED_FIELD_SIZE
+            } else {
+                0
+            }
     }
 
     /// Calculates the size in bytes of this record
@@ -249,7 +262,7 @@ impl Record {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]

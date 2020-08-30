@@ -2,8 +2,8 @@ use std::io;
 use std::io::{Read, Seek, Write};
 use std::mem::size_of;
 
-use crate::*;
 use crate::plugin::FieldInterface;
+use crate::*;
 
 /// An attribute of a record
 ///
@@ -19,7 +19,7 @@ use crate::plugin::FieldInterface;
 /// The data, on the other hand, is taken as an owned value, because this is much more likely to be
 /// dynamic.
 #[derive(Debug)]
-pub struct Field{
+pub struct Field {
     name: [u8; 4],
     data: Vec<u8>,
 }
@@ -334,7 +334,9 @@ mod tests {
     #[test]
     fn set_raw_field() {
         let mut field = Field::new(b"ALDT", vec![]).unwrap();
-        field.set(b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0".to_vec()).unwrap();
+        field
+            .set(b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0".to_vec())
+            .unwrap();
         assert_eq!(field.data, *b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0");
     }
 

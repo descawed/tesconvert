@@ -1,8 +1,8 @@
 use std::cmp;
 use std::ops::{Add, Div};
 
-use clap::*;
 use clap::Result as ClapResult;
+use clap::*;
 use num::One;
 
 /// The command to be executed
@@ -32,14 +32,14 @@ pub enum SkillCombineStrategy {
 
 impl SkillCombineStrategy {
     /// Combines two skills using the appropriate strategy
-    pub fn combine<T: Ord + Add<Output=T> + Div<Output=T> + One>(&self, x: T, y: T) -> T {
+    pub fn combine<T: Ord + Add<Output = T> + Div<Output = T> + One>(&self, x: T, y: T) -> T {
         match self {
             SkillCombineStrategy::Highest => cmp::max(x, y),
             // I wasn't able to find a better way to do this. Using a literal 2 fails because
             // there's no way to constrain T to a type that we can convert a literal 2 to. The
             // Google results I found indicated that you generally can't do math involving a literal
             // and a generic type and all recommended to use the num crate.
-            SkillCombineStrategy::Average => (x + y)/(T::one() + T::one()),
+            SkillCombineStrategy::Average => (x + y) / (T::one() + T::one()),
             SkillCombineStrategy::Lowest => cmp::min(x, y),
         }
     }
@@ -179,7 +179,19 @@ mod tests {
 
     #[test]
     fn test_args() {
-        let config = Config::get(Some(vec!["tesconvert", "--combine", "lowest", "mw2ob", "source", "target", "output"]), true).unwrap();
+        let config = Config::get(
+            Some(vec![
+                "tesconvert",
+                "--combine",
+                "lowest",
+                "mw2ob",
+                "source",
+                "target",
+                "output",
+            ]),
+            true,
+        )
+        .unwrap();
         assert_eq!(config.command, Command::MorrowindToOblivion);
         assert_eq!(config.skill_combine_strategy, SkillCombineStrategy::Lowest);
         assert_eq!(config.source_path, "source");
@@ -194,7 +206,19 @@ mod tests {
 
     #[test]
     fn test_bogus_args() {
-        assert!(Config::get(Some(vec!["tesconvert", "-x", "4", "efwef", "path1", "path2", "path3"]), true).is_err());
+        assert!(Config::get(
+            Some(vec![
+                "tesconvert",
+                "-x",
+                "4",
+                "efwef",
+                "path1",
+                "path2",
+                "path3"
+            ]),
+            true
+        )
+        .is_err());
     }
 
     #[test]

@@ -1,8 +1,8 @@
 use std::io;
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::*;
 use super::record::Record;
+use crate::*;
 
 /// Indicates the type of group a group is
 #[derive(Debug)]
@@ -34,21 +34,32 @@ impl GroupKind {
                 let mut x = [0u8; 2];
                 y.copy_from_slice(&label[..2]);
                 x.copy_from_slice(&label[2..]);
-                Ok(GroupKind::ExteriorCellBlock(i16::from_le_bytes(y), i16::from_le_bytes(x)))
-            },
+                Ok(GroupKind::ExteriorCellBlock(
+                    i16::from_le_bytes(y),
+                    i16::from_le_bytes(x),
+                ))
+            }
             5 => {
                 let mut y = [0u8; 2];
                 let mut x = [0u8; 2];
                 y.copy_from_slice(&label[..2]);
                 x.copy_from_slice(&label[2..]);
-                Ok(GroupKind::ExteriorCellSubBlock(i16::from_le_bytes(y), i16::from_le_bytes(x)))
-            },
+                Ok(GroupKind::ExteriorCellSubBlock(
+                    i16::from_le_bytes(y),
+                    i16::from_le_bytes(x),
+                ))
+            }
             6 => Ok(GroupKind::CellChildren(u32::from_le_bytes(label))),
             7 => Ok(GroupKind::TopicChildren(u32::from_le_bytes(label))),
             8 => Ok(GroupKind::CellPersistentChildren(u32::from_le_bytes(label))),
             9 => Ok(GroupKind::CellTemporaryChildren(u32::from_le_bytes(label))),
-            10 => Ok(GroupKind::CellVisibleDistantChildren(u32::from_le_bytes(label))),
-            kind @ _ => Err(TesError::DecodeFailed { description: format!("Unexpected group type {}", kind), source: None }),
+            10 => Ok(GroupKind::CellVisibleDistantChildren(u32::from_le_bytes(
+                label,
+            ))),
+            kind @ _ => Err(TesError::DecodeFailed {
+                description: format!("Unexpected group type {}", kind),
+                source: None,
+            }),
         }
     }
 
@@ -57,49 +68,49 @@ impl GroupKind {
             GroupKind::Top(label) => {
                 f.write_exact(&label)?;
                 serialize!(0u32 => f)?;
-            },
+            }
             GroupKind::WorldChildren(id) => {
                 serialize!(id => f)?;
                 serialize!(1u32 => f)?;
-            },
+            }
             GroupKind::InteriorCellBlock(num) => {
                 serialize!(num => f)?;
                 serialize!(2u32 => f)?;
-            },
+            }
             GroupKind::InteriorCellSubBlock(num) => {
                 serialize!(num => f)?;
                 serialize!(3u32 => f)?;
-            },
+            }
             GroupKind::ExteriorCellBlock(y, x) => {
                 serialize!(y => f)?;
                 serialize!(x => f)?;
                 serialize!(4u32 => f)?;
-            },
+            }
             GroupKind::ExteriorCellSubBlock(y, x) => {
                 serialize!(y => f)?;
                 serialize!(x => f)?;
                 serialize!(5u32 => f)?;
-            },
+            }
             GroupKind::CellChildren(id) => {
                 serialize!(id => f)?;
                 serialize!(6u32 => f)?;
-            },
+            }
             GroupKind::TopicChildren(id) => {
                 serialize!(id => f)?;
                 serialize!(7u32 => f)?;
-            },
+            }
             GroupKind::CellPersistentChildren(id) => {
                 serialize!(id => f)?;
                 serialize!(8u32 => f)?;
-            },
+            }
             GroupKind::CellTemporaryChildren(id) => {
                 serialize!(id => f)?;
                 serialize!(9u32 => f)?;
-            },
+            }
             GroupKind::CellVisibleDistantChildren(id) => {
                 serialize!(id => f)?;
                 serialize!(10u32 => f)?;
-            },
+            }
         }
         Ok(())
     }
@@ -170,12 +181,15 @@ impl Group {
             }
         }
 
-        Ok((Group {
-            kind,
-            stamp,
-            groups,
-            records,
-        }, full_size))
+        Ok((
+            Group {
+                kind,
+                stamp,
+                groups,
+                records,
+            },
+            full_size,
+        ))
     }
 
     /// Reads a group from a binary stream

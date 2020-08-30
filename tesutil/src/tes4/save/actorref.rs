@@ -2,8 +2,8 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::io::{Cursor, Seek, SeekFrom};
 
+use crate::tes4::save::{Attributes, ChangeRecord, ChangeType, FORM_PLAYER_REF};
 use crate::*;
-use crate::tes4::save::{ChangeRecord, FORM_PLAYER_REF, ChangeType, Attributes};
 
 use bitflags;
 
@@ -67,7 +67,10 @@ impl ScriptVariableValue {
         match var_type {
             0 => Ok(ScriptVariableValue::Number(extract!(f as f64)?)),
             0xF000 => Ok(ScriptVariableValue::Reference(extract!(f as u32)?)),
-            _ => Err(decode_failed(format!("Unexpected variable type {}", var_type))),
+            _ => Err(decode_failed(format!(
+                "Unexpected variable type {}",
+                var_type
+            ))),
         }
     }
 
@@ -81,11 +84,11 @@ impl ScriptVariableValue {
             ScriptVariableValue::Number(value) => {
                 serialize!(0u16 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             ScriptVariableValue::Reference(value) => {
                 serialize!(0xf000u16 => f)?;
                 serialize!(value => f)?;
-            },
+            }
         }
 
         Ok(())
@@ -182,7 +185,7 @@ impl Property {
                     variables,
                     unknown,
                 })
-            },
+            }
             0x1b => Ok(Property::EquippedItem),
             0x1c => Ok(Property::EquippedAccessory),
             0x22 => Ok(Property::Unknown22(extract!(f as u32)?)),
@@ -194,7 +197,7 @@ impl Property {
                 }
 
                 Ok(Property::Unknown23(items))
-            },
+            }
             0x27 => Ok(Property::Owner(extract!(f as u32)?)),
             0x2a => Ok(Property::AffectedItemCount(extract!(f as u16)?)),
             0x2b => Ok(Property::ItemHealth(extract!(f as f32)?)),
@@ -205,7 +208,7 @@ impl Property {
                 let mut buf = [0u8; 5];
                 f.read_exact(&mut buf)?;
                 Ok(Property::LeveledItem(buf))
-            },
+            }
             0x37 => Ok(Property::Scale(extract!(f as f32)?)),
             0x3d => Ok(Property::CrimeGold(extract!(f as f32)?)),
             0x3e => Ok(Property::OblivionEntry {
@@ -230,7 +233,11 @@ impl Property {
     /// Fails if an I/O error occurs
     pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         match self {
-            Property::Script { script, variables, unknown } => {
+            Property::Script {
+                script,
+                variables,
+                unknown,
+            } => {
                 check_size(variables, u16::MAX as usize, "Too many script variables")?;
                 serialize!(0x12u8 => f)?;
                 serialize!(script => f)?;
@@ -239,17 +246,17 @@ impl Property {
                     variable.write(&mut f)?;
                 }
                 serialize!(unknown => f)?;
-            },
+            }
             Property::EquippedItem => {
                 serialize!(0x1bu8 => f)?;
-            },
+            }
             Property::EquippedAccessory => {
                 serialize!(0x1cu8 => f)?;
-            },
+            }
             Property::Unknown22(value) => {
                 serialize!(0x22u8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::Unknown23(values) => {
                 check_size(values, u16::MAX as usize, "Too many Unknown23 values")?;
                 serialize!(0x23u8 => f)?;
@@ -257,68 +264,68 @@ impl Property {
                 for value in values.iter() {
                     serialize!(value => f)?;
                 }
-            },
+            }
             Property::Owner(value) => {
                 serialize!(0x27u8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::AffectedItemCount(count) => {
                 serialize!(0x2au8 => f)?;
                 serialize!(count => f)?;
-            },
+            }
             Property::ItemHealth(health) => {
                 serialize!(0x2bu8 => f)?;
                 serialize!(health => f)?;
-            },
+            }
             Property::Time(time) => {
                 serialize!(0x2du8 => f)?;
                 serialize!(time => f)?;
-            },
+            }
             Property::EnchantmentPoints(points) => {
                 serialize!(0x2eu8 => f)?;
                 serialize!(points => f)?;
-            },
+            }
             Property::Soul(value) => {
                 serialize!(0x2fu8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::LeveledItem(data) => {
                 serialize!(0x36u8 => f)?;
                 f.write_exact(data)?;
-            },
+            }
             Property::Scale(value) => {
                 serialize!(0x37u8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::CrimeGold(value) => {
                 serialize!(0x3du8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::OblivionEntry { door, x, y, z } => {
                 serialize!(0x3eu8 => f)?;
                 serialize!(door => f)?;
                 serialize!(x => f)?;
                 serialize!(y => f)?;
                 serialize!(z => f)?;
-            },
+            }
             Property::CantWear => {
                 serialize!(0x47u8 => f)?;
-            },
+            }
             Property::Poison(value) => {
                 serialize!(0x48u8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::Unknown4f(value) => {
                 serialize!(0x4fu8 => f)?;
                 serialize!(value => f)?;
-            },
+            }
             Property::BoundItem => {
                 serialize!(0x50u8 => f)?;
-            },
+            }
             Property::ShortcutKey(key) => {
                 serialize!(0x55u8 => f)?;
                 serialize!(key => f)?;
-            },
+            }
         }
 
         Ok(())
@@ -353,7 +360,11 @@ impl Item {
             changes.push(properties);
         }
 
-        Ok(Item { iref, stack_count, changes })
+        Ok(Item {
+            iref,
+            stack_count,
+            changes,
+        })
     }
 
     /// Writes an item to a binary stream
@@ -399,7 +410,7 @@ impl ActiveEffect {
         Ok(ActiveEffect {
             spell,
             effect,
-            details
+            details,
         })
     }
 
@@ -618,11 +629,15 @@ impl PlayerReferenceChange {
     /// Fails if an I/O error occurs or if the data is invalid
     pub fn read(record: &ChangeRecord) -> Result<PlayerReferenceChange, TesError> {
         if record.form_id() != FORM_PLAYER_REF {
-            return Err(decode_failed("Only the player's change record may currently be decoded"));
+            return Err(decode_failed(
+                "Only the player's change record may currently be decoded",
+            ));
         }
 
         if record.change_type() != ChangeType::CharacterReference {
-            return Err(decode_failed("Only character reference change record may currently be decoded"));
+            return Err(decode_failed(
+                "Only character reference change record may currently be decoded",
+            ));
         }
 
         let mut data = record.data();
@@ -660,7 +675,8 @@ impl PlayerReferenceChange {
         let magicka_delta = extract!(reader as f32)?;
         let fatigue_delta = extract!(reader as f32)?;
 
-        let actor_flag = ActorFlag::try_from(extract!(reader as u8)?).map_err(|e| decode_failed_because("Invalid actor flags", e))?;
+        let actor_flag = ActorFlag::try_from(extract!(reader as u8)?)
+            .map_err(|e| decode_failed_because("Invalid actor flags", e))?;
 
         // inventory might not be present if the save is from the very beginning of the game
         let inventory = if flags & 0x08000000 != 0 {
@@ -684,7 +700,7 @@ impl PlayerReferenceChange {
         // it all raw so we can spit it back out later
         let start = reader.seek(SeekFrom::Current(0))?;
         let mut end = data_size as u64;
-        for _ in start..end-1 {
+        for _ in start..end - 1 {
             // scan for certain marker bytes to tell when we've reached the player statistics section
             let landmark = (extract!(reader as u8)?, extract!(reader as u8)?);
             if landmark == (0xec, 0x42) {
@@ -818,7 +834,11 @@ impl PlayerReferenceChange {
         let num_open_quests = extract!(reader as u16)? as usize;
         let mut open_quests = Vec::with_capacity(num_open_quests);
         for _ in 0..num_open_quests {
-            open_quests.push((extract!(reader as u32)?, extract!(reader as u8)?, extract!(reader as u8)?));
+            open_quests.push((
+                extract!(reader as u32)?,
+                extract!(reader as u8)?,
+                extract!(reader as u8)?,
+            ));
         }
 
         let num_magic_effects = extract!(reader as u32)? as usize;
@@ -869,8 +889,12 @@ impl PlayerReferenceChange {
         Ok(PlayerReferenceChange {
             flags,
             cell,
-            x, y, z,
-            rx, ry, rz,
+            x,
+            y,
+            z,
+            rx,
+            ry,
+            rz,
             temp_active_effects,
             tac_unknown,
             damage,

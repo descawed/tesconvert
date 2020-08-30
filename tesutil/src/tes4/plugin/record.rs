@@ -1,16 +1,16 @@
-use std::io::{Read, Write, Seek};
+use std::io::{Read, Seek, Write};
 use std::str;
 
-use crate::*;
-use crate::plugin::FieldInterface;
 use super::field::Field;
 use super::group::Group;
+use crate::plugin::FieldInterface;
+use crate::*;
 
 // this line is only to help the IDE
 use bitflags;
 
-use flate2::Compression;
 use flate2::bufread::{ZlibDecoder, ZlibEncoder};
+use flate2::Compression;
 
 macro_rules! flag_property {
     ($get:ident, $set:ident, $flag:ident) => {
@@ -21,11 +21,11 @@ macro_rules! flag_property {
         pub fn $set(&mut self, value: bool) {
             if value {
                 self.flags |= RecordFlags::$flag;
-            } else{
+            } else {
                 self.flags -= RecordFlags::$flag;
             }
         }
-    }
+    };
 }
 
 bitflags! {
@@ -57,7 +57,7 @@ const COMPRESSION_LEVEL: u32 = 6;
 ///
 /// [`Field::new`]: #method.new
 #[derive(Debug)]
-pub struct Record{
+pub struct Record {
     name: [u8; 4],
     flags: RecordFlags,
     form_id: u32,
@@ -177,9 +177,17 @@ impl Record {
     flag_property!(casts_shadows, set_casts_shadows, SHADOWS);
     flag_property!(is_persistent, set_persistent, PERSISTENT);
     flag_property!(is_quest_item, set_quest_item, PERSISTENT); // same flag; meaning is contextual
-    flag_property!(is_initially_disabled, set_initially_disabled, INITIALLY_DISABLED);
+    flag_property!(
+        is_initially_disabled,
+        set_initially_disabled,
+        INITIALLY_DISABLED
+    );
     flag_property!(is_ignored, set_ignored, IGNORED);
-    flag_property!(is_visible_when_distant, set_visible_when_distant, VISIBLE_WHEN_DISTANT);
+    flag_property!(
+        is_visible_when_distant,
+        set_visible_when_distant,
+        VISIBLE_WHEN_DISTANT
+    );
     flag_property!(is_dangerous, set_dangerous, OFF_LIMITS);
     flag_property!(is_off_limits, set_off_limits, OFF_LIMITS);
     flag_property!(uses_compression, set_compression, COMPRESSED);
@@ -230,7 +238,8 @@ impl Record {
             }
 
             let mut buf_reader: &[u8] = raw_buf.as_ref();
-            let mut encoder = ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
+            let mut encoder =
+                ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
             let mut comp_buf: Vec<u8> = vec![];
             encoder.read_to_end(&mut comp_buf)?;
 
@@ -332,7 +341,7 @@ impl Record {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     use std::io::Cursor;
 

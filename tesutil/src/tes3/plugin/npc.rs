@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::*;
-use crate::plugin::FieldInterface;
 use super::record::Record;
+use crate::plugin::FieldInterface;
+use crate::*;
 
 // this line is only to help the IDE
 use bitflags;
@@ -323,19 +323,26 @@ impl Npc {
                         extract!(reader as u8)?; // skip dummy byte
                         npc.gold = extract!(reader as u32)?;
                     }
-                },
-                b"FLAG" => npc.flags = NpcFlags::from_bits(field.get_u32()?).ok_or(TesError::DecodeFailed { description: String::from("Invalid NPC flags"), source: None })?,
+                }
+                b"FLAG" => {
+                    npc.flags =
+                        NpcFlags::from_bits(field.get_u32()?).ok_or(TesError::DecodeFailed {
+                            description: String::from("Invalid NPC flags"),
+                            source: None,
+                        })?
+                }
                 b"NPCO" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
                     let count = extract!(reader as u32)?;
                     let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
                     npc.inventory.insert(id, count);
-                },
+                }
                 b"NPCS" => {
-                    let spell = extract_string(NPC_STRING_LENGTH, &mut field.get()).map_err(|e| decode_failed_because("Could not parse NPCS", e))?;
+                    let spell = extract_string(NPC_STRING_LENGTH, &mut field.get())
+                        .map_err(|e| decode_failed_because("Could not parse NPCS", e))?;
                     npc.spells.push(spell);
-                },
+                }
                 b"AIDT" => {
                     let mut data = field.get();
                     let reader = &mut data;
@@ -350,7 +357,7 @@ impl Npc {
                     // so we mask them out to prevent an error when reading the flags
                     let flags = extract!(reader as u32)? & 0x3ffff;
                     npc.services = ServiceFlags::from_bits(flags).unwrap();
-                },
+                }
                 b"DODT" => {
                     let mut data = field.get();
                     let reader = &mut data;
@@ -365,23 +372,32 @@ impl Npc {
                         rotation: (rot_x, rot_y, rot_z),
                         cell_name: None,
                     });
-                },
+                }
                 b"DNAM" => {
                     if let Some(last_destination) = npc.destinations.last_mut() {
                         if last_destination.cell_name == None {
                             last_destination.cell_name = Some(String::from(field.get_zstring()?));
                         } else {
-                            return Err(TesError::DecodeFailed { description: String::from("Orphaned DNAM field"), source: None });
+                            return Err(TesError::DecodeFailed {
+                                description: String::from("Orphaned DNAM field"),
+                                source: None,
+                            });
                         }
                     } else {
-                        return Err(TesError::DecodeFailed { description: String::from("Orphaned DNAM field"), source: None });
+                        return Err(TesError::DecodeFailed {
+                            description: String::from("Orphaned DNAM field"),
+                            source: None,
+                        });
                     }
-                },
+                }
                 b"AI_A" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
-                    npc.packages.push(Package::Activate(extract_string(NPC_STRING_LENGTH, &mut reader)?));
-                },
+                    npc.packages.push(Package::Activate(extract_string(
+                        NPC_STRING_LENGTH,
+                        &mut reader,
+                    )?));
+                }
                 b"AI_E" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
@@ -398,7 +414,7 @@ impl Npc {
                         id,
                         cell: None,
                     });
-                },
+                }
                 b"AI_F" => {
                     let mut data = field.get();
                     let mut reader = &mut data;
@@ -415,7 +431,7 @@ impl Npc {
                         id,
                         cell: None,
                     });
-                },
+                }
                 b"AI_T" => {
                     let mut data = field.get();
                     let reader = &mut data;
@@ -423,7 +439,7 @@ impl Npc {
                     let y = extract!(reader as f32)?;
                     let z = extract!(reader as f32)?;
                     npc.packages.push(Package::Travel { x, y, z });
-                },
+                }
                 b"AI_W" => {
                     let mut data = field.get();
                     let reader = &mut data;
@@ -438,26 +454,49 @@ impl Npc {
                         time_of_day,
                         idles,
                     });
-                },
+                }
                 b"CNDT" => {
                     if let Some(last_package) = npc.packages.last_mut() {
                         let cell_field = Some(String::from(field.get_zstring()?));
                         match last_package {
                             Package::Escort { ref mut cell, .. } => match *cell {
-                                Some(_) => return Err(TesError::DecodeFailed { description: String::from("Extraneous CNDT field"), source: None }),
+                                Some(_) => {
+                                    return Err(TesError::DecodeFailed {
+                                        description: String::from("Extraneous CNDT field"),
+                                        source: None,
+                                    })
+                                }
                                 None => *cell = cell_field,
                             },
                             Package::Follow { ref mut cell, .. } => match *cell {
-                                Some(_) => return Err(TesError::DecodeFailed { description: String::from("Extraneous CNDT field"), source: None }),
+                                Some(_) => {
+                                    return Err(TesError::DecodeFailed {
+                                        description: String::from("Extraneous CNDT field"),
+                                        source: None,
+                                    })
+                                }
                                 None => *cell = cell_field,
                             },
-                            _ => return Err(TesError::DecodeFailed { description: String::from("Orphaned CNDT field"), source: None }),
+                            _ => {
+                                return Err(TesError::DecodeFailed {
+                                    description: String::from("Orphaned CNDT field"),
+                                    source: None,
+                                })
+                            }
                         }
                     } else {
-                        return Err(TesError::DecodeFailed { description: String::from("Orphaned CNDT field"), source: None });
+                        return Err(TesError::DecodeFailed {
+                            description: String::from("Orphaned CNDT field"),
+                            source: None,
+                        });
                     }
-                },
-                _ => return Err(TesError::DecodeFailed { description: format!("Unexpected field {}", field.display_name()), source: None }),
+                }
+                _ => {
+                    return Err(TesError::DecodeFailed {
+                        description: format!("Unexpected field {}", field.display_name()),
+                        source: None,
+                    })
+                }
             }
         }
 
@@ -520,7 +559,7 @@ impl Npc {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     static NPC_RECORD: &[u8] = include_bytes!("test/npc_record.bin");

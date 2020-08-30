@@ -1,8 +1,8 @@
 use std::io;
 use std::mem::size_of;
 
-use crate::*;
 use crate::plugin::FieldInterface;
+use crate::*;
 
 /// An attribute of a record
 ///
@@ -18,7 +18,7 @@ use crate::plugin::FieldInterface;
 /// The data, on the other hand, is taken as an owned value, because this is much more likely to be
 /// dynamic.
 #[derive(Debug)]
-pub struct Field{
+pub struct Field {
     name: [u8; 4],
     data: Vec<u8>,
 }
@@ -279,6 +279,9 @@ mod tests {
         let field = Field::read(&mut data.as_ref()).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(field.name, *b"DATA");
-        assert_eq!(s, "Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.");
+        assert_eq!(
+            s,
+            "Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one."
+        );
     }
 }

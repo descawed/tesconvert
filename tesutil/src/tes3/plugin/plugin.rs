@@ -1,14 +1,14 @@
-use std::cell::{Ref, RefMut, RefCell};
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read, Write, BufWriter};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::rc::Rc;
 use std::str;
 
-use crate::*;
-use crate::tes3::plugin::*;
 use super::record::*;
 use crate::plugin::*;
+use crate::tes3::plugin::*;
+use crate::*;
 
 /// Save game information
 ///
@@ -37,7 +37,12 @@ impl SaveInfo {
     /// Fails if you attempt to set the player's current health greater than their maximum health or
     /// to a negative value.
     pub fn set_current_health(&mut self, value: f32) -> Result<(), TesError> {
-        check_range(value, 0., self.max_health, "current health must be between 0 and max health")?;
+        check_range(
+            value,
+            0.,
+            self.max_health,
+            "current health must be between 0 and max health",
+        )?;
         self.current_health = value;
         Ok(())
     }
@@ -53,7 +58,12 @@ impl SaveInfo {
     ///
     /// Fails if you attempt to set the player's maximum health lower than their current health.
     pub fn set_max_health(&mut self, value: f32) -> Result<(), TesError> {
-        check_range(value, self.current_health, f32::MAX, "max health must be >= current health")?;
+        check_range(
+            value,
+            self.current_health,
+            f32::MAX,
+            "max health must be >= current health",
+        )?;
         self.max_health = value;
         Ok(())
     }
@@ -205,7 +215,11 @@ impl Plugin {
     /// [`DESCRIPTION_LENGTH`]: constant.DESCRIPTION_LENGTH.html
     pub fn new(author: String, description: String) -> Result<Plugin, TesError> {
         check_size(&author, AUTHOR_LENGTH, "author value too long")?;
-        check_size(&description, DESCRIPTION_LENGTH, "description value too long")?;
+        check_size(
+            &description,
+            DESCRIPTION_LENGTH,
+            "description value too long",
+        )?;
         Ok(Plugin {
             version: VERSION_1_3,
             is_master: false,
@@ -246,7 +260,10 @@ impl Plugin {
     pub fn read<T: Read + Seek>(mut f: T) -> Result<Plugin, TesError> {
         let header = Record::read(&mut f)?;
         if header.name() != b"TES3" {
-            return Err(decode_failed(format!("Expected TES3 record, got {}", header.display_name())));
+            return Err(decode_failed(format!(
+                "Expected TES3 record, got {}",
+                header.display_name()
+            )));
         }
 
         let mut fields = header.into_iter();
@@ -292,7 +309,7 @@ impl Plugin {
 
                     let string_name = field.get_zstring()?;
                     master_name = Some(String::from(string_name));
-                },
+                }
                 b"DATA" => {
                     if let Some(name) = master_name {
                         let size = field.get_u64()?;
@@ -301,7 +318,7 @@ impl Plugin {
                     } else {
                         return Err(decode_failed("Data field without master"));
                     }
-                },
+                }
                 b"GMDT" => {
                     // TODO: write a test for this part
                     let data = field.consume();
@@ -325,10 +342,15 @@ impl Plugin {
                         unknown2,
                         player_name,
                     });
-                },
+                }
                 b"SCRD" => (),
                 b"SCRS" => plugin.screen_data = field.consume(),
-                _ => return Err(decode_failed(format!("Unexpected field in header: {}", field.display_name()))),
+                _ => {
+                    return Err(decode_failed(format!(
+                        "Unexpected field in header: {}",
+                        field.display_name()
+                    )))
+                }
             }
         }
 
@@ -491,7 +513,11 @@ impl Plugin {
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`DESCRIPTION_LENGTH`]: constant.AUTHOR_LENGTH.html
     pub fn set_description(&mut self, description: String) -> Result<(), TesError> {
-        check_size(&description, DESCRIPTION_LENGTH, "description value too long")?;
+        check_size(
+            &description,
+            DESCRIPTION_LENGTH,
+            "description value too long",
+        )?;
         self.description = description;
         Ok(())
     }
@@ -540,7 +566,11 @@ impl Plugin {
     /// [`PluginError::DuplicateMaster`]: enum.PluginError.html#variant.DuplicateMaster
     pub fn add_master(&mut self, name: String, size: u64) -> Result<(), TesError> {
         // don't add it if it's already in the list
-        if !self.masters.iter().any(|m| m.0.to_lowercase() == name.to_lowercase()) {
+        if !self
+            .masters
+            .iter()
+            .any(|m| m.0.to_lowercase() == name.to_lowercase())
+        {
             self.masters.push((name, size));
             Ok(())
         } else {
@@ -646,7 +676,9 @@ impl Plugin {
 
     /// Gets an iterator over fields with a particular type
     pub fn get_records_by_type(&self, name: &[u8; 4]) -> Option<impl Iterator<Item = Ref<Record>>> {
-        self.type_map.get(name).map(|v| v.iter().map(|r| r.borrow()))
+        self.type_map
+            .get(name)
+            .map(|v| v.iter().map(|r| r.borrow()))
     }
 
     /// Finds a record by ID and returns a mutable reference
@@ -691,7 +723,10 @@ impl Plugin {
 
     /// Finds a record by ID and type and returns a mutable reference
     pub fn get_record_with_type_mut(&mut self, id: &str, name: &[u8; 4]) -> Option<RefMut<Record>> {
-        self.id_map.get_mut(id)?.get_mut(name).map(|v| v.borrow_mut())
+        self.id_map
+            .get_mut(id)?
+            .get_mut(name)
+            .map(|v| v.borrow_mut())
     }
 
     /// Writes a plugin to the provided writer
@@ -763,7 +798,15 @@ impl Plugin {
 
         if self.screen_data.len() > 0 {
             // as far as I can tell, the contents of this field are always the same
-            header.add_field(Field::new(b"SCRD", vec![0, 0, 0xff, 0, 0, 0xff, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0x20, 0, 0, 0]).unwrap());
+            header.add_field(
+                Field::new(
+                    b"SCRD",
+                    vec![
+                        0, 0, 0xff, 0, 0, 0xff, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0x20, 0, 0, 0,
+                    ],
+                )
+                .unwrap(),
+            );
             header.add_field(Field::new(b"SCRS", self.screen_data.clone()).unwrap());
         }
 
@@ -821,7 +864,10 @@ mod tests {
         assert_eq!(plugin.version, VERSION_1_3);
         assert!(!plugin.is_master);
         assert_eq!(plugin.author, "tes3cmd multipatch");
-        assert_eq!(plugin.description, "options: cellnames,fogbug,merge_lists,summons_persist");
+        assert_eq!(
+            plugin.description,
+            "options: cellnames,fogbug,merge_lists,summons_persist"
+        );
         assert_eq!(plugin.masters.len(), 0);
         assert_eq!(plugin.records.len(), 8);
     }
@@ -829,9 +875,15 @@ mod tests {
     #[test]
     fn write_plugin() {
         let mut buf: Vec<u8> = Vec::with_capacity(EXPECTED_PLUGIN.len());
-        let mut plugin = Plugin::new(String::from("test"), String::from("This is an empty test plugin")).unwrap();
+        let mut plugin = Plugin::new(
+            String::from("test"),
+            String::from("This is an empty test plugin"),
+        )
+        .unwrap();
         plugin.is_master = true;
-        plugin.add_master(String::from("Morrowind.esm"), 79837557).unwrap();
+        plugin
+            .add_master(String::from("Morrowind.esm"), 79837557)
+            .unwrap();
 
         let mut test_record = Record::new(b"GMST");
         test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")).unwrap());

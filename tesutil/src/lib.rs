@@ -12,7 +12,7 @@ pub mod tes4;
 use std::error;
 use std::ffi::CStr;
 use std::io;
-use std::io::{Error, ErrorKind, Read, Write, Seek, SeekFrom};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::iter;
 use std::str;
 
@@ -25,22 +25,19 @@ extern crate bitflags;
 // have to use a macro instead of a generic because from_le_bytes isn't a trait method
 #[macro_export]
 macro_rules! extract {
-    ($f:ident as $t:ty) => {
-        {
-            let mut buf = [0u8; std::mem::size_of::<$t>()];
-            $f.read_exact(&mut buf).map(move |_| <$t>::from_le_bytes(buf))
-        }
-    }
+    ($f:ident as $t:ty) => {{
+        let mut buf = [0u8; std::mem::size_of::<$t>()];
+        $f.read_exact(&mut buf)
+            .map(move |_| <$t>::from_le_bytes(buf))
+    }};
 }
 
 #[macro_export]
 macro_rules! serialize {
-    ($v:expr => $f:ident) => {
-        {
-            let value = $v;
-            $f.write(&value.to_le_bytes())
-        }
-    }
+    ($v:expr => $f:ident) => {{
+        let value = $v;
+        $f.write(&value.to_le_bytes())
+    }};
 }
 
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
@@ -51,11 +48,20 @@ trait WriteExact {
 impl<T: Write> WriteExact for T {
     fn write_exact(&mut self, buf: &[u8]) -> io::Result<()> {
         match self.write(buf) {
-            Ok(num_bytes) => if num_bytes == buf.len() {
-                Ok(())
-            } else {
-                Err(io::Error::new(ErrorKind::UnexpectedEof, format!("Attempted to write {} bytes but could only write {}", buf.len(), num_bytes)))
-            },
+            Ok(num_bytes) => {
+                if num_bytes == buf.len() {
+                    Ok(())
+                } else {
+                    Err(io::Error::new(
+                        ErrorKind::UnexpectedEof,
+                        format!(
+                            "Attempted to write {} bytes but could only write {}",
+                            buf.len(),
+                            num_bytes
+                        ),
+                    ))
+                }
+            }
             Err(e) => Err(e),
         }
     }
@@ -65,8 +71,13 @@ fn extract_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
     let mut buf = vec![0u8; size];
     f.read_exact(&mut buf)?;
     // ensure there is exactly one null byte at the end of the string
-    let chars: Vec<u8> = buf.into_iter().take_while(|b| *b != 0).chain(iter::once(0)).collect();
-    let cs = CStr::from_bytes_with_nul(&chars).map_err(|e| io_error(format!("Invalid null-terminated string: {}", e)))?;
+    let chars: Vec<u8> = buf
+        .into_iter()
+        .take_while(|b| *b != 0)
+        .chain(iter::once(0))
+        .collect();
+    let cs = CStr::from_bytes_with_nul(&chars)
+        .map_err(|e| io_error(format!("Invalid null-terminated string: {}", e)))?;
     match cs.to_str() {
         Ok(s) => Ok(String::from(s)),
         Err(e) => Err(io_error(format!("Failed to decode string: {}", e))),
@@ -123,7 +134,8 @@ fn serialize_bzstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
 }
 
 fn io_error<E>(e: E) -> Error
-where E: Into<Box<dyn error::Error + Send + Sync>>
+where
+    E: Into<Box<dyn error::Error + Send + Sync>>,
 {
     io::Error::new(ErrorKind::InvalidData, e)
 }
@@ -145,7 +157,12 @@ fn check_size<T: Len + ?Sized>(data: &T, max_size: usize, msg: &str) -> Result<(
     }
 }
 
-fn check_range<T: Into<f64> + PartialOrd>(value: T, min: T, max: T, msg: &str) -> Result<(), TesError> {
+fn check_range<T: Into<f64> + PartialOrd>(
+    value: T,
+    min: T,
+    max: T,
+    msg: &str,
+) -> Result<(), TesError> {
     if value < min || value > max {
         Err(TesError::OutOfRange {
             description: String::from(msg),
@@ -159,7 +176,10 @@ fn check_range<T: Into<f64> + PartialOrd>(value: T, min: T, max: T, msg: &str) -
 }
 
 // this answer has a good explanation for why the 'static lifetime is required here: https://users.rust-lang.org/t/box-with-a-trait-object-requires-static-lifetime/35261
-fn decode_failed_because<T: Into<String>, E: error::Error + Send + Sync + 'static>(msg: T, e: E) -> TesError {
+fn decode_failed_because<T: Into<String>, E: error::Error + Send + Sync + 'static>(
+    msg: T,
+    e: E,
+) -> TesError {
     TesError::DecodeFailed {
         description: msg.into(),
         source: Some(Box::new(e)),
@@ -186,13 +206,26 @@ pub enum TesError {
     DuplicateMaster(String),
     /// A size limit, e.g. on a record or field, has been exceeded
     #[error("Limit exceeded: {description}. Max size {max_size}, actual size {actual_size}")]
-    LimitExceeded { description: String, max_size: usize, actual_size: usize },
+    LimitExceeded {
+        description: String,
+        max_size: usize,
+        actual_size: usize,
+    },
     /// A value is not in the expected range
     #[error("Out of range: {description}. Min: {min}, max: {max}, actual: {actual}")]
-    OutOfRange { description: String, min: f64, max: f64, actual: f64 },
+    OutOfRange {
+        description: String,
+        min: f64,
+        max: f64,
+        actual: f64,
+    },
     /// Failed to decode binary data as the expected type or format
     #[error("Decode failed: {description}")]
-    DecodeFailed { description: String, #[source] source: Option<Box<dyn error::Error + Send + Sync>> },
+    DecodeFailed {
+        description: String,
+        #[source]
+        source: Option<Box<dyn error::Error + Send + Sync>>,
+    },
     /// Unexpected I/O error
     #[error(transparent)]
     IoError(#[from] io::Error),

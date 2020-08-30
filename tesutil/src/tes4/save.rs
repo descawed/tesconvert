@@ -7,11 +7,11 @@ pub use actor::*;
 mod actorref;
 pub use actorref::*;
 
-use crate::*;
 use crate::tes4::plugin::Record;
-use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
-use std::fs::File;
+use crate::*;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 /// An actor's attributes
 #[derive(Debug, Clone)]
@@ -28,9 +28,9 @@ pub struct Attributes {
 
 impl Attributes {
     /// Reads a character's attributes from a binary stream
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Fails if an I/O error occurs
     pub fn read<T: Read>(mut f: T) -> Result<Attributes, TesError> {
         Ok(Attributes {
@@ -64,8 +64,14 @@ impl Attributes {
 
     /// Checks whether all the attributes are all 0
     pub fn are_all_zero(&self) -> bool {
-        self.strength == 0 && self.intelligence == 0 && self.willpower == 0 && self.agility == 0 &&
-            self.speed == 0 && self.endurance == 0 && self.personality == 0 && self.luck == 0
+        self.strength == 0
+            && self.intelligence == 0
+            && self.willpower == 0
+            && self.agility == 0
+            && self.speed == 0
+            && self.endurance == 0
+            && self.personality == 0
+            && self.luck == 0
     }
 }
 
@@ -149,23 +155,23 @@ impl Save {
         let player_location = extract_bzstring(&mut f)?;
         let game_days = extract!(f as f32)?;
         let game_ticks = extract!(f as u32)?;
-        
+
         let mut game_time = [0u8; 16];
         f.read_exact(&mut game_time)?;
-        
+
         let screen_size = extract!(f as u32)? as usize;
         let screen_width = extract!(f as u32)?;
         let screen_height = extract!(f as u32)?;
         // - 8 because we already read the width and height
         let mut screen_data = vec![0u8; screen_size - 8];
         f.read_exact(&mut screen_data)?;
-        
+
         let num_plugins = extract!(f as u8)? as usize;
         let mut plugins = Vec::with_capacity(num_plugins);
         for _ in 0..num_plugins {
             plugins.push(extract_bstring(&mut f)?);
         }
-        
+
         extract!(f as u32)?; // form IDs offset; don't need it
         let num_change_records = extract!(f as u32)? as usize;
         let next_form_id = extract!(f as u32)?;
@@ -176,7 +182,7 @@ impl Save {
         let player_x = extract!(f as f32)?;
         let player_y = extract!(f as f32)?;
         let player_z = extract!(f as f32)?;
-        
+
         let num_globals = extract!(f as u16)? as usize;
         let mut globals = Vec::with_capacity(num_globals);
         for _ in 0..num_globals {
@@ -184,7 +190,7 @@ impl Save {
             let value = extract!(f as f32)?;
             globals.push((iref, value));
         }
-        
+
         extract!(f as u16)?; // another size we don't need
         let num_deaths = extract!(f as u32)? as usize;
         let mut deaths = Vec::with_capacity(num_deaths);
@@ -193,9 +199,9 @@ impl Save {
             let count = extract!(f as u16)?;
             deaths.push((actor, count));
         }
-        
+
         let game_seconds = extract!(f as f32)?;
-        
+
         let processes_size = extract!(f as u16)? as usize;
         let mut processes_data = vec![0u8; processes_size];
         f.read_exact(&mut processes_data)?;
@@ -225,13 +231,16 @@ impl Save {
             let has_quick_key = quick_keys_data[i] == 1;
             i += 1;
             if has_quick_key {
-                if i+4 <= quick_keys_size {
+                if i + 4 <= quick_keys_size {
                     let mut buf = [0u8; 4];
-                    buf.copy_from_slice(&quick_keys_data[i..i+4]);
+                    buf.copy_from_slice(&quick_keys_data[i..i + 4]);
                     quick_keys.push(Some(u32::from_le_bytes(buf)));
                     i += 4;
                 } else {
-                    return Err(TesError::DecodeFailed { description: format!("Invalid quick key data at index {}", i), source: None });
+                    return Err(TesError::DecodeFailed {
+                        description: format!("Invalid quick key data at index {}", i),
+                        source: None,
+                    });
                 }
             } else {
                 quick_keys.push(None);
@@ -258,11 +267,11 @@ impl Save {
             change_ids.push(form_id);
             change_records.insert(form_id, record);
         }
-        
+
         let temp_effects_size = extract!(f as u32)? as usize;
         let mut temporary_effects = vec![0u8; temp_effects_size];
         f.read_exact(&mut temporary_effects)?;
-        
+
         let num_form_ids = extract!(f as u32)? as usize;
         let mut form_ids = Vec::with_capacity(num_form_ids);
         for _ in 0..num_form_ids {
@@ -382,7 +391,8 @@ impl Save {
 
         serialize!(self.header_version => f)?;
         // header size = screenshot size + hard-coded fields + name and location bzstrings
-        let header_size = self.screen_data.len() + 46 + self.player_name.len() + self.player_location.len();
+        let header_size =
+            self.screen_data.len() + 46 + self.player_name.len() + self.player_location.len();
         serialize!(header_size as u32 => f)?;
         serialize!(self.save_number => f)?;
         serialize_bzstring(&mut f, &self.player_name)?;
@@ -422,7 +432,7 @@ impl Save {
             serialize!(value => f)?;
         }
 
-        let tes_class_size = self.deaths.len()*6 + 8;
+        let tes_class_size = self.deaths.len() * 6 + 8;
         serialize!(tes_class_size as u16 => f)?;
         serialize!(self.deaths.len() as u32 => f)?;
         for (actor, count) in self.deaths.iter() {
