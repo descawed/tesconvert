@@ -183,17 +183,15 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
-    pub fn read<T: Read>(mut f: T) -> Result<Option<(Group, usize)>, TesError> {
+    pub fn read<T: Read>(mut f: T) -> Result<(Group, usize), TesError> {
         let mut name = [0u8; 4];
-        if !f.read_all_or_none(&mut name)? {
-            return Ok(None);
-        }
+        f.read_exact(&mut name)?;
 
         if name != *b"GRUP" {
             return Err(decode_failed(format!("Expected GRUP, found {:?}", name)));
         }
 
-        Ok(Some(Group::read_without_name(f)?))
+        Group::read_without_name(f)
     }
 
     /// Writes a group to a binary stream

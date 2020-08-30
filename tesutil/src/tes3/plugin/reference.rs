@@ -242,7 +242,8 @@ mod tests {
 
     #[test]
     fn read() {
-        let record = Record::read(&mut REFR_RECORD.as_ref()).unwrap().unwrap();
+        let cursor = io::Cursor::new(REFR_RECORD);
+        let record = Record::read(cursor).unwrap();
         let player = PlayerReference::read(&record).unwrap();
         assert_eq!(player.strength.base, 38.);
         assert_eq!(player.destruction.base, 91);

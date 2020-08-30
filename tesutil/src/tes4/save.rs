@@ -213,7 +213,7 @@ impl Save {
         let num_created = extract!(f as u32)? as usize;
         let mut created_records = Vec::with_capacity(num_created);
         for _ in 0..num_created {
-            created_records.push(Record::read(&mut f)?.ok_or(decode_failed("Expected created record"))?.0);
+            created_records.push(Record::read(&mut f)?.0);
         }
 
         let quick_keys_size = extract!(f as u16)? as usize;

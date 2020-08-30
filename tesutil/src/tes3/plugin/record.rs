@@ -62,21 +62,19 @@ impl Record {
 
     /// Reads a record from a binary stream
     ///
-    /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
-    /// On success, this function returns an `Option<Record>`. A value of `None` indicates that the
-    /// stream was at EOF; otherwise, it will be `Some(Record)`. This is necessary because EOF
-    /// indicates that the end of a plugin file has been reached.
+    /// Reads a record from any type that implements [`Read`] or a mutable reference to
+    /// such a type. On success, this function returns an `Option<Record>`. A value of `None`
+    /// indicates that the stream was at EOF; otherwise, it will be `Some(Record)`. This is
+    /// necessary because EOF indicates that the end of a plugin file has been reached.
     ///
     /// # Errors
     ///
     /// Returns an error if an I/O error occurs.
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    pub fn read<T: Read>(mut f: T) -> Result<Option<Record>, TesError> {
+    pub fn read<T: Read>(mut f: T) -> Result<Record, TesError> {
         let mut name = [0u8; 4];
-        if !f.read_all_or_none(&mut name)? {
-            return Ok(None);
-        }
+        f.read_exact(&mut name)?;
 
         let mut size = extract!(f as u32)? as usize;
 
@@ -113,7 +111,7 @@ impl Record {
             record.add_field(field);
         }
 
-        Ok(Some(record))
+        Ok(record)
     }
 
     /// Writes the record to the provided writer
@@ -256,8 +254,9 @@ mod tests{
 
     #[test]
     fn read_record() {
-        let data = b"GLOB\x27\0\0\0\0\0\0\0\0\0\0\0NAME\x0a\0\0\0TimeScale\0FNAM\x01\0\0\0fFLTV\x04\0\0\0\0\0\x20\x41";
-        let record = Record::read(&mut data.as_ref()).unwrap().unwrap();
+        let data = b"GLOB\x27\0\0\0\0\0\0\0\0\0\0\0NAME\x0a\0\0\0TimeScale\0FNAM\x01\0\0\0fFLTV\x04\0\0\0\0\0\x20\x41".to_vec();
+        let cursor = io::Cursor::new(data);
+        let record = Record::read(cursor).unwrap();
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted);
         assert!(!record.is_persistent);
@@ -268,10 +267,12 @@ mod tests{
 
     #[test]
     fn read_deleted_record() {
-        let data = b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0";
-        let record = Record::read(&mut data.as_ref()).unwrap().unwrap();
+        let data = b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0".to_vec();
+        let len = data.len();
+        let cursor = io::Cursor::new(data);
+        let record = Record::read(cursor).unwrap();
         assert!(record.is_deleted);
-        assert_eq!(record.size(), data.len());
+        assert_eq!(record.size(), len);
     }
 
     #[test]

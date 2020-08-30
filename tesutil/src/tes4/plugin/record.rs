@@ -146,17 +146,15 @@ impl Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    pub fn read<T: Read>(mut f: T) -> Result<Option<(Record, usize)>, TesError> {
+    pub fn read<T: Read>(mut f: T) -> Result<(Record, usize), TesError> {
         let mut name = [0u8; 4];
-        if !f.read_all_or_none(&mut name)? {
-            return Ok(None);
-        }
+        f.read_exact(&mut name)?;
 
         if name == *b"GRUP" {
             return Err(decode_failed("Expected record, found group"));
         }
 
-        Ok(Some(Record::read_with_name(f, name)?))
+        Record::read_with_name(f, name)
     }
 
     fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> Result<(), TesError> {
@@ -340,8 +338,9 @@ mod tests{
 
     #[test]
     fn read_record() {
-        let data = b"GLOB\x21\0\0\0\0\0\0\0\x3a\0\0\0\0\0\0\0EDID\x0a\0TimeScale\0FNAM\x01\0sFLTV\x04\0\0\0\xf0\x41";
-        let record = Record::read(&mut data.as_ref()).unwrap().unwrap().0;
+        let data = b"GLOB\x21\0\0\0\0\0\0\0\x3a\0\0\0\0\0\0\0EDID\x0a\0TimeScale\0FNAM\x01\0sFLTV\x04\0\0\0\xf0\x41".to_vec();
+        let cursor = io::Cursor::new(data);
+        let record = Record::read(cursor).unwrap().0;
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted());
         assert!(!record.is_persistent());

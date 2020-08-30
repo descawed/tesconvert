@@ -527,7 +527,7 @@ mod tests{
 
     #[test]
     fn parse_record() {
-        let record = Record::read(&mut NPC_RECORD.as_ref()).unwrap().unwrap();
+        let record = Record::read(&mut NPC_RECORD.as_ref()).unwrap();
         let npc = Npc::read(&record).unwrap();
         assert_eq!(npc.id, "player");
         assert_eq!(npc.name.unwrap(), "Cirfenath");

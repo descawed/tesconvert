@@ -1,7 +1,7 @@
 use std::cell::{Ref, RefMut, RefCell};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Error, ErrorKind, Read, Write, BufWriter};
+use std::io::{BufReader, Read, Write, BufWriter};
 use std::rc::Rc;
 use std::str;
 
@@ -243,8 +243,8 @@ impl Plugin {
     /// ```
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    pub fn read<T: Read>(mut f: T) -> Result<Plugin, TesError> {
-        let header = Record::read(&mut f)?.ok_or(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"))?;
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<Plugin, TesError> {
+        let header = Record::read(&mut f)?;
         if header.name() != b"TES3" {
             return Err(decode_failed(format!("Expected TES3 record, got {}", header.display_name())));
         }
@@ -337,8 +337,13 @@ impl Plugin {
         }
 
         // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
-        while let Some(record) = Record::read(&mut f)? {
-            plugin.add_record(record)?;
+        let mut here = f.seek(SeekFrom::Current(0))?;
+        let eof = f.seek(SeekFrom::End(0))?;
+        f.seek(SeekFrom::Start(here))?;
+
+        while here != eof {
+            plugin.add_record(Record::read(&mut f)?)?;
+            here = f.seek(SeekFrom::Current(0))?;
         }
 
         Ok(plugin)
@@ -813,7 +818,8 @@ mod tests {
 
     #[test]
     fn read_plugin() {
-        let plugin = Plugin::read(&mut TEST_PLUGIN.as_ref()).unwrap();
+        let cursor = io::Cursor::new(TEST_PLUGIN);
+        let plugin = Plugin::read(cursor).unwrap();
         assert_eq!(plugin.version, VERSION_1_3);
         assert!(!plugin.is_master);
         assert_eq!(plugin.author, "tes3cmd multipatch");
@@ -841,7 +847,8 @@ mod tests {
 
     #[test]
     fn fetch_record() {
-        let plugin = Plugin::read(&mut TEST_PLUGIN.as_ref()).unwrap();
+        let cursor = io::Cursor::new(TEST_PLUGIN);
+        let plugin = Plugin::read(cursor).unwrap();
         let record = plugin.get_record("BM_wolf_grey_summon").unwrap().unwrap();
         assert_eq!(record.len(), 9);
         for field in record.iter() {
