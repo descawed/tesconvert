@@ -21,8 +21,8 @@ macro_rules! extract_stats {
 macro_rules! serialize_stats {
     ($f:ident, $p:ident, $($s:ident),+) => {
         $({
-            serialize!($p.$s.current => $f).unwrap();
-            serialize!($p.$s.base => $f).unwrap();
+            serialize!($p.$s.current => $f)?;
+            serialize!($p.$s.base => $f)?;
         })*
     }
 }
@@ -196,21 +196,20 @@ impl PlayerReference {
                     let writer = &mut buf;
                     
                     // write operations on Vec<u8> are infallible
-                    // TODO: is it safe to rely on this?
-                    writer.write_exact(&self.unknown1).unwrap();
-                    serialize!(self.flags => writer).unwrap();
-                    serialize!(self.breath_meter => writer).unwrap();
-                    writer.write_exact(&self.unknown2).unwrap();
+                    writer.write_exact(&self.unknown1)?;
+                    serialize!(self.flags => writer)?;
+                    serialize!(self.breath_meter => writer)?;
+                    writer.write_exact(&self.unknown2)?;
                     serialize_stats!(writer, self, health, fatigue, magicka);
-                    writer.write_exact(&self.unknown3).unwrap();
+                    writer.write_exact(&self.unknown3)?;
                     serialize_stats!(writer, self, strength, intelligence, willpower, agility, speed, endurance, personality, luck);
-                    for effect in self.magic_effects.iter() {
-                        serialize!(effect => writer).unwrap();
+                    for effect in &self.magic_effects {
+                        serialize!(effect => writer)?;
                     }
-                    writer.write_exact(&self.unknown4).unwrap();
-                    serialize!(self.gold => writer).unwrap();
-                    serialize!(self.count_down => writer).unwrap();
-                    writer.write_exact(&self.unknown5).unwrap();
+                    writer.write_exact(&self.unknown4)?;
+                    serialize!(self.gold => writer)?;
+                    serialize!(self.count_down => writer)?;
+                    writer.write_exact(&self.unknown5)?;
 
                     field.set(buf)?;
                 },
