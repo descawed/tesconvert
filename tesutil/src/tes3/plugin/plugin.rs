@@ -6,9 +6,9 @@ use std::rc::Rc;
 use std::str;
 
 use crate::*;
-use crate::plugin::*;
+use crate::tes3::plugin::*;
 use super::record::*;
-use super::field::*;
+use crate::plugin::*;
 
 /// Save game information
 ///
@@ -189,7 +189,7 @@ impl Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
@@ -232,7 +232,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let buf: Vec<u8> = vec![/* raw plugin data */];
@@ -357,7 +357,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -385,7 +385,7 @@ impl Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
@@ -406,7 +406,7 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -429,7 +429,7 @@ impl Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("wrong author"), String::from("some description"))?;
@@ -451,7 +451,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -474,7 +474,7 @@ impl Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("author"), String::from("some description"))?;
@@ -523,7 +523,7 @@ impl Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("author"), String::from("some description"))?;
@@ -560,7 +560,7 @@ impl Plugin {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
@@ -607,7 +607,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -657,7 +657,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -704,7 +704,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let mut buf: Vec<u8> = vec![];
@@ -785,7 +785,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::tes3::*;
+    /// use tesutil::tes3::plugin::*;
     /// use tesutil::TesError;
     ///
     /// # fn main() -> Result<(), TesError> {

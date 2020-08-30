@@ -1,6 +1,6 @@
 use bitflags;
 use crate::*;
-use crate::save::{Attributes, ChangeRecord, ChangeType};
+use crate::tes4::save::{Attributes, ChangeRecord, ChangeType};
 use std::io::Read;
 
 bitflags! {
@@ -399,7 +399,7 @@ impl ActorChange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::save::*;
+    use crate::tes4::save::*;
 
     #[test]
     fn read_actor_change() {

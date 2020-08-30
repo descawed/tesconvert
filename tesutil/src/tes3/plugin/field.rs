@@ -1,4 +1,5 @@
 use std::io;
+use std::io::{Read, Seek, Write};
 use std::mem::size_of;
 
 use crate::*;
@@ -35,7 +36,7 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"DATA", vec![/* binary gobbledygook */])?;
@@ -66,7 +67,7 @@ impl FieldInterface for Field {
     ///
     /// ```rust
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::*;
+    /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -83,17 +84,7 @@ impl FieldInterface for Field {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
-        let size = if name == *b"XXXX" {
-            extract!(f as u16)?; // always 4 bytes
-            let real_size = extract!(f as u32)?;
-            // now fetch the actual record
-            f.read_exact(&mut name)?;
-            extract!(f as u16)?; // regular size is irrelevant here
-            real_size as usize
-        } else {
-            extract!(f as u16)? as usize
-        };
-
+        let size = extract!(f as u32)? as usize;
         let mut data = vec![0u8; size];
 
         f.read_exact(&mut data)?;
@@ -110,7 +101,7 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::Field;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"NAME", vec![])?;
@@ -129,7 +120,7 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
@@ -148,7 +139,7 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::Field;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
@@ -172,7 +163,7 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut field = Field::new(b"DATA", vec![])?;
@@ -196,18 +187,16 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
-    /// assert_eq!(field.size(), 9); // 4 bytes for the name + 2 bytes for the length + 3 bytes of data
+    /// assert_eq!(field.size(), 11); // 4 bytes for the name + 4 bytes for the length + 3 bytes of data
     /// # Ok(())
     /// # }
     /// ```
     fn size(&self) -> usize {
-        self.name.len() + size_of::<u16>() + self.data.len()
-            // 10 = 4 byte XXXX + 2 byte length + 4 byte data
-            + if self.data.len() > u16::MAX as usize { 10 } else { 0 }
+        self.name.len() + size_of::<u32>() + self.data.len()
     }
 
     /// Writes the field to the provided writer
@@ -223,7 +212,7 @@ impl FieldInterface for Field {
     ///
     /// ```rust
     /// use tesutil::plugin::*;
-    /// use tesutil::plugin::tes4::*;
+    /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf: Vec<u8> = vec![];
@@ -237,19 +226,20 @@ impl FieldInterface for Field {
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     fn write(&self, mut f: &mut dyn Write) -> io::Result<()> {
-        let mut len = self.data.len();
-
-        if len > u16::MAX as usize {
-            f.write_exact(b"XXXX\x04\0")?;
-            serialize!(len as u32 => f)?;
-            len = 0;
-        }
+        let len = self.data.len();
 
         f.write_exact(&self.name)?;
-        f.write_exact(&(len as u16).to_le_bytes())?;
+        f.write_exact(&(len as u32).to_le_bytes())?;
         f.write_exact(&self.data)?;
 
         Ok(())
+    }
+}
+
+impl Field {
+    /// Gets a reader over the contents of this field
+    pub fn reader(&self) -> impl Read + Seek + '_ {
+        io::Cursor::new(self.get())
     }
 }
 
@@ -258,27 +248,100 @@ mod tests {
     use super::*;
 
     #[test]
-    fn write_tes4_field() {
-        let field = Field::new(b"EDID", b"sNoTalkFleeing\0".to_vec()).unwrap();
+    fn create_field() {
+        Field::new(b"NAME", vec![]).unwrap();
+    }
+
+    #[test]
+    fn read_field() {
+        let data = b"NAME\x09\0\0\0GameHour\0";
+        let field = Field::read(&mut data.as_ref()).unwrap();
+        assert_eq!(field.name, *b"NAME");
+        assert_eq!(field.data, b"GameHour\0");
+        assert_eq!(field.size(), data.len());
+    }
+
+    #[test]
+    fn read_field_empty() {
+        let data = b"";
+        if Field::read(&mut data.as_ref()).is_ok() {
+            panic!("Read of empty field succeeded");
+        }
+    }
+
+    #[test]
+    fn read_field_invalid_len() {
+        let data = b"NAME\x0f\0\0\0GameHour\0";
+        if Field::read(&mut data.as_ref()).is_ok() {
+            panic!("Read of field with invalid length succeeded");
+        }
+    }
+
+    #[test]
+    fn write_field() {
+        let field = Field::new(b"NAME", b"PCHasCrimeGold\0".to_vec()).unwrap();
         let mut buf = vec![];
         field.write(&mut buf).unwrap();
-        assert_eq!(buf, *b"EDID\x0f\0sNoTalkFleeing\0");
+        assert_eq!(buf, *b"NAME\x0f\0\0\0PCHasCrimeGold\0");
     }
 
     #[test]
-    fn read_tes4_field() {
-        let data = b"EDID\x13\0fDialogSpeachDelay\0";
+    fn read_zstring_field() {
+        let data = b"NAME\x09\0\0\0GameHour\0";
         let field = Field::read(&mut data.as_ref()).unwrap();
         let s = field.get_zstring().unwrap();
-        assert_eq!(s, "fDialogSpeachDelay");
+        assert_eq!(s, "GameHour");
     }
 
     #[test]
-    fn read_long_tes4_field() {
-        let data = b"XXXX\x04\0\x51\0\0\0DATA\0\0Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.\0";
+    fn read_string_field() {
+        let data = b"BNAM\x15\0\0\0shield_nordic_leather";
         let field = Field::read(&mut data.as_ref()).unwrap();
-        let s = field.get_zstring().unwrap();
-        assert_eq!(field.name, *b"DATA");
-        assert_eq!(s, "Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.");
+        let s = field.get_string().unwrap();
+        assert_eq!(s, "shield_nordic_leather");
+    }
+
+    #[test]
+    fn read_raw_field() {
+        let data = b"ALDT\x0c\0\0\0\0\0\xa0\x40\x0a\0\0\0\0\0\0\0";
+        let field = Field::read(&mut data.as_ref()).unwrap();
+        let d = field.get();
+        assert_eq!(d, *b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0");
+    }
+
+    #[test]
+    fn read_numeric_field() {
+        let data = b"DATA\x08\0\0\0\x75\x39\xc2\x04\0\0\0\0";
+        let field = Field::read(&mut data.as_ref()).unwrap();
+        let v = field.get_u64().unwrap();
+        assert_eq!(v, 0x4c23975u64);
+    }
+
+    #[test]
+    fn set_zstring_field() {
+        let mut field = Field::new(b"NAME", vec![]).unwrap();
+        field.set_zstring(String::from("sWerewolfRefusal")).unwrap();
+        assert_eq!(field.data, *b"sWerewolfRefusal\0");
+    }
+
+    #[test]
+    fn set_string_field() {
+        let mut field = Field::new(b"BNAM", vec![]).unwrap();
+        field.set_string(String::from("a_steel_helmet")).unwrap();
+        assert_eq!(field.data, *b"a_steel_helmet");
+    }
+
+    #[test]
+    fn set_raw_field() {
+        let mut field = Field::new(b"ALDT", vec![]).unwrap();
+        field.set(b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0".to_vec()).unwrap();
+        assert_eq!(field.data, *b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0");
+    }
+
+    #[test]
+    fn set_numeric_field() {
+        let mut field = Field::new(b"XSCL", vec![]).unwrap();
+        field.set_f32(0.75);
+        assert_eq!(field.data, *b"\0\0\x40\x3f");
     }
 }

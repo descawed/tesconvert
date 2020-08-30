@@ -1,7 +1,7 @@
 use anyhow::*;
 
-use tesutil::plugin::tes3::*;
-use tesutil::save::*;
+use tesutil::tes3::plugin::*;
+use tesutil::tes4::save::*;
 
 mod config;
 pub use config::*;

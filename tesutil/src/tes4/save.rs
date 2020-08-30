@@ -8,7 +8,7 @@ mod actorref;
 pub use actorref::*;
 
 use crate::*;
-use crate::plugin::tes4::Record;
+use crate::tes4::plugin::Record;
 use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
 use std::fs::File;
 use std::collections::HashMap;

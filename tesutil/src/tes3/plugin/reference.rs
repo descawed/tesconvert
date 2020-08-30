@@ -1,4 +1,4 @@
-use crate::plugin::tes3::*;
+use crate::tes3::plugin::*;
 use crate::plugin::*;
 use crate::*;
 

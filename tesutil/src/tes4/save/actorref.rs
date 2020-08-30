@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::*;
-use crate::save::{ChangeRecord, FORM_PLAYER_REF, ChangeType, Attributes};
+use crate::tes4::save::{ChangeRecord, FORM_PLAYER_REF, ChangeType, Attributes};
 
 use bitflags;
 
@@ -1160,7 +1160,7 @@ impl PlayerReferenceChange {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::save::{Save, TEST_SAVE};
+    use crate::tes4::save::{Save, TEST_SAVE};
 
     #[test]
     fn read_player_ref_change() {
