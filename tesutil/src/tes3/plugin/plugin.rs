@@ -540,8 +540,6 @@ impl Plugin {
     /// [`PluginError::DuplicateMaster`]: enum.PluginError.html#variant.DuplicateMaster
     pub fn add_master(&mut self, name: String, size: u64) -> Result<(), TesError> {
         // don't add it if it's already in the list
-        // TODO: find out if doing a case-insensitive comparison is appropriate for OpenMW running
-        //  on Linux
         if !self.masters.iter().any(|m| m.0.to_lowercase() == name.to_lowercase()) {
             self.masters.push((name, size));
             Ok(())
