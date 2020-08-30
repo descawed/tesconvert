@@ -56,7 +56,7 @@ impl GroupKind {
             10 => Ok(GroupKind::CellVisibleDistantChildren(u32::from_le_bytes(
                 label,
             ))),
-            kind @ _ => Err(TesError::DecodeFailed {
+            kind => Err(TesError::DecodeFailed {
                 description: format!("Unexpected group type {}", kind),
                 source: None,
             }),

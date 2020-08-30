@@ -13,40 +13,36 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     // set name that appears in the save list
     let mw_save_info = mw_save
         .get_save_info()
-        .ok_or(anyhow!("Morrowind plugin did not contain save information"))?;
+        .ok_or_else(|| anyhow!("Morrowind plugin did not contain save information"))?;
     ob_save.set_player_name(String::from(mw_save_info.player_name()))?;
 
     // get Morrowind player information
     let mw_record = mw_save
         .get_record("player")?
-        .ok_or(anyhow!("Missing player record in Morrowind save"))?;
+        .ok_or_else(|| anyhow!("Missing player record in Morrowind save"))?;
     let mw_player_base = Npc::read(&mw_record)?;
 
     let mw_record = mw_save
         .get_record_with_type("PlayerSaveGame", b"REFR")
-        .ok_or(anyhow!("Missing player reference record in Morrowind save"))?;
+        .ok_or_else(|| anyhow!("Missing player reference record in Morrowind save"))?;
     let mw_player_ref = PlayerReference::read(&mw_record)?;
 
     let mw_record = mw_save
         .get_records_by_type(b"PCDT")
-        .ok_or(anyhow!(
-            "Missing player data record (PCDT) in Morrowind save"
-        ))?
+        .ok_or_else(|| anyhow!("Missing player data record (PCDT) in Morrowind save"))?
         .next()
-        .ok_or(anyhow!(
-            "Missing player data record (PCDT) in Morrowind save"
-        ))?;
+        .ok_or_else(|| anyhow!("Missing player data record (PCDT) in Morrowind save"))?;
     let mw_player_data = PlayerData::read(&mw_record)?;
 
     // get Oblivion player information
     let mut ob_record_base = ob_save
         .get_change_record_mut(FORM_PLAYER)
-        .ok_or(anyhow!("Missing player change record in Oblivion save"))?;
+        .ok_or_else(|| anyhow!("Missing player change record in Oblivion save"))?;
     let mut ob_player_base = ActorChange::read(&ob_record_base)?;
     // set attributes
     let mut attributes = ob_player_base
         .attributes_mut()
-        .ok_or(anyhow!("Oblivion player base has no attributes"))?;
+        .ok_or_else(|| anyhow!("Oblivion player base has no attributes"))?;
     attributes.strength = mw_player_ref.strength.base as u8;
     attributes.intelligence = mw_player_ref.intelligence.base as u8;
     attributes.willpower = mw_player_ref.willpower.base as u8;
@@ -59,7 +55,7 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     // set skills
     let mut skills = ob_player_base
         .skills_mut()
-        .ok_or(anyhow!("Oblivion player base has no skills"))?;
+        .ok_or_else(|| anyhow!("Oblivion player base has no skills"))?;
     skills.armorer = mw_player_ref.armorer.base as u8;
     skills.athletics = mw_player_ref.athletics.base as u8;
     skills.blade = config.skill_combine_strategy.combine(
@@ -103,9 +99,7 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     // set name and level/skill progress
     let mut ob_record_ref = ob_save
         .get_change_record_mut(FORM_PLAYER_REF)
-        .ok_or(anyhow!(
-            "Missing player reference change record in Oblivion save"
-        ))?;
+        .ok_or_else(|| anyhow!("Missing player reference change record in Oblivion save"))?;
     let mut ob_player_ref = PlayerReferenceChange::read(&ob_record_ref)?;
     ob_player_ref.set_name(String::from(mw_player_base.name().unwrap_or("")))?;
 

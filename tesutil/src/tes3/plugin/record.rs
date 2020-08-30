@@ -51,7 +51,7 @@ impl Record {
     /// Creates a new, empty record
     pub fn new(name: &[u8; 4]) -> Record {
         Record {
-            name: name.clone(),
+            name: *name,
             is_deleted: false,
             is_persistent: false,
             is_initially_disabled: false,
@@ -240,7 +240,18 @@ impl Record {
         self.fields.len()
     }
 
+    /// Returns whether this record is empty (contains no fields)
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+
     /// Consumes the record and returns an iterator over its fields
+    // we allow this here because of the return type. returning `impl Iterator` decouples the result
+    // of this method from the particular collection we're using behind the scenes. you can't return
+    // an impl from a trait method, and furthermore the IntoIterator trait requires you to name the
+    // iterator type as an associated type, so we would have to explicitly return alloc::vec::IntoIter,
+    // coupling this method to the data type of self.fields unnecessarily.
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = Field> {
         self.fields.into_iter()
     }

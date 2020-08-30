@@ -1,6 +1,5 @@
 use super::*;
 use crate::plugin::FieldInterface;
-use crate::*;
 
 /// Information about the state of a resting player
 #[derive(Debug)]
@@ -276,7 +275,7 @@ impl PlayerData {
                         rank: extract!(reader as u32)?,
                         reputation: extract!(reader as i32)?,
                         flags: extract!(reader as u32)?,
-                        name: String::from(extract_string(32, &mut reader)?),
+                        name: extract_string(32, &mut reader)?,
                     });
                 }
                 b"AADT" => {
@@ -295,7 +294,7 @@ impl PlayerData {
                     for _ in 0..10 {
                         player_data.quick_keys.push(QuickKey {
                             bind_type: extract!(reader as u8)?,
-                            bound_form: String::from(extract_string(35, &mut reader)?),
+                            bound_form: extract_string(35, &mut reader)?,
                             unknown: extract!(reader as i32)?,
                         });
                     }

@@ -376,7 +376,7 @@ impl Save {
     ///
     /// Returns `None` if there is no form ID for the given iref
     pub fn iref(&self, iref: u32) -> Option<u32> {
-        self.form_ids.get(iref as usize).map(|v| *v)
+        self.form_ids.get(iref as usize).copied()
     }
 
     /// Write a save to a binary stream

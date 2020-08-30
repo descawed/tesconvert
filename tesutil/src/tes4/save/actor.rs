@@ -1,3 +1,5 @@
+#![allow(clippy::single_component_path_imports)]
+
 use crate::tes4::save::{Attributes, ChangeRecord, ChangeType};
 use crate::*;
 use bitflags;
@@ -153,12 +155,12 @@ impl ActorChange {
 
         if change_flags.contains(ActorChangeFlags::BASE_DATA) {
             actor_change.base = Some(ActorBase {
-                flags: ActorFlags::from_bits(extract!(reader as u32)?).ok_or(io_error(
-                    TesError::DecodeFailed {
+                flags: ActorFlags::from_bits(extract!(reader as u32)?).ok_or_else(|| {
+                    io_error(TesError::DecodeFailed {
                         description: String::from("Invalid actor flags"),
                         source: None,
-                    },
-                ))?,
+                    })
+                })?,
                 magicka: extract!(reader as u16)?,
                 fatigue: extract!(reader as u16)?,
                 gold: extract!(reader as u16)?,
@@ -327,7 +329,7 @@ impl ActorChange {
             serialize!(base_data.calc_max => writer)?;
         }
 
-        if self.factions.len() > 0 {
+        if !self.factions.is_empty() {
             flags |= ActorChangeFlags::FACTIONS;
             let len = self.factions.len() as u16;
             serialize!(len => writer)?;
@@ -337,7 +339,7 @@ impl ActorChange {
             }
         }
 
-        if self.spells.len() > 0 {
+        if !self.spells.is_empty() {
             flags |= ActorChangeFlags::SPELL_LIST;
             let len = self.spells.len() as u16;
             serialize!(len => writer)?;
@@ -356,7 +358,7 @@ impl ActorChange {
             serialize!(base_health => writer)?;
         }
 
-        if self.modifiers.len() > 0 {
+        if !self.modifiers.is_empty() {
             flags |= ActorChangeFlags::BASE_MODIFIERS;
             let len = self.modifiers.len() as u16;
             serialize!(len => writer)?;

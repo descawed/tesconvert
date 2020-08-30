@@ -1,3 +1,5 @@
+#![allow(clippy::single_component_path_imports)]
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::io::{Cursor, Seek, SeekFrom};
@@ -452,15 +454,15 @@ impl CustomClass {
     /// Fails if an I/O error occurs
     pub fn read<T: Read>(mut f: T) -> Result<CustomClass, TesError> {
         let mut favored_attributes = [0u32; 2];
-        for i in 0..favored_attributes.len() {
-            favored_attributes[i] = extract!(f as u32)?;
+        for favored_attribute in &mut favored_attributes {
+            *favored_attribute = extract!(f as u32)?;
         }
 
         let specialization = extract!(f as u32)?;
 
         let mut major_skills = [0u32; 7];
-        for i in 0..major_skills.len() {
-            major_skills[i] = extract!(f as u32)?;
+        for major_skill in &mut major_skills {
+            *major_skill = extract!(f as u32)?;
         }
 
         let flags = extract!(f as u32)?;
@@ -659,14 +661,18 @@ impl PlayerReferenceChange {
         let mut tac_unknown = [0f32; 72];
         let mut damage = [0f32; 72];
 
+        // can't use an iterator because these arrays are longer than 32 elements
+        #[allow(clippy::needless_range_loop)]
         for i in 0..temp_active_effects.len() {
             temp_active_effects[i] = extract!(reader as f32)?;
         }
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..tac_unknown.len() {
             tac_unknown[i] = extract!(reader as f32)?;
         }
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..damage.len() {
             damage[i] = extract!(reader as f32)?;
         }
@@ -725,6 +731,7 @@ impl PlayerReferenceChange {
 
         // player statistics
         let mut statistics = [0u32; 34];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..statistics.len() {
             statistics[i] = extract!(reader as u32)?;
         }
@@ -735,8 +742,8 @@ impl PlayerReferenceChange {
         let birthsign = extract!(reader as u32)?;
 
         let mut stat_unknown2 = [0u32; 13];
-        for i in 0..stat_unknown2.len() {
-            stat_unknown2[i] = extract!(reader as u32)?;
+        for unk in &mut stat_unknown2 {
+            *unk = extract!(reader as u32)?;
         }
 
         let num2 = extract!(reader as u16)? as usize;

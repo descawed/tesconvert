@@ -47,10 +47,7 @@ impl FieldInterface for Field {
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, TesError> {
         check_size(&data, MAX_DATA, "field data too large")?;
-        Ok(Field {
-            name: name.clone(),
-            data,
-        })
+        Ok(Field { name: *name, data })
     }
 
     /// Reads a field from a binary stream

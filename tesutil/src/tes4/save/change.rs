@@ -109,7 +109,7 @@ impl ChangeRecord {
         serialize!(self.flags => f)?;
         serialize!(self.version => f)?;
         serialize!(self.data.len() as u16 => f)?;
-        f.write_exact(&mut self.data.as_ref())?;
+        f.write_exact(self.data.as_ref())?;
         Ok(())
     }
 }

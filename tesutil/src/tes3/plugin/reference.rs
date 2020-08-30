@@ -1,6 +1,5 @@
 use crate::plugin::*;
 use crate::tes3::plugin::*;
-use crate::*;
 
 /// A statistic, such as an attribute, skill, health, etc.
 #[derive(Debug, Default)]

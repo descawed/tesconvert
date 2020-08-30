@@ -99,13 +99,13 @@ fn extract_bstring_raw<T: Read>(mut f: T) -> io::Result<Vec<u8>> {
 
 fn extract_bstring<T: Read>(f: T) -> io::Result<String> {
     let buf = extract_bstring_raw(f)?;
-    let s = str::from_utf8(&buf).map_err(|e| io_error(e))?;
+    let s = str::from_utf8(&buf).map_err(io_error)?;
     Ok(String::from(s))
 }
 
 fn extract_bzstring<T: Read>(f: T) -> io::Result<String> {
     let buf = extract_bstring_raw(f)?;
-    let cs = CStr::from_bytes_with_nul(&buf).map_err(|e| io_error(e))?;
+    let cs = CStr::from_bytes_with_nul(&buf).map_err(io_error)?;
     match cs.to_str() {
         Ok(s) => Ok(String::from(s)),
         Err(e) => Err(io_error(e)),

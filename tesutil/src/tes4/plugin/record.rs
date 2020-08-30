@@ -1,3 +1,5 @@
+#![allow(clippy::single_component_path_imports)]
+
 use std::io::{Read, Seek, Write};
 use std::str;
 
@@ -73,7 +75,7 @@ impl Record {
     /// Creates a new, empty record
     pub fn new(name: &[u8; 4]) -> Record {
         Record {
-            name: name.clone(),
+            name: *name,
             flags: RecordFlags::empty(),
             form_id: 0,
             vcs_info: 0,
@@ -103,7 +105,7 @@ impl Record {
         f.read_exact(&mut buf)?;
 
         let flags = RecordFlags::from_bits(u32::from_le_bytes(buf))
-            .ok_or(decode_failed("Invalid record flags"))?;
+            .ok_or_else(|| decode_failed("Invalid record flags"))?;
 
         let form_id = extract!(f as u32)?;
         let vcs_info = extract!(f as u32)?;
@@ -319,7 +321,14 @@ impl Record {
         self.fields.len()
     }
 
+    /// Returns whether this record is empty (contains no fields)
+    pub fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+
     /// Consumes the record and returns an iterator over its fields
+    // see tes3's Record for why this is allowed
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = Field> {
         self.fields.into_iter()
     }

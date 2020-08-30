@@ -1,3 +1,5 @@
+#![allow(clippy::single_component_path_imports)]
+
 use std::collections::HashMap;
 
 use super::record::Record;
