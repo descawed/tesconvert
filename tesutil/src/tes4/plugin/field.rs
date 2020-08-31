@@ -158,28 +158,6 @@ impl FieldInterface for Field {
         self.data
     }
 
-    /// Sets the field's data
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`PluginError::LimitExceeded`] if the size of `data` exceeds [`MAX_DATA`].
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::*;
-    ///
-    /// # fn main() -> Result<(), TesError> {
-    /// let mut field = Field::new(b"DATA", vec![])?;
-    /// field.set(b"new data to use".to_vec())?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
-    /// [`MAX_DATA`]: constant.MAX_DATA.html
     fn set(&mut self, data: Vec<u8>) -> Result<(), TesError> {
         check_size(&data, MAX_DATA, "field data too large")?;
         self.data = data;

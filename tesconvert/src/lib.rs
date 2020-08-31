@@ -1,7 +1,10 @@
 use anyhow::*;
 
 use tesutil::tes3::plugin::*;
+use tesutil::tes3::Skill as Skill3;
 use tesutil::tes4::save::*;
+use tesutil::tes4::Skill as Skill4;
+use tesutil::Attributes;
 
 mod config;
 pub use config::*;
@@ -40,48 +43,44 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
         .ok_or_else(|| anyhow!("Missing player change record in Oblivion save"))?;
     let mut ob_player_base = ActorChange::read(&ob_record_base)?;
     // set attributes
-    let mut attributes = ob_player_base
+    let attributes = ob_player_base
         .attributes_mut()
         .ok_or_else(|| anyhow!("Oblivion player base has no attributes"))?;
-    attributes.strength = mw_player_ref.strength.base as u8;
-    attributes.intelligence = mw_player_ref.intelligence.base as u8;
-    attributes.willpower = mw_player_ref.willpower.base as u8;
-    attributes.agility = mw_player_ref.agility.base as u8;
-    attributes.speed = mw_player_ref.speed.base as u8;
-    attributes.endurance = mw_player_ref.endurance.base as u8;
-    attributes.personality = mw_player_ref.personality.base as u8;
-    attributes.luck = mw_player_ref.luck.base as u8;
+    for (attribute, value) in attributes.iter_mut() {
+        *value = mw_player_ref.attributes[attribute].base as u8;
+    }
 
     // set skills
-    let mut skills = ob_player_base
+    let skills = ob_player_base
         .skills_mut()
         .ok_or_else(|| anyhow!("Oblivion player base has no skills"))?;
-    skills.armorer = mw_player_ref.armorer.base as u8;
-    skills.athletics = mw_player_ref.athletics.base as u8;
-    skills.blade = config.skill_combine_strategy.combine(
-        mw_player_ref.long_blade.base,
-        mw_player_ref.short_blade.base,
+    skills[Skill4::Armorer] = mw_player_ref.skills[Skill3::Armorer].base as u8;
+    skills[Skill4::Athletics] = mw_player_ref.skills[Skill3::Athletics].base as u8;
+    skills[Skill4::Blade] = config.skill_combine_strategy.combine(
+        mw_player_ref.skills[Skill3::LongBlade].base,
+        mw_player_ref.skills[Skill3::ShortBlade].base,
     ) as u8;
-    skills.block = mw_player_ref.block.base as u8;
-    skills.blunt = config
-        .skill_combine_strategy
-        .combine(mw_player_ref.axe.base, mw_player_ref.blunt.base) as u8;
-    skills.hand_to_hand = mw_player_ref.hand_to_hand.base as u8;
-    skills.heavy_armor = mw_player_ref.heavy_armor.base as u8;
-    skills.alchemy = mw_player_ref.alchemy.base as u8;
-    skills.alteration = mw_player_ref.alteration.base as u8;
-    skills.conjuration = mw_player_ref.conjuration.base as u8;
-    skills.destruction = mw_player_ref.destruction.base as u8;
-    skills.illusion = mw_player_ref.illusion.base as u8;
-    skills.mysticism = mw_player_ref.mysticism.base as u8;
-    skills.restoration = mw_player_ref.restoration.base as u8;
-    skills.acrobatics = mw_player_ref.acrobatics.base as u8;
-    skills.light_armor = mw_player_ref.light_armor.base as u8;
-    skills.marksman = mw_player_ref.marksman.base as u8;
-    skills.mercantile = mw_player_ref.mercantile.base as u8;
-    skills.security = mw_player_ref.security.base as u8;
-    skills.sneak = mw_player_ref.sneak.base as u8;
-    skills.speechcraft = mw_player_ref.speechcraft.base as u8;
+    skills[Skill4::Block] = mw_player_ref.skills[Skill3::Block].base as u8;
+    skills[Skill4::Blunt] = config.skill_combine_strategy.combine(
+        mw_player_ref.skills[Skill3::Axe].base,
+        mw_player_ref.skills[Skill3::Blunt].base,
+    ) as u8;
+    skills[Skill4::HandToHand] = mw_player_ref.skills[Skill3::HandToHand].base as u8;
+    skills[Skill4::HeavyArmor] = mw_player_ref.skills[Skill3::HeavyArmor].base as u8;
+    skills[Skill4::Alchemy] = mw_player_ref.skills[Skill3::Alchemy].base as u8;
+    skills[Skill4::Alteration] = mw_player_ref.skills[Skill3::Alteration].base as u8;
+    skills[Skill4::Conjuration] = mw_player_ref.skills[Skill3::Conjuration].base as u8;
+    skills[Skill4::Destruction] = mw_player_ref.skills[Skill3::Destruction].base as u8;
+    skills[Skill4::Illusion] = mw_player_ref.skills[Skill3::Illusion].base as u8;
+    skills[Skill4::Mysticism] = mw_player_ref.skills[Skill3::Mysticism].base as u8;
+    skills[Skill4::Restoration] = mw_player_ref.skills[Skill3::Restoration].base as u8;
+    skills[Skill4::Acrobatics] = mw_player_ref.skills[Skill3::Acrobatics].base as u8;
+    skills[Skill4::LightArmor] = mw_player_ref.skills[Skill3::LightArmor].base as u8;
+    skills[Skill4::Marksman] = mw_player_ref.skills[Skill3::Marksman].base as u8;
+    skills[Skill4::Mercantile] = mw_player_ref.skills[Skill3::Mercantile].base as u8;
+    skills[Skill4::Security] = mw_player_ref.skills[Skill3::Security].base as u8;
+    skills[Skill4::Sneak] = mw_player_ref.skills[Skill3::Sneak].base as u8;
+    skills[Skill4::Speechcraft] = mw_player_ref.skills[Skill3::Speechcraft].base as u8;
 
     // set level
     if ob_player_base.actor_base().is_none() {
@@ -105,44 +104,24 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
 
     ob_player_ref.major_skill_advancements = mw_player_data.level_progress;
 
-    ob_player_ref.combat_increases = mw_player_data.combat_increases;
-    ob_player_ref.magic_increases = mw_player_data.magic_increases;
-    ob_player_ref.stealth_increases = mw_player_data.stealth_increases;
+    for (spec, value) in ob_player_ref.spec_increases.iter_mut() {
+        *value = mw_player_data.spec_increases[spec];
+    }
 
     let mut advancements = vec![];
     // Morrowind doesn't track advancements by level like Oblivion does, so we have to fake it here.
     // I don't actually know how Oblivion would handle an advancement greater than 10, but it never
     // happens in normal gameplay, so I figure it's best to enforce it here.
-    let mut attributes = Attributes {
-        strength: mw_player_data.strength_progress,
-        intelligence: mw_player_data.intelligence_progress,
-        willpower: mw_player_data.willpower_progress,
-        agility: mw_player_data.agility_progress,
-        endurance: mw_player_data.endurance_progress,
-        speed: mw_player_data.speed_progress,
-        personality: mw_player_data.personality_progress,
-        luck: mw_player_data.luck_progress,
-    };
-    while !attributes.are_all_zero() {
-        let advancement = Attributes {
-            strength: attributes.strength % 10,
-            intelligence: attributes.intelligence % 10,
-            willpower: attributes.willpower % 10,
-            agility: attributes.agility % 10,
-            endurance: attributes.endurance % 10,
-            speed: attributes.speed % 10,
-            personality: attributes.personality % 10,
-            luck: attributes.luck % 10,
-        };
+    let mut attributes = mw_player_data.attribute_progress.clone();
+    while attributes.values().sum::<u8>() > 0 {
+        let mut advancement = Attributes::new();
+        for (attribute, value) in advancement.iter_mut() {
+            *value = attributes[attribute] % 10;
+        }
 
-        attributes.strength -= advancement.strength;
-        attributes.intelligence -= advancement.intelligence;
-        attributes.willpower -= advancement.willpower;
-        attributes.agility -= advancement.agility;
-        attributes.endurance -= advancement.endurance;
-        attributes.speed -= advancement.speed;
-        attributes.personality -= advancement.personality;
-        attributes.luck -= advancement.luck;
+        for (attribute, value) in attributes.iter_mut() {
+            *value -= advancement[attribute];
+        }
 
         advancements.push(advancement);
     }

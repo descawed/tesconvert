@@ -1,5 +1,6 @@
 use crate::plugin::*;
 use crate::tes3::plugin::*;
+use crate::tes3::Skills;
 
 /// A statistic, such as an attribute, skill, health, etc.
 #[derive(Debug, Default)]
@@ -11,8 +12,8 @@ pub struct Stat<T> {
 macro_rules! extract_stats {
     ($f:ident, $p:ident, $t:ty, $($s:ident),+) => {
         $({
-            $p.$s.current = extract!($f as $t).unwrap();
-            $p.$s.base = extract!($f as $t).unwrap();
+            $p.$s.current = extract!($f as $t)?;
+            $p.$s.base = extract!($f as $t)?;
         })*
     }
 }
@@ -40,46 +41,13 @@ pub struct PlayerReference {
     pub fatigue: Stat<f32>,
     pub magicka: Stat<f32>,
     unknown3: [u8; 16],
-    pub strength: Stat<f32>,
-    pub intelligence: Stat<f32>,
-    pub willpower: Stat<f32>,
-    pub agility: Stat<f32>,
-    pub speed: Stat<f32>,
-    pub endurance: Stat<f32>,
-    pub personality: Stat<f32>,
-    pub luck: Stat<f32>,
+    pub attributes: Attributes<Stat<f32>>,
     magic_effects: [f32; 27],
     unknown4: [u8; 4],
     gold: u32,
     count_down: u8,
     unknown5: [u8; 3],
-    pub block: Stat<u32>,
-    pub armorer: Stat<u32>,
-    pub medium_armor: Stat<u32>,
-    pub heavy_armor: Stat<u32>,
-    pub blunt: Stat<u32>,
-    pub long_blade: Stat<u32>,
-    pub axe: Stat<u32>,
-    pub spear: Stat<u32>,
-    pub athletics: Stat<u32>,
-    pub enchant: Stat<u32>,
-    pub destruction: Stat<u32>,
-    pub alteration: Stat<u32>,
-    pub illusion: Stat<u32>,
-    pub conjuration: Stat<u32>,
-    pub mysticism: Stat<u32>,
-    pub restoration: Stat<u32>,
-    pub alchemy: Stat<u32>,
-    pub unarmored: Stat<u32>,
-    pub security: Stat<u32>,
-    pub sneak: Stat<u32>,
-    pub acrobatics: Stat<u32>,
-    pub light_armor: Stat<u32>,
-    pub short_blade: Stat<u32>,
-    pub marksman: Stat<u32>,
-    pub mercantile: Stat<u32>,
-    pub speechcraft: Stat<u32>,
-    pub hand_to_hand: Stat<u32>,
+    pub skills: Skills<Stat<u32>>,
 }
 
 impl PlayerReference {
@@ -105,46 +73,13 @@ impl PlayerReference {
             fatigue: Stat::default(),
             magicka: Stat::default(),
             unknown3: [0; 16],
-            strength: Stat::default(),
-            intelligence: Stat::default(),
-            willpower: Stat::default(),
-            agility: Stat::default(),
-            speed: Stat::default(),
-            endurance: Stat::default(),
-            personality: Stat::default(),
-            luck: Stat::default(),
+            attributes: Attributes::new(),
             magic_effects: [0.; 27],
             unknown4: [0; 4],
             gold: 0,
             count_down: 0,
             unknown5: [0; 3],
-            block: Stat::default(),
-            armorer: Stat::default(),
-            medium_armor: Stat::default(),
-            heavy_armor: Stat::default(),
-            blunt: Stat::default(),
-            long_blade: Stat::default(),
-            axe: Stat::default(),
-            spear: Stat::default(),
-            athletics: Stat::default(),
-            enchant: Stat::default(),
-            destruction: Stat::default(),
-            alteration: Stat::default(),
-            illusion: Stat::default(),
-            conjuration: Stat::default(),
-            mysticism: Stat::default(),
-            restoration: Stat::default(),
-            alchemy: Stat::default(),
-            unarmored: Stat::default(),
-            security: Stat::default(),
-            sneak: Stat::default(),
-            acrobatics: Stat::default(),
-            light_armor: Stat::default(),
-            short_blade: Stat::default(),
-            marksman: Stat::default(),
-            mercantile: Stat::default(),
-            speechcraft: Stat::default(),
-            hand_to_hand: Stat::default(),
+            skills: Skills::new(),
         };
 
         for field in record.iter() {
@@ -159,22 +94,16 @@ impl PlayerReference {
                     reader.read_exact(&mut player.unknown2)?;
                     extract_stats!(reader, player, f32, health, fatigue, magicka);
                     reader.read_exact(&mut player.unknown3)?;
-                    extract_stats!(
-                        reader,
-                        player,
-                        f32,
-                        strength,
-                        intelligence,
-                        willpower,
-                        agility,
-                        speed,
-                        endurance,
-                        personality,
-                        luck
-                    );
-                    for i in 0..player.magic_effects.len() {
-                        player.magic_effects[i] = extract!(reader as f32)?;
+
+                    for attribute in player.attributes.values_mut() {
+                        (*attribute).current = extract!(reader as f32)?;
+                        (*attribute).base = extract!(reader as f32)?;
                     }
+
+                    for magic_effect in &mut player.magic_effects {
+                        *magic_effect = extract!(reader as f32)?;
+                    }
+
                     reader.read_exact(&mut player.unknown4)?;
                     player.gold = extract!(reader as u32)?;
                     player.count_down = extract!(reader as u8)?;
@@ -184,38 +113,10 @@ impl PlayerReference {
                     let mut buf_ref = field.get();
                     let reader = &mut buf_ref;
 
-                    extract_stats!(
-                        reader,
-                        player,
-                        u32,
-                        block,
-                        armorer,
-                        medium_armor,
-                        heavy_armor,
-                        blunt,
-                        long_blade,
-                        axe,
-                        spear,
-                        athletics,
-                        enchant,
-                        destruction,
-                        alteration,
-                        illusion,
-                        conjuration,
-                        mysticism,
-                        restoration,
-                        alchemy,
-                        unarmored,
-                        security,
-                        sneak,
-                        acrobatics,
-                        light_armor,
-                        short_blade,
-                        marksman,
-                        mercantile,
-                        speechcraft,
-                        hand_to_hand
-                    );
+                    for skill in player.skills.values_mut() {
+                        (*skill).current = extract!(reader as u32)?;
+                        (*skill).base = extract!(reader as u32)?;
+                    }
                 }
                 _ => (),
             }
@@ -243,18 +144,10 @@ impl PlayerReference {
                     writer.write_exact(&self.unknown2)?;
                     serialize_stats!(writer, self, health, fatigue, magicka);
                     writer.write_exact(&self.unknown3)?;
-                    serialize_stats!(
-                        writer,
-                        self,
-                        strength,
-                        intelligence,
-                        willpower,
-                        agility,
-                        speed,
-                        endurance,
-                        personality,
-                        luck
-                    );
+                    for attribute in self.attributes.values() {
+                        serialize!(attribute.current => writer)?;
+                        serialize!(attribute.base => writer)?;
+                    }
                     for effect in &self.magic_effects {
                         serialize!(effect => writer)?;
                     }
@@ -269,37 +162,10 @@ impl PlayerReference {
                     let mut buf: Vec<u8> = Vec::new();
                     let writer = &mut buf;
 
-                    serialize_stats!(
-                        writer,
-                        self,
-                        block,
-                        armorer,
-                        medium_armor,
-                        heavy_armor,
-                        blunt,
-                        long_blade,
-                        axe,
-                        spear,
-                        athletics,
-                        enchant,
-                        destruction,
-                        alteration,
-                        illusion,
-                        conjuration,
-                        mysticism,
-                        restoration,
-                        alchemy,
-                        unarmored,
-                        security,
-                        sneak,
-                        acrobatics,
-                        light_armor,
-                        short_blade,
-                        marksman,
-                        mercantile,
-                        speechcraft,
-                        hand_to_hand
-                    );
+                    for skill in self.skills.values() {
+                        serialize!(skill.current => writer)?;
+                        serialize!(skill.base => writer)?;
+                    }
 
                     field.set(buf)?;
                 }
@@ -314,6 +180,7 @@ impl PlayerReference {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tes3::Skill;
 
     static REFR_RECORD: &[u8] = include_bytes!("test/refr_record.bin");
 
@@ -322,7 +189,7 @@ mod tests {
         let cursor = io::Cursor::new(REFR_RECORD);
         let record = Record::read(cursor).unwrap();
         let player = PlayerReference::read(&record).unwrap();
-        assert_eq!(player.strength.base, 38.);
-        assert_eq!(player.destruction.base, 91);
+        assert_eq!(player.attributes[Attribute::Strength].base, 38.);
+        assert_eq!(player.skills[Skill::Destruction].base, 91);
     }
 }

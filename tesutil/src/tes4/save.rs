@@ -13,68 +13,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
-/// An actor's attributes
-#[derive(Debug, Clone)]
-pub struct Attributes {
-    pub strength: u8,
-    pub intelligence: u8,
-    pub willpower: u8,
-    pub agility: u8,
-    pub speed: u8,
-    pub endurance: u8,
-    pub personality: u8,
-    pub luck: u8,
-}
-
-impl Attributes {
-    /// Reads a character's attributes from a binary stream
-    ///
-    /// # Errors
-    ///
-    /// Fails if an I/O error occurs
-    pub fn read<T: Read>(mut f: T) -> Result<Attributes, TesError> {
-        Ok(Attributes {
-            strength: extract!(f as u8)?,
-            intelligence: extract!(f as u8)?,
-            willpower: extract!(f as u8)?,
-            agility: extract!(f as u8)?,
-            speed: extract!(f as u8)?,
-            endurance: extract!(f as u8)?,
-            personality: extract!(f as u8)?,
-            luck: extract!(f as u8)?,
-        })
-    }
-
-    /// Writes a character's attributes to a binary stream
-    ///
-    /// # Errors
-    ///
-    /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
-        serialize!(self.strength => f)?;
-        serialize!(self.intelligence => f)?;
-        serialize!(self.willpower => f)?;
-        serialize!(self.agility => f)?;
-        serialize!(self.speed => f)?;
-        serialize!(self.endurance => f)?;
-        serialize!(self.personality => f)?;
-        serialize!(self.luck => f)?;
-        Ok(())
-    }
-
-    /// Checks whether all the attributes are all 0
-    pub fn are_all_zero(&self) -> bool {
-        self.strength == 0
-            && self.intelligence == 0
-            && self.willpower == 0
-            && self.agility == 0
-            && self.speed == 0
-            && self.endurance == 0
-            && self.personality == 0
-            && self.luck == 0
-    }
-}
-
 /// Form ID of the player's base record
 pub const FORM_PLAYER: u32 = 7;
 /// Form ID of the player's reference

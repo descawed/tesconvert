@@ -1,10 +1,11 @@
 #![allow(clippy::single_component_path_imports)]
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::io::{Cursor, Seek, SeekFrom};
 
-use crate::tes4::save::{Attributes, ChangeRecord, ChangeType, FORM_PLAYER_REF};
+use crate::tes4::save::{ChangeRecord, ChangeType, FORM_PLAYER_REF};
+use crate::tes4::{ActorValue, ActorValues, Skill, Skills};
 use crate::*;
 
 use bitflags;
@@ -434,10 +435,9 @@ impl ActiveEffect {
 /// A class, if the player created a custom class
 #[derive(Debug)]
 pub struct CustomClass {
-    // TODO: make these enums
-    favored_attributes: [u32; 2],
-    specialization: u32,
-    major_skills: [u32; 7],
+    favored_attributes: [Attribute; 2],
+    specialization: Specialization,
+    major_skills: [Skill; 7],
     flags: u32,
     services: u32,
     skill_trained: u8,
@@ -453,16 +453,18 @@ impl CustomClass {
     ///
     /// Fails if an I/O error occurs
     pub fn read<T: Read>(mut f: T) -> Result<CustomClass, TesError> {
-        let mut favored_attributes = [0u32; 2];
+        let mut favored_attributes = [Attribute::Strength; 2];
         for favored_attribute in &mut favored_attributes {
-            *favored_attribute = extract!(f as u32)?;
+            let val = extract!(f as u32)? as usize;
+            *favored_attribute = <Attribute as Enum<()>>::from_usize(val);
         }
 
-        let specialization = extract!(f as u32)?;
+        let specialization = <Specialization as Enum<()>>::from_usize(extract!(f as u32)? as usize);
 
-        let mut major_skills = [0u32; 7];
+        let mut major_skills = [Skill::Acrobatics; 7];
         for major_skill in &mut major_skills {
-            *major_skill = extract!(f as u32)?;
+            let av = <ActorValue as Enum<()>>::from_usize(extract!(f as u32)? as usize);
+            *major_skill = av.try_into()?;
         }
 
         let flags = extract!(f as u32)?;
@@ -493,13 +495,14 @@ impl CustomClass {
     /// Fails if an I/O error occurs
     pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         for attribute in self.favored_attributes.iter() {
-            serialize!(attribute => f)?;
+            serialize!(<Attribute as Enum<()>>::to_usize(*attribute) as u32 => f)?;
         }
 
-        serialize!(self.specialization => f)?;
+        serialize!(<Specialization as Enum<()>>::to_usize(self.specialization) as u32 => f)?;
 
         for skill in self.major_skills.iter() {
-            serialize!(skill => f)?;
+            let av: ActorValue = (*skill).into();
+            serialize!(<ActorValue as Enum<()>>::to_usize(av) as u32 => f)?;
         }
 
         serialize!(self.flags => f)?;
@@ -530,9 +533,9 @@ pub struct PlayerReferenceChange {
     ry: f32,
     rz: f32,
     // temporary attribute changes
-    temp_active_effects: [f32; 72],
-    tac_unknown: [f32; 72],
-    damage: [f32; 72],
+    temp_active_effects: ActorValues<f32>,
+    tac_unknown: ActorValues<f32>,
+    damage: ActorValues<f32>,
     health_delta: f32,
     magicka_delta: f32,
     fatigue_delta: f32,
@@ -555,52 +558,10 @@ pub struct PlayerReferenceChange {
     oblivion_doors: Vec<(u32, u8)>,
     stat_unknown6: [u8; 2],
     stat_active_effects: Vec<ActiveEffect>,
-    pub armorer_xp: f32,
-    pub athletics_xp: f32,
-    pub blade_xp: f32,
-    pub block_xp: f32,
-    pub blunt_xp: f32,
-    pub hand_to_hand_xp: f32,
-    pub heavy_armor_xp: f32,
-    pub alchemy_xp: f32,
-    pub alteration_xp: f32,
-    pub conjuration_xp: f32,
-    pub destruction_xp: f32,
-    pub illusion_xp: f32,
-    pub mysticism_xp: f32,
-    pub restoration_xp: f32,
-    pub acrobatics_xp: f32,
-    pub light_armor_xp: f32,
-    pub marksman_xp: f32,
-    pub mercantile_xp: f32,
-    pub security_xp: f32,
-    pub sneak_xp: f32,
-    pub speechcraft_xp: f32,
-    pub advancements: Vec<Attributes>,
-    pub combat_increases: u8,
-    pub magic_increases: u8,
-    pub stealth_increases: u8,
-    pub armorer_usage: u32,
-    pub athletics_usage: u32,
-    pub blade_usage: u32,
-    pub block_usage: u32,
-    pub blunt_usage: u32,
-    pub hand_to_hand_usage: u32,
-    pub heavy_armor_usage: u32,
-    pub alchemy_usage: u32,
-    pub alteration_usage: u32,
-    pub conjuration_usage: u32,
-    pub destruction_usage: u32,
-    pub illusion_usage: u32,
-    pub mysticism_usage: u32,
-    pub restoration_usage: u32,
-    pub acrobatics_usage: u32,
-    pub light_armor_usage: u32,
-    pub marksman_usage: u32,
-    pub mercantile_usage: u32,
-    pub security_usage: u32,
-    pub sneak_usage: u32,
-    pub speechcraft_usage: u32,
+    pub skill_xp: Skills<f32>,
+    pub advancements: Vec<Attributes<u8>>,
+    pub spec_increases: Specializations<u8>,
+    pub skill_usage: Skills<u32>,
     pub major_skill_advancements: u32,
     stat_unknown7: u8,
     active_quest: u32,
@@ -657,24 +618,20 @@ impl PlayerReferenceChange {
         let ry = extract!(reader as f32)?;
         let rz = extract!(reader as f32)?;
 
-        let mut temp_active_effects = [0f32; 72];
-        let mut tac_unknown = [0f32; 72];
-        let mut damage = [0f32; 72];
+        let mut temp_active_effects = ActorValues::new();
+        let mut tac_unknown = ActorValues::new();
+        let mut damage = ActorValues::new();
 
-        // can't use an iterator because these arrays are longer than 32 elements
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..temp_active_effects.len() {
-            temp_active_effects[i] = extract!(reader as f32)?;
+        for effect in temp_active_effects.values_mut() {
+            *effect = extract!(reader as f32)?;
         }
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..tac_unknown.len() {
-            tac_unknown[i] = extract!(reader as f32)?;
+        for tac in tac_unknown.values_mut() {
+            *tac = extract!(reader as f32)?;
         }
 
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..damage.len() {
-            damage[i] = extract!(reader as f32)?;
+        for dmg in damage.values_mut() {
+            *dmg = extract!(reader as f32)?;
         }
 
         let health_delta = extract!(reader as f32)?;
@@ -731,6 +688,7 @@ impl PlayerReferenceChange {
 
         // player statistics
         let mut statistics = [0u32; 34];
+        // can't use an iterator because these arrays are longer than 32 elements
         #[allow(clippy::needless_range_loop)]
         for i in 0..statistics.len() {
             statistics[i] = extract!(reader as u32)?;
@@ -774,59 +732,31 @@ impl PlayerReferenceChange {
             stat_active_effects.push(ActiveEffect::read(&mut reader)?);
         }
 
-        let armorer_xp = extract!(reader as f32)?;
-        let athletics_xp = extract!(reader as f32)?;
-        let blade_xp = extract!(reader as f32)?;
-        let block_xp = extract!(reader as f32)?;
-        let blunt_xp = extract!(reader as f32)?;
-        let hand_to_hand_xp = extract!(reader as f32)?;
-        let heavy_armor_xp = extract!(reader as f32)?;
-        let alchemy_xp = extract!(reader as f32)?;
-        let alteration_xp = extract!(reader as f32)?;
-        let conjuration_xp = extract!(reader as f32)?;
-        let destruction_xp = extract!(reader as f32)?;
-        let illusion_xp = extract!(reader as f32)?;
-        let mysticism_xp = extract!(reader as f32)?;
-        let restoration_xp = extract!(reader as f32)?;
-        let acrobatics_xp = extract!(reader as f32)?;
-        let light_armor_xp = extract!(reader as f32)?;
-        let marksman_xp = extract!(reader as f32)?;
-        let mercantile_xp = extract!(reader as f32)?;
-        let security_xp = extract!(reader as f32)?;
-        let sneak_xp = extract!(reader as f32)?;
-        let speechcraft_xp = extract!(reader as f32)?;
+        let mut skill_xp = Skills::new();
+        for skill in skill_xp.values_mut() {
+            *skill = extract!(reader as f32)?;
+        }
 
         let num_advancements = extract!(reader as u32)? as usize;
         let mut advancements = Vec::with_capacity(num_advancements);
         for _ in 0..num_advancements {
-            advancements.push(Attributes::read(&mut reader)?);
+            let mut attributes = Attributes::new();
+            for attribute in attributes.values_mut() {
+                *attribute = extract!(reader as u8)?;
+            }
+
+            advancements.push(attributes);
         }
 
-        let combat_increase = extract!(reader as u8)?;
-        let magic_increase = extract!(reader as u8)?;
-        let stealth_increase = extract!(reader as u8)?;
+        let mut spec_increases = Specializations::new();
+        for specialization in spec_increases.values_mut() {
+            *specialization = extract!(reader as u8)?;
+        }
 
-        let armorer_usage = extract!(reader as u32)?;
-        let athletics_usage = extract!(reader as u32)?;
-        let blade_usage = extract!(reader as u32)?;
-        let block_usage = extract!(reader as u32)?;
-        let blunt_usage = extract!(reader as u32)?;
-        let hand_to_hand_usage = extract!(reader as u32)?;
-        let heavy_armor_usage = extract!(reader as u32)?;
-        let alchemy_usage = extract!(reader as u32)?;
-        let alteration_usage = extract!(reader as u32)?;
-        let conjuration_usage = extract!(reader as u32)?;
-        let destruction_usage = extract!(reader as u32)?;
-        let illusion_usage = extract!(reader as u32)?;
-        let mysticism_usage = extract!(reader as u32)?;
-        let restoration_usage = extract!(reader as u32)?;
-        let acrobatics_usage = extract!(reader as u32)?;
-        let light_armor_usage = extract!(reader as u32)?;
-        let marksman_usage = extract!(reader as u32)?;
-        let mercantile_usage = extract!(reader as u32)?;
-        let security_usage = extract!(reader as u32)?;
-        let sneak_usage = extract!(reader as u32)?;
-        let speechcraft_usage = extract!(reader as u32)?;
+        let mut skill_usage = Skills::new();
+        for skill in skill_usage.values_mut() {
+            *skill = extract!(reader as u32)?;
+        }
 
         let major_skill_advancements = extract!(reader as u32)?;
         let stat_unknown7 = extract!(reader as u8)?;
@@ -922,52 +852,10 @@ impl PlayerReferenceChange {
             oblivion_doors,
             stat_unknown6,
             stat_active_effects,
-            armorer_xp,
-            athletics_xp,
-            blade_xp,
-            block_xp,
-            blunt_xp,
-            hand_to_hand_xp,
-            heavy_armor_xp,
-            alchemy_xp,
-            alteration_xp,
-            conjuration_xp,
-            destruction_xp,
-            illusion_xp,
-            mysticism_xp,
-            restoration_xp,
-            acrobatics_xp,
-            light_armor_xp,
-            marksman_xp,
-            mercantile_xp,
-            security_xp,
-            sneak_xp,
-            speechcraft_xp,
+            skill_xp,
             advancements,
-            combat_increases: combat_increase,
-            magic_increases: magic_increase,
-            stealth_increases: stealth_increase,
-            armorer_usage,
-            athletics_usage,
-            blade_usage,
-            block_usage,
-            blunt_usage,
-            hand_to_hand_usage,
-            heavy_armor_usage,
-            alchemy_usage,
-            alteration_usage,
-            conjuration_usage,
-            destruction_usage,
-            illusion_usage,
-            mysticism_usage,
-            restoration_usage,
-            acrobatics_usage,
-            light_armor_usage,
-            marksman_usage,
-            mercantile_usage,
-            security_usage,
-            sneak_usage,
-            speechcraft_usage,
+            spec_increases,
+            skill_usage,
             major_skill_advancements,
             stat_unknown7,
             active_quest,
@@ -1026,15 +914,15 @@ impl PlayerReferenceChange {
         serialize!(self.ry => writer)?;
         serialize!(self.rz => writer)?;
 
-        for effect in self.temp_active_effects.iter() {
+        for effect in self.temp_active_effects.values() {
             serialize!(effect => writer)?;
         }
 
-        for unknown in self.tac_unknown.iter() {
+        for unknown in self.tac_unknown.values() {
             serialize!(unknown => writer)?;
         }
 
-        for damage in self.damage.iter() {
+        for damage in self.damage.values() {
             serialize!(damage => writer)?;
         }
 
@@ -1088,58 +976,22 @@ impl PlayerReferenceChange {
             effect.write(&mut writer)?;
         }
 
-        serialize!(self.armorer_xp => writer)?;
-        serialize!(self.athletics_xp => writer)?;
-        serialize!(self.blade_xp => writer)?;
-        serialize!(self.block_xp => writer)?;
-        serialize!(self.blunt_xp => writer)?;
-        serialize!(self.hand_to_hand_xp => writer)?;
-        serialize!(self.heavy_armor_xp => writer)?;
-        serialize!(self.alchemy_xp => writer)?;
-        serialize!(self.alteration_xp => writer)?;
-        serialize!(self.conjuration_xp => writer)?;
-        serialize!(self.destruction_xp => writer)?;
-        serialize!(self.illusion_xp => writer)?;
-        serialize!(self.mysticism_xp => writer)?;
-        serialize!(self.restoration_xp => writer)?;
-        serialize!(self.acrobatics_xp => writer)?;
-        serialize!(self.light_armor_xp => writer)?;
-        serialize!(self.marksman_xp => writer)?;
-        serialize!(self.mercantile_xp => writer)?;
-        serialize!(self.security_xp => writer)?;
-        serialize!(self.sneak_xp => writer)?;
-        serialize!(self.speechcraft_xp => writer)?;
-
-        serialize!(self.advancements.len() as u32 => writer)?;
-        for adv in self.advancements.iter() {
-            adv.write(&mut writer)?;
+        for skill in self.skill_xp.values() {
+            serialize!(skill => writer)?;
         }
 
-        serialize!(self.combat_increases => writer)?;
-        serialize!(self.magic_increases => writer)?;
-        serialize!(self.stealth_increases => writer)?;
+        serialize!(self.advancements.len() as u32 => writer)?;
+        for adv in self.advancements.iter().flat_map(|v| v.values()) {
+            serialize!(adv => writer)?;
+        }
 
-        serialize!(self.armorer_usage => writer)?;
-        serialize!(self.athletics_usage => writer)?;
-        serialize!(self.blade_usage => writer)?;
-        serialize!(self.block_usage => writer)?;
-        serialize!(self.blunt_usage => writer)?;
-        serialize!(self.hand_to_hand_usage => writer)?;
-        serialize!(self.heavy_armor_usage => writer)?;
-        serialize!(self.alchemy_usage => writer)?;
-        serialize!(self.alteration_usage => writer)?;
-        serialize!(self.conjuration_usage => writer)?;
-        serialize!(self.destruction_usage => writer)?;
-        serialize!(self.illusion_usage => writer)?;
-        serialize!(self.mysticism_usage => writer)?;
-        serialize!(self.restoration_usage => writer)?;
-        serialize!(self.acrobatics_usage => writer)?;
-        serialize!(self.light_armor_usage => writer)?;
-        serialize!(self.marksman_usage => writer)?;
-        serialize!(self.mercantile_usage => writer)?;
-        serialize!(self.security_usage => writer)?;
-        serialize!(self.sneak_usage => writer)?;
-        serialize!(self.speechcraft_usage => writer)?;
+        for spec in self.spec_increases.values() {
+            serialize!(spec => writer)?;
+        }
+
+        for skill in self.skill_usage.values() {
+            serialize!(skill => writer)?;
+        }
 
         serialize!(self.major_skill_advancements => writer)?;
         serialize!(self.stat_unknown7 => writer)?;

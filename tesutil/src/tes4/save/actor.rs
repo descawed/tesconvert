@@ -1,9 +1,12 @@
 #![allow(clippy::single_component_path_imports)]
 
-use crate::tes4::save::{Attributes, ChangeRecord, ChangeType};
-use crate::*;
-use bitflags;
 use std::io::Read;
+
+use crate::tes4::save::{Attributes, ChangeRecord, ChangeType};
+use crate::tes4::Skills;
+use crate::*;
+
+use bitflags;
 
 bitflags! {
     struct ActorChangeFlags: u32 {
@@ -63,38 +66,12 @@ impl Default for ActorBase {
     }
 }
 
-/// An actor's skills
-#[derive(Debug)]
-pub struct Skills {
-    pub armorer: u8,
-    pub athletics: u8,
-    pub blade: u8,
-    pub block: u8,
-    pub blunt: u8,
-    pub hand_to_hand: u8,
-    pub heavy_armor: u8,
-    pub alchemy: u8,
-    pub alteration: u8,
-    pub conjuration: u8,
-    pub destruction: u8,
-    pub illusion: u8,
-    pub mysticism: u8,
-    pub restoration: u8,
-    pub acrobatics: u8,
-    pub light_armor: u8,
-    pub marksman: u8,
-    pub mercantile: u8,
-    pub security: u8,
-    pub sneak: u8,
-    pub speechcraft: u8,
-}
-
 /// A change record for an NPC or creature
 #[derive(Debug)]
 pub struct ActorChange {
     change_type: ChangeType,
     flags: Option<u32>,
-    attributes: Option<Attributes>,
+    attributes: Option<Attributes<u8>>,
     base: Option<ActorBase>,
     factions: Vec<(u32, i8)>,
     spells: Vec<u32>,
@@ -102,7 +79,7 @@ pub struct ActorChange {
     base_health: Option<u32>,
     modifiers: Vec<(u8, f32)>,
     full_name: Option<String>,
-    skills: Option<Skills>,
+    skills: Option<Skills<u8>>,
     combat_style: Option<u32>,
 }
 
@@ -150,7 +127,12 @@ impl ActorChange {
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_ATTRIBUTES) {
-            actor_change.attributes = Some(Attributes::read(&mut reader)?);
+            let mut attributes = Attributes::new();
+            for attribute in attributes.values_mut() {
+                *attribute = extract!(reader as u8)?;
+            }
+
+            actor_change.attributes = Some(attributes);
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_DATA) {
@@ -210,29 +192,12 @@ impl ActorChange {
         }
 
         if change_flags.contains(ActorChangeFlags::SKILLS) {
-            actor_change.skills = Some(Skills {
-                armorer: extract!(reader as u8)?,
-                athletics: extract!(reader as u8)?,
-                blade: extract!(reader as u8)?,
-                block: extract!(reader as u8)?,
-                blunt: extract!(reader as u8)?,
-                hand_to_hand: extract!(reader as u8)?,
-                heavy_armor: extract!(reader as u8)?,
-                alchemy: extract!(reader as u8)?,
-                alteration: extract!(reader as u8)?,
-                conjuration: extract!(reader as u8)?,
-                destruction: extract!(reader as u8)?,
-                illusion: extract!(reader as u8)?,
-                mysticism: extract!(reader as u8)?,
-                restoration: extract!(reader as u8)?,
-                acrobatics: extract!(reader as u8)?,
-                light_armor: extract!(reader as u8)?,
-                marksman: extract!(reader as u8)?,
-                mercantile: extract!(reader as u8)?,
-                security: extract!(reader as u8)?,
-                sneak: extract!(reader as u8)?,
-                speechcraft: extract!(reader as u8)?,
-            });
+            let mut skills = Skills::new();
+            for skill in skills.values_mut() {
+                *skill = extract!(reader as u8)?;
+            }
+
+            actor_change.skills = Some(skills);
         }
 
         if change_flags.contains(ActorChangeFlags::COMBAT_STYLE) {
@@ -243,22 +208,22 @@ impl ActorChange {
     }
 
     /// Gets the actor's attributes
-    pub fn attributes(&self) -> Option<&Attributes> {
+    pub fn attributes(&self) -> Option<&Attributes<u8>> {
         self.attributes.as_ref()
     }
 
     /// Gets the actor's attributes mutably
-    pub fn attributes_mut(&mut self) -> Option<&mut Attributes> {
+    pub fn attributes_mut(&mut self) -> Option<&mut Attributes<u8>> {
         self.attributes.as_mut()
     }
 
     /// Gets the actor's skills
-    pub fn skills(&self) -> Option<&Skills> {
+    pub fn skills(&self) -> Option<&Skills<u8>> {
         self.skills.as_ref()
     }
 
     /// Gets the actor's skills mutably
-    pub fn skills_mut(&mut self) -> Option<&mut Skills> {
+    pub fn skills_mut(&mut self) -> Option<&mut Skills<u8>> {
         self.skills.as_mut()
     }
 
@@ -315,7 +280,9 @@ impl ActorChange {
 
         if let Some(ref attributes) = self.attributes {
             flags |= ActorChangeFlags::BASE_ATTRIBUTES;
-            attributes.write(&mut writer)?;
+            for attribute in attributes.values() {
+                serialize!(attribute => writer)?;
+            }
         }
 
         if let Some(ref base_data) = self.base {
@@ -375,27 +342,9 @@ impl ActorChange {
 
         if let Some(ref skills) = self.skills {
             flags |= ActorChangeFlags::SKILLS;
-            serialize!(skills.armorer => writer)?;
-            serialize!(skills.athletics => writer)?;
-            serialize!(skills.blade => writer)?;
-            serialize!(skills.block => writer)?;
-            serialize!(skills.blunt => writer)?;
-            serialize!(skills.hand_to_hand => writer)?;
-            serialize!(skills.heavy_armor => writer)?;
-            serialize!(skills.alchemy => writer)?;
-            serialize!(skills.alteration => writer)?;
-            serialize!(skills.conjuration => writer)?;
-            serialize!(skills.destruction => writer)?;
-            serialize!(skills.illusion => writer)?;
-            serialize!(skills.mysticism => writer)?;
-            serialize!(skills.restoration => writer)?;
-            serialize!(skills.acrobatics => writer)?;
-            serialize!(skills.light_armor => writer)?;
-            serialize!(skills.marksman => writer)?;
-            serialize!(skills.mercantile => writer)?;
-            serialize!(skills.security => writer)?;
-            serialize!(skills.sneak => writer)?;
-            serialize!(skills.speechcraft => writer)?;
+            for skill in skills.values() {
+                serialize!(skill => writer)?;
+            }
         }
 
         if let Some(combat_style) = self.combat_style {
@@ -418,6 +367,9 @@ mod tests {
         let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
         let player = save.get_change_record(FORM_PLAYER).unwrap();
         let actor_change = ActorChange::read(player).unwrap();
-        assert_eq!(actor_change.attributes.unwrap().intelligence, 40);
+        assert_eq!(
+            actor_change.attributes.unwrap()[Attribute::Intelligence],
+            40
+        );
     }
 }

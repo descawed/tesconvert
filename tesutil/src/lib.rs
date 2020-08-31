@@ -16,6 +16,7 @@ use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::iter;
 use std::str;
 
+use enum_map::{Enum, EnumMap};
 use len_trait::len::Len;
 use thiserror::*;
 
@@ -38,6 +39,74 @@ macro_rules! serialize {
         let value = $v;
         $f.write(&value.to_le_bytes())
     }};
+}
+
+/// All possible attributes
+#[derive(Copy, Clone, Debug, Enum)]
+pub enum Attribute {
+    Strength,
+    Intelligence,
+    Willpower,
+    Agility,
+    Speed,
+    Endurance,
+    Personality,
+    Luck,
+}
+
+/// Character skills
+pub type Attributes<T> = EnumMap<Attribute, T>;
+
+/// All possible specializations
+#[derive(Copy, Clone, Debug, Enum)]
+pub enum Specialization {
+    Combat,
+    Magic,
+    Stealth,
+}
+
+/// Specialization mapping
+pub type Specializations<T> = EnumMap<Specialization, T>;
+
+/// Error type for utility errors
+///
+/// A type for errors that may occur while manipulating game files.
+#[derive(Error, Debug)]
+pub enum TesError {
+    /// Multiple records in the plugin have the same ID string
+    #[error("ID {0} already in use")]
+    DuplicateId(String),
+    /// The same master file is referenced by the plugin multiple times
+    #[error("Master {0} already present")]
+    DuplicateMaster(String),
+    /// A size limit, e.g. on a record or field, has been exceeded
+    #[error("Limit exceeded: {description}. Max size {max_size}, actual size {actual_size}")]
+    LimitExceeded {
+        description: String,
+        max_size: usize,
+        actual_size: usize,
+    },
+    /// A value is not in the expected range
+    #[error("Out of range: {description}. Min: {min}, max: {max}, actual: {actual}")]
+    OutOfRange {
+        description: String,
+        min: f64,
+        max: f64,
+        actual: f64,
+    },
+    /// Cannot map one value to another
+    #[error("Could not map {0} to {1}")]
+    InvalidMapping(String, String),
+    /// Failed to decode binary data as the expected type or format
+    #[error("Decode failed: {description}")]
+    DecodeFailed {
+        description: String,
+        #[source]
+        source: Option<Box<dyn error::Error + Send + Sync>>,
+    },
+    /// Unexpected I/O error
+    #[error(transparent)]
+    IoError(#[from] io::Error),
 }
 
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
@@ -191,44 +260,6 @@ fn decode_failed<T: Into<String>>(msg: T) -> TesError {
         description: msg.into(),
         source: None,
     }
-}
-
-/// Error type for utility errors
-///
-/// A type for errors that may occur while manipulating game files.
-#[derive(Error, Debug)]
-pub enum TesError {
-    /// Multiple records in the plugin have the same ID string
-    #[error("ID {0} already in use")]
-    DuplicateId(String),
-    /// The same master file is referenced by the plugin multiple times
-    #[error("Master {0} already present")]
-    DuplicateMaster(String),
-    /// A size limit, e.g. on a record or field, has been exceeded
-    #[error("Limit exceeded: {description}. Max size {max_size}, actual size {actual_size}")]
-    LimitExceeded {
-        description: String,
-        max_size: usize,
-        actual_size: usize,
-    },
-    /// A value is not in the expected range
-    #[error("Out of range: {description}. Min: {min}, max: {max}, actual: {actual}")]
-    OutOfRange {
-        description: String,
-        min: f64,
-        max: f64,
-        actual: f64,
-    },
-    /// Failed to decode binary data as the expected type or format
-    #[error("Decode failed: {description}")]
-    DecodeFailed {
-        description: String,
-        #[source]
-        source: Option<Box<dyn error::Error + Send + Sync>>,
-    },
-    /// Unexpected I/O error
-    #[error(transparent)]
-    IoError(#[from] io::Error),
 }
 
 #[cfg(test)]

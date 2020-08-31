@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use super::record::Record;
 use crate::plugin::FieldInterface;
+use crate::tes3::Skills;
 use crate::*;
 
 // this line is only to help the IDE
@@ -101,45 +102,8 @@ pub struct Npc {
     hair: String,
     script: Option<String>,
     pub level: u16,
-    // <attributes>
-    pub strength: u8,
-    pub intelligence: u8,
-    pub willpower: u8,
-    pub agility: u8,
-    pub speed: u8,
-    pub endurance: u8,
-    pub personality: u8,
-    pub luck: u8,
-    // </attributes>
-    // <skills>
-    pub block: u8,
-    pub armorer: u8,
-    pub medium_armor: u8,
-    pub heavy_armor: u8,
-    pub blunt: u8,
-    pub long_blade: u8,
-    pub axe: u8,
-    pub spear: u8,
-    pub athletics: u8,
-    pub enchant: u8,
-    pub destruction: u8,
-    pub alteration: u8,
-    pub illusion: u8,
-    pub conjuration: u8,
-    pub mysticism: u8,
-    pub restoration: u8,
-    pub alchemy: u8,
-    pub unarmored: u8,
-    pub security: u8,
-    pub sneak: u8,
-    pub acrobatics: u8,
-    pub light_armor: u8,
-    pub short_blade: u8,
-    pub marksman: u8,
-    pub mercantile: u8,
-    pub speechcraft: u8,
-    pub hand_to_hand: u8,
-    // </skills>
+    pub attributes: Attributes<u8>,
+    pub skills: Skills<u8>,
     health: u16,
     magicka: u16,
     fatigue: u16,
@@ -187,45 +151,8 @@ impl Npc {
             hair: String::new(),
             script: None,
             level: 0,
-            // <attributes>
-            strength: 0,
-            intelligence: 0,
-            willpower: 0,
-            agility: 0,
-            speed: 0,
-            endurance: 0,
-            personality: 0,
-            luck: 0,
-            // </attributes>
-            // <skills>
-            block: 0,
-            armorer: 0,
-            medium_armor: 0,
-            heavy_armor: 0,
-            blunt: 0,
-            long_blade: 0,
-            axe: 0,
-            spear: 0,
-            athletics: 0,
-            enchant: 0,
-            destruction: 0,
-            alteration: 0,
-            illusion: 0,
-            conjuration: 0,
-            mysticism: 0,
-            restoration: 0,
-            alchemy: 0,
-            unarmored: 0,
-            security: 0,
-            sneak: 0,
-            acrobatics: 0,
-            light_armor: 0,
-            short_blade: 0,
-            marksman: 0,
-            mercantile: 0,
-            speechcraft: 0,
-            hand_to_hand: 0,
-            // </skills>
+            attributes: Attributes::new(),
+            skills: Skills::new(),
             health: 0,
             magicka: 0,
             fatigue: 0,
@@ -278,42 +205,13 @@ impl Npc {
                         npc.gold = extract!(reader as u32)?;
                     } else {
                         // not auto-calculated; all fields are present
-                        npc.strength = extract!(reader as u8)?;
-                        npc.intelligence = extract!(reader as u8)?;
-                        npc.willpower = extract!(reader as u8)?;
-                        npc.agility = extract!(reader as u8)?;
-                        npc.speed = extract!(reader as u8)?;
-                        npc.endurance = extract!(reader as u8)?;
-                        npc.personality = extract!(reader as u8)?;
-                        npc.luck = extract!(reader as u8)?;
+                        for attribute in npc.attributes.values_mut() {
+                            *attribute = extract!(reader as u8)?;
+                        }
 
-                        npc.block = extract!(reader as u8)?;
-                        npc.armorer = extract!(reader as u8)?;
-                        npc.medium_armor = extract!(reader as u8)?;
-                        npc.heavy_armor = extract!(reader as u8)?;
-                        npc.blunt = extract!(reader as u8)?;
-                        npc.long_blade = extract!(reader as u8)?;
-                        npc.axe = extract!(reader as u8)?;
-                        npc.spear = extract!(reader as u8)?;
-                        npc.athletics = extract!(reader as u8)?;
-                        npc.enchant = extract!(reader as u8)?;
-                        npc.destruction = extract!(reader as u8)?;
-                        npc.alteration = extract!(reader as u8)?;
-                        npc.illusion = extract!(reader as u8)?;
-                        npc.conjuration = extract!(reader as u8)?;
-                        npc.mysticism = extract!(reader as u8)?;
-                        npc.restoration = extract!(reader as u8)?;
-                        npc.alchemy = extract!(reader as u8)?;
-                        npc.unarmored = extract!(reader as u8)?;
-                        npc.security = extract!(reader as u8)?;
-                        npc.sneak = extract!(reader as u8)?;
-                        npc.acrobatics = extract!(reader as u8)?;
-                        npc.light_armor = extract!(reader as u8)?;
-                        npc.short_blade = extract!(reader as u8)?;
-                        npc.marksman = extract!(reader as u8)?;
-                        npc.mercantile = extract!(reader as u8)?;
-                        npc.speechcraft = extract!(reader as u8)?;
-                        npc.hand_to_hand = extract!(reader as u8)?;
+                        for skill in npc.skills.values_mut() {
+                            *skill = extract!(reader as u8)?;
+                        }
 
                         npc.health = extract!(reader as u16)?;
                         npc.magicka = extract!(reader as u16)?;

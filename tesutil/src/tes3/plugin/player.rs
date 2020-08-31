@@ -1,5 +1,6 @@
 use super::*;
 use crate::plugin::FieldInterface;
+use crate::tes3::Skills;
 
 /// Information about the state of a resting player
 #[derive(Debug)]
@@ -69,41 +70,8 @@ pub struct PlayerData {
     // PNAM
     player_flags: u32,
     pub level_progress: u32,
-    pub block_progress: f32,
-    pub armorer_progress: f32,
-    pub medium_armor_progress: f32,
-    pub heavy_armor_progress: f32,
-    pub blunt_progress: f32,
-    pub long_blade_progress: f32,
-    pub axe_progress: f32,
-    pub spear_progress: f32,
-    pub athletics_progress: f32,
-    pub enchant_progress: f32,
-    pub destruction_progress: f32,
-    pub alteration_progress: f32,
-    pub illusion_progress: f32,
-    pub conjuration_progress: f32,
-    pub mysticism_progress: f32,
-    pub restoration_progress: f32,
-    pub alchemy_progress: f32,
-    pub unarmored_progress: f32,
-    pub security_progress: f32,
-    pub sneak_progress: f32,
-    pub acrobatics_progress: f32,
-    pub light_armor_progress: f32,
-    pub short_blade_progress: f32,
-    pub marksman_progress: f32,
-    pub mercantile_progress: f32,
-    pub speechcraft_progress: f32,
-    pub hand_to_hand_progress: f32,
-    pub strength_progress: u8,
-    pub intelligence_progress: u8,
-    pub willpower_progress: u8,
-    pub agility_progress: u8,
-    pub speed_progress: u8,
-    pub endurance_progress: u8,
-    pub personality_progress: u8,
-    pub luck_progress: u8,
+    pub skill_progress: Skills<f32>,
+    pub attribute_progress: Attributes<u8>,
     telekinesis_range_bonus: i32,
     vision_bonus: f32,
     detect_key_magnitude: i32,
@@ -116,9 +84,7 @@ pub struct PlayerData {
     mark_grid_x: i32,
     mark_grid_y: i32,
     unknown1: Vec<u8>, // always 40
-    pub combat_increases: u8,
-    pub magic_increases: u8,
-    pub stealth_increases: u8,
+    pub spec_increases: Specializations<u8>,
     unknown2: u8,
     // SNAM
     snam: Vec<u8>,
@@ -172,42 +138,13 @@ impl PlayerData {
                     player_data.player_flags = extract!(reader as u32)?;
                     player_data.level_progress = extract!(reader as u32)?;
 
-                    player_data.block_progress = extract!(reader as f32)?;
-                    player_data.armorer_progress = extract!(reader as f32)?;
-                    player_data.medium_armor_progress = extract!(reader as f32)?;
-                    player_data.heavy_armor_progress = extract!(reader as f32)?;
-                    player_data.blunt_progress = extract!(reader as f32)?;
-                    player_data.long_blade_progress = extract!(reader as f32)?;
-                    player_data.axe_progress = extract!(reader as f32)?;
-                    player_data.spear_progress = extract!(reader as f32)?;
-                    player_data.athletics_progress = extract!(reader as f32)?;
-                    player_data.enchant_progress = extract!(reader as f32)?;
-                    player_data.destruction_progress = extract!(reader as f32)?;
-                    player_data.alteration_progress = extract!(reader as f32)?;
-                    player_data.illusion_progress = extract!(reader as f32)?;
-                    player_data.conjuration_progress = extract!(reader as f32)?;
-                    player_data.mysticism_progress = extract!(reader as f32)?;
-                    player_data.restoration_progress = extract!(reader as f32)?;
-                    player_data.alchemy_progress = extract!(reader as f32)?;
-                    player_data.unarmored_progress = extract!(reader as f32)?;
-                    player_data.security_progress = extract!(reader as f32)?;
-                    player_data.sneak_progress = extract!(reader as f32)?;
-                    player_data.acrobatics_progress = extract!(reader as f32)?;
-                    player_data.light_armor_progress = extract!(reader as f32)?;
-                    player_data.short_blade_progress = extract!(reader as f32)?;
-                    player_data.marksman_progress = extract!(reader as f32)?;
-                    player_data.mercantile_progress = extract!(reader as f32)?;
-                    player_data.speechcraft_progress = extract!(reader as f32)?;
-                    player_data.hand_to_hand_progress = extract!(reader as f32)?;
+                    for skill in player_data.skill_progress.values_mut() {
+                        *skill = extract!(reader as f32)?;
+                    }
 
-                    player_data.strength_progress = extract!(reader as u8)?;
-                    player_data.intelligence_progress = extract!(reader as u8)?;
-                    player_data.willpower_progress = extract!(reader as u8)?;
-                    player_data.agility_progress = extract!(reader as u8)?;
-                    player_data.speed_progress = extract!(reader as u8)?;
-                    player_data.endurance_progress = extract!(reader as u8)?;
-                    player_data.personality_progress = extract!(reader as u8)?;
-                    player_data.luck_progress = extract!(reader as u8)?;
+                    for attribute in player_data.attribute_progress.values_mut() {
+                        *attribute = extract!(reader as u8)?;
+                    }
 
                     player_data.telekinesis_range_bonus = extract!(reader as i32)?;
                     player_data.vision_bonus = extract!(reader as f32)?;
@@ -225,9 +162,10 @@ impl PlayerData {
                     player_data.unknown1 = vec![0u8; 40];
                     reader.read_exact(player_data.unknown1.as_mut())?;
 
-                    player_data.combat_increases = extract!(reader as u8)?;
-                    player_data.magic_increases = extract!(reader as u8)?;
-                    player_data.stealth_increases = extract!(reader as u8)?;
+                    for specialization in player_data.spec_increases.values_mut() {
+                        *specialization = extract!(reader as u8)?;
+                    }
+
                     player_data.unknown2 = extract!(reader as u8)?;
                 }
                 b"SNAM" => player_data.snam = field.get().to_vec(),
