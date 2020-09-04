@@ -2,6 +2,9 @@ use enum_map::{Enum, EnumMap};
 
 pub mod plugin;
 
+mod world;
+pub use world::*;
+
 /// All possible skills
 #[derive(Copy, Clone, Debug, Enum)]
 pub enum Skill {

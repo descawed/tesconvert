@@ -2,6 +2,7 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::Path;
 use std::rc::Rc;
 use std::str;
 
@@ -405,7 +406,7 @@ impl Plugin {
     ///
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Plugin::read`]: #method.read
-    pub fn load_file(path: &str) -> Result<Plugin, TesError> {
+    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Plugin, TesError> {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
         Plugin::read(reader)
@@ -846,7 +847,7 @@ impl Plugin {
     /// ```
     ///
     /// [`Plugin::write`]: #method.write
-    pub fn save_file(&self, path: &str) -> Result<(), TesError> {
+    pub fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError> {
         let f = File::create(path)?;
         let writer = BufWriter::new(f);
         self.write(writer)

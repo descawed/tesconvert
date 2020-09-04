@@ -17,6 +17,7 @@ use std::iter;
 use std::str;
 
 use enum_map::{Enum, EnumMap};
+use ini::ini;
 use len_trait::len::Len;
 use thiserror::*;
 
@@ -107,6 +108,9 @@ pub enum TesError {
     /// Unexpected I/O error
     #[error(transparent)]
     IoError(#[from] io::Error),
+    /// Error parsing an INI file
+    #[error(transparent)]
+    IniError(#[from] ini::Error),
 }
 
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
