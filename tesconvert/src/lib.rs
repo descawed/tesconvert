@@ -112,7 +112,7 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     // Morrowind doesn't track advancements by level like Oblivion does, so we have to fake it here.
     // I don't actually know how Oblivion would handle an advancement greater than 10, but it never
     // happens in normal gameplay, so I figure it's best to enforce it here.
-    let mut attributes = mw_player_data.attribute_progress.clone();
+    let mut attributes = mw_player_data.attribute_progress;
     while attributes.values().sum::<u8>() > 0 {
         let mut advancement = Attributes::new();
         for (attribute, value) in advancement.iter_mut() {

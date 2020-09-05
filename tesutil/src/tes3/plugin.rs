@@ -733,6 +733,11 @@ impl Plugin {
             .map(|v| v.borrow_mut())
     }
 
+    /// Gets an iterator over the names of this plugin's master files
+    pub fn iter_masters(&self) -> impl Iterator<Item = &str> {
+        self.masters.iter().map(|(n, _)| &n[..])
+    }
+
     /// Writes a plugin to the provided writer
     ///
     /// Writes a plugin to any type that implements [`Write`] or a mutable reference to such a type.
@@ -780,7 +785,7 @@ impl Plugin {
 
         header.add_field(Field::new(b"HEDR", buf).unwrap());
 
-        for (name, size) in self.masters.iter() {
+        for (name, size) in &self.masters {
             let mast = Field::new_zstring(b"MAST", name.clone())?;
             header.add_field(mast);
             header.add_field(Field::new_u64(b"DATA", *size));
