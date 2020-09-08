@@ -1,11 +1,13 @@
+use std::cell::RefCell;
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::rc::Rc;
 
 use super::record::Record;
 use crate::*;
 
 /// Indicates the type of group a group is
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum GroupKind {
     Top([u8; 4]),
     WorldChildren(u32),
@@ -126,7 +128,7 @@ pub struct Group {
     kind: GroupKind,
     stamp: u32,
     groups: Vec<Group>,
-    records: Vec<Record>,
+    records: Vec<Rc<RefCell<Record>>>,
 }
 
 impl Group {
@@ -155,7 +157,7 @@ impl Group {
         let stamp = extract!(f as u32)?;
 
         let mut groups = vec![];
-        let mut records: Vec<Record> = vec![];
+        let mut records: Vec<Rc<RefCell<Record>>> = vec![];
         while size > 0 {
             let mut name = [0u8; 4];
             f.read_exact(&mut name)?;
@@ -167,7 +169,7 @@ impl Group {
                 size -= group_size;
 
                 if let Some(last_record) = records.last_mut() {
-                    last_record.add_group(group);
+                    last_record.borrow_mut().add_group(group);
                 } else {
                     groups.push(group);
                 }
@@ -177,7 +179,7 @@ impl Group {
                     return Err(decode_failed("Record size exceeds group size"));
                 }
                 size -= record_size;
-                records.push(record);
+                records.push(Rc::new(RefCell::new(record)));
             }
         }
 
@@ -208,6 +210,24 @@ impl Group {
         Group::read_without_name(f)
     }
 
+    /// Returns an iterator over Rc smart pointers to this group's records
+    // need Box because the iterator is recursive
+    pub fn iter_rc(&self) -> Box<dyn Iterator<Item = Rc<RefCell<Record>>> + '_> {
+        Box::new(
+            self.records
+                .iter()
+                .map(Rc::clone)
+                .chain(self.groups.iter().flat_map(|g| g.iter_rc())),
+        )
+    }
+
+    /// Gets this group's [`GroupKind`]
+    ///
+    /// [`GroupKind`]: enum.GroupKind.html
+    pub fn kind(&self) -> GroupKind {
+        self.kind
+    }
+
     /// Writes a group to a binary stream
     ///
     /// # Errors
@@ -227,7 +247,7 @@ impl Group {
         serialize!(self.stamp => f)?;
 
         for record in &self.records {
-            record.write(&mut *f)?;
+            record.borrow().write(&mut *f)?;
         }
 
         for group in &self.groups {

@@ -45,7 +45,6 @@ impl World {
 
         let mut plugins = Vec::with_capacity(files.len());
         for (filename, _) in &files {
-            // I would do a map but ? in the closure wouldn't have the correct effect
             plugins.push(Plugin::load_file(filename)?);
         }
 
@@ -65,7 +64,7 @@ impl World {
         let game_files = ini
             .section(Some("Game Files"))
             .ok_or_else(|| decode_failed(format!("No Game Files section in {}", INI_FILE)))?;
-        Self::load_plugins(game_dir, game_files.iter().map(|(_, v)| v))
+        World::load_plugins(game_dir, game_files.iter().map(|(_, v)| v))
     }
 
     /// Loads the world from a save file
@@ -75,7 +74,7 @@ impl World {
     /// Returns an error if an I/O error occurs while reading a plugin file or if a plugin file
     /// contains invalid data.
     pub fn load_from_save<P: AsRef<Path>>(game_dir: P, save: &Plugin) -> Result<World, TesError> {
-        Self::load_plugins(game_dir, save.iter_masters())
+        World::load_plugins(game_dir, save.iter_masters())
     }
 
     /// Gets the active version of a record by ID

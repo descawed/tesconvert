@@ -23,9 +23,10 @@ pub const FORM_PLAYER_CUSTOM_CLASS: u32 = 0x00022843;
 /// An Oblivion save game
 ///
 /// Unlike Morrowind, Oblivion saves use a completely different format than plugins.
+#[derive(Debug)]
 pub struct Save {
     version: (u8, u8),
-    exe_time: [u8; 16], // TODO: implement for real
+    exe_time: [u8; 16],
     header_version: u32,
     save_number: u32,
     player_name: String,
@@ -33,7 +34,7 @@ pub struct Save {
     player_location: String,
     game_days: f32,
     game_ticks: u32,
-    game_time: [u8; 16], // TODO: implement for real
+    game_time: [u8; 16],
     screen_width: u32,
     screen_height: u32,
     screen_data: Vec<u8>,

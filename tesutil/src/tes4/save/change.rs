@@ -32,6 +32,7 @@ pub enum ChangeType {
 }
 
 /// A record in a save that records changes to objects
+#[derive(Debug)]
 pub struct ChangeRecord {
     form_id: u32,
     change_type: ChangeType,

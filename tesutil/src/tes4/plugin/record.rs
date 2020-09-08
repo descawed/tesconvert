@@ -5,6 +5,7 @@ use std::str;
 
 use super::field::Field;
 use super::group::Group;
+use super::FormId;
 use crate::plugin::FieldInterface;
 use crate::*;
 
@@ -62,7 +63,7 @@ const COMPRESSION_LEVEL: u32 = 6;
 pub struct Record {
     name: [u8; 4],
     flags: RecordFlags,
-    form_id: u32,
+    form_id: FormId,
     vcs_info: u32,
     fields: Vec<Field>,
     groups: Vec<Group>,
@@ -77,7 +78,7 @@ impl Record {
         Record {
             name: *name,
             flags: RecordFlags::empty(),
-            form_id: 0,
+            form_id: FormId(0),
             vcs_info: 0,
             fields: vec![],
             groups: vec![],
@@ -107,7 +108,7 @@ impl Record {
         let flags = RecordFlags::from_bits(u32::from_le_bytes(buf))
             .ok_or_else(|| decode_failed("Invalid record flags"))?;
 
-        let form_id = extract!(f as u32)?;
+        let form_id = FormId(extract!(f as u32)?);
         let vcs_info = extract!(f as u32)?;
 
         let mut record = Record {
@@ -247,7 +248,7 @@ impl Record {
 
             f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
             f.write_exact(&self.flags.bits.to_le_bytes())?;
-            f.write_exact(&self.form_id.to_le_bytes())?;
+            f.write_exact(&self.form_id.0.to_le_bytes())?;
             f.write_exact(&self.vcs_info.to_le_bytes())?;
             f.write_exact(&(size as u32).to_le_bytes())?;
             f.write_exact(&comp_buf)?;
@@ -257,7 +258,7 @@ impl Record {
         } else {
             f.write_exact(&(size as u32).to_le_bytes())?;
             f.write_exact(&self.flags.bits.to_le_bytes())?;
-            f.write_exact(&self.form_id.to_le_bytes())?;
+            f.write_exact(&self.form_id.0.to_le_bytes())?;
             f.write_exact(&self.vcs_info.to_le_bytes())?;
 
             for field in self.fields.iter() {
@@ -289,7 +290,7 @@ impl Record {
     }
 
     /// Returns the form ID
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> FormId {
         self.form_id
     }
 
@@ -369,7 +370,7 @@ mod tests {
     #[test]
     fn write_record() {
         let mut record = Record::new(b"DIAL");
-        record.form_id = 0xaa;
+        record.form_id = FormId(0xaa);
         record.vcs_info = 0x181f1c;
         record.add_field(Field::new(b"EDID", b"ADMIREHATE\0".to_vec()).unwrap());
         record.add_field(Field::new_u32(b"QSTI", 0x1e722));

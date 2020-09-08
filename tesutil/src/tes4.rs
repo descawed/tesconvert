@@ -6,6 +6,9 @@ use enum_map::{Enum, EnumMap};
 pub mod plugin;
 pub mod save;
 
+mod world;
+pub use world::*;
+
 /// All possible actor values
 #[derive(Copy, Clone, Debug, Enum)]
 pub enum ActorValue {
