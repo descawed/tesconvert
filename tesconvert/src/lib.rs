@@ -4,7 +4,7 @@ use tesutil::tes3::plugin::*;
 use tesutil::tes3::Skill as Skill3;
 use tesutil::tes4::save::*;
 use tesutil::tes4::Skill as Skill4;
-use tesutil::Attributes;
+use tesutil::*;
 
 mod config;
 pub use config::*;

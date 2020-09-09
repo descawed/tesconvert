@@ -1,11 +1,10 @@
 use std::cell::Ref;
-use std::fs;
 use std::path::Path;
 
 use ini::Ini;
 
 use super::plugin::*;
-use crate::{decode_failed, TesError};
+use crate::{decode_failed, TesError, WorldInterface};
 
 static INI_FILE: &str = "Morrowind.ini";
 static PLUGIN_DIR: &str = "Data Files";
@@ -20,34 +19,15 @@ pub struct World {
 }
 
 impl World {
-    /// Loads the world from a provided list of plugins
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if an I/O error occurs while reading a plugin file or if a plugin file
-    /// contains invalid data.
-    pub fn load_plugins<'a, P, T>(game_dir: P, plugin_names: T) -> Result<World, TesError>
+    fn load_from_plugins<'a, P, T>(game_dir: P, plugin_names: T) -> Result<World, TesError>
     where
         P: AsRef<Path>,
         T: Iterator<Item = &'a str>,
     {
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
-        let mut files = vec![];
-        for filename in plugin_names {
-            let plugin_path = plugin_dir.join(filename);
-            let meta = fs::metadata(&plugin_path)?;
-            files.push((plugin_path, meta.modified()?));
-        }
-
-        // we sort in reverse order here because we want to search plugins latest in the load order
-        // first
-        files.sort_by(|a, b| b.1.cmp(&a.1));
-
-        let mut plugins = Vec::with_capacity(files.len());
-        for (filename, _) in &files {
-            plugins.push(Plugin::load_file(filename)?);
-        }
-
+        let plugins = World::load_plugins(plugin_dir, plugin_names)?;
+        // we keep the plugins in reverse order so we search the most recent one first
+        let plugins = plugins.into_iter().map(|(_, p)| p).rev().collect();
         Ok(World { plugins })
     }
 
@@ -64,7 +44,7 @@ impl World {
         let game_files = ini
             .section(Some("Game Files"))
             .ok_or_else(|| decode_failed(format!("No Game Files section in {}", INI_FILE)))?;
-        World::load_plugins(game_dir, game_files.iter().map(|(_, v)| v))
+        World::load_from_plugins(game_dir, game_files.iter().map(|(_, v)| v))
     }
 
     /// Loads the world from a save file
@@ -74,7 +54,7 @@ impl World {
     /// Returns an error if an I/O error occurs while reading a plugin file or if a plugin file
     /// contains invalid data.
     pub fn load_from_save<P: AsRef<Path>>(game_dir: P, save: &Plugin) -> Result<World, TesError> {
-        World::load_plugins(game_dir, save.iter_masters())
+        World::load_from_plugins(game_dir, save.iter_masters())
     }
 
     /// Gets the active version of a record by ID
@@ -108,6 +88,10 @@ impl World {
     }
 }
 
+impl WorldInterface for World {
+    type Plugin = Plugin;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,7 +114,7 @@ mod tests {
         let base_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let game_dir = base_dir.join(TEST_GAME_DIR);
         let plugins = vec!["test1.esp", "test2.esp"];
-        let world = World::load_plugins(&game_dir, plugins.into_iter()).unwrap();
+        let world = World::load_from_plugins(&game_dir, plugins.into_iter()).unwrap();
         assert_eq!(world.plugins.len(), 2);
     }
 }

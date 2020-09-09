@@ -149,7 +149,7 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
-    pub fn read_without_name<T: Read>(mut f: T) -> Result<(Group, usize), TesError> {
+    pub fn read_without_name<T: Read>(mut f: &mut T) -> Result<(Group, usize), TesError> {
         let full_size = extract!(f as u32)? as usize;
         // size includes this header, so subtract that
         let mut size = full_size - 20;
@@ -162,7 +162,7 @@ impl Group {
             let mut name = [0u8; 4];
             f.read_exact(&mut name)?;
             if name == *b"GRUP" {
-                let (group, group_size) = Group::read_without_name(&mut f)?;
+                let (group, group_size) = Group::read_without_name(&mut *f)?;
                 if group_size > size {
                     return Err(decode_failed("Sub-group size exceeds group size"));
                 }
@@ -207,7 +207,7 @@ impl Group {
             return Err(decode_failed(format!("Expected GRUP, found {:?}", name)));
         }
 
-        Group::read_without_name(f)
+        Group::read_without_name(&mut f)
     }
 
     /// Returns an iterator over Rc smart pointers to this group's records

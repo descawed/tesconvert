@@ -381,37 +381,6 @@ impl Plugin {
         Ok(plugin)
     }
 
-    /// Reads a plugin from a file
-    ///
-    /// Reads a plugin from the file at `path`. The entire plugin is read into memory and retains
-    /// no reference to the file once the read is complete.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`std::io::Error`] if the file cannot be opened or if [`Plugin::read`] fails;
-    /// refer to that method for more information.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tesutil::tes3::plugin::*;
-    /// # use std::io;
-    ///
-    /// # fn main() -> io::Result<()> {
-    /// let plugin = Plugin::load_file("Morrowind.esm")?;
-    /// assert!(plugin.is_master);
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    /// [`Plugin::read`]: #method.read
-    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Plugin, TesError> {
-        let f = File::open(path)?;
-        let reader = BufReader::new(f);
-        Plugin::read(reader)
-    }
-
     /// Returns the plugin file version
     ///
     /// This should always return one of the version constants ([`VERSION_1_2`] or [`VERSION_1_3`]),
@@ -442,7 +411,7 @@ impl Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::plugin::*;
+    /// use tesutil::*;
     /// use tesutil::tes3::plugin::*;
     /// # use std::io;
     ///
@@ -489,6 +458,7 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
+    /// use tesutil::PluginInterface;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -596,7 +566,6 @@ impl Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
@@ -645,6 +614,7 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
+    /// use tesutil::PluginInterface;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -697,6 +667,7 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
+    /// use tesutil::PluginInterface;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -752,6 +723,7 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
+    /// use tesutil::PluginInterface;
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let mut buf: Vec<u8> = vec![];
@@ -827,6 +799,40 @@ impl Plugin {
 
         Ok(())
     }
+}
+
+impl PluginInterface for Plugin {
+    /// Reads a plugin from a file
+    ///
+    /// Reads a plugin from the file at `path`. The entire plugin is read into memory and retains
+    /// no reference to the file once the read is complete.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be opened or if [`Plugin::read`] fails;
+    /// refer to that method for more information.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::PluginInterface;
+    /// # use std::io;
+    ///
+    /// # fn main() -> io::Result<()> {
+    /// let plugin = Plugin::load_file("Morrowind.esm")?;
+    /// assert!(plugin.is_master);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+    /// [`Plugin::read`]: #method.read
+    fn load_file<P: AsRef<Path>>(path: P) -> Result<Plugin, TesError> {
+        let f = File::open(path)?;
+        let reader = BufReader::new(f);
+        Plugin::read(reader)
+    }
 
     /// Save a plugin to a file
     ///
@@ -841,6 +847,7 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
+    /// use tesutil::PluginInterface;
     /// use tesutil::TesError;
     ///
     /// # fn main() -> Result<(), TesError> {
@@ -852,7 +859,7 @@ impl Plugin {
     /// ```
     ///
     /// [`Plugin::write`]: #method.write
-    pub fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError> {
+    fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError> {
         let f = File::create(path)?;
         let writer = BufWriter::new(f);
         self.write(writer)

@@ -7,7 +7,7 @@ pub use actor::*;
 mod actorref;
 pub use actorref::*;
 
-use crate::tes4::plugin::Record;
+use crate::tes4::plugin::{FormId, Record};
 use crate::*;
 use std::collections::HashMap;
 use std::fs::File;
@@ -62,7 +62,7 @@ pub struct Save {
     change_ids: Vec<u32>,
     change_records: HashMap<u32, ChangeRecord>,
     temporary_effects: Vec<u8>,
-    form_ids: Vec<u32>,
+    form_ids: Vec<FormId>,
     world_spaces: Vec<u32>,
 }
 
@@ -214,7 +214,7 @@ impl Save {
         let num_form_ids = extract!(f as u32)? as usize;
         let mut form_ids = Vec::with_capacity(num_form_ids);
         for _ in 0..num_form_ids {
-            form_ids.push(extract!(f as u32)?);
+            form_ids.push(FormId(extract!(f as u32)?));
         }
 
         let num_world_spaces = extract!(f as u32)? as usize;
@@ -314,8 +314,13 @@ impl Save {
     /// Gets the form ID for an iref, if one exists
     ///
     /// Returns `None` if there is no form ID for the given iref
-    pub fn iref(&self, iref: u32) -> Option<u32> {
+    pub fn iref(&self, iref: u32) -> Option<FormId> {
         self.form_ids.get(iref as usize).copied()
+    }
+
+    /// Iterates over this save's plugins
+    pub fn iter_plugins(&self) -> impl Iterator<Item = &str> {
+        self.plugins.iter().map(|s| &s[..])
     }
 
     /// Write a save to a binary stream
@@ -439,7 +444,7 @@ impl Save {
 
         serialize!(self.form_ids.len() as u32 => f)?;
         for form_id in self.form_ids.iter() {
-            serialize!(form_id => f)?;
+            serialize!(form_id.0 => f)?;
         }
 
         serialize!(self.world_spaces.len() as u32 => f)?;

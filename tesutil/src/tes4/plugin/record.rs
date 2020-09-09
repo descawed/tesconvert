@@ -124,11 +124,12 @@ impl Record {
         // read in the field data
         f.read_exact(&mut data)?;
 
+        let reader = &mut &data[..];
         if flags.contains(RecordFlags::COMPRESSED) {
-            // 4 bytes to skip the size of the decoded data, which we don't need
-            record.field_read_helper(ZlibDecoder::new(&mut &data[4..]), size)?;
+            let uncompressed_size = extract!(reader as u32)? as usize;
+            record.field_read_helper(ZlibDecoder::new(reader), uncompressed_size)?;
         } else {
-            record.field_read_helper(&mut &data[..], size)?;
+            record.field_read_helper(reader, size)?;
         };
 
         // 20 = type + size + flags + form ID = VCS info

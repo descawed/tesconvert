@@ -5,9 +5,14 @@
 //! .esp, .ess) are implemented, but support for archives (.bsa) will be added in the future, and
 //! potentially other formats as well.
 
-pub mod plugin;
 pub mod tes3;
 pub mod tes4;
+
+mod plugin;
+pub use plugin::*;
+
+mod world;
+pub use world::*;
 
 use std::error;
 use std::ffi::CStr;

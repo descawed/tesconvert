@@ -1,9 +1,9 @@
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
-use std::io::{Read, Seek};
+use std::fs::File;
+use std::io::{BufReader, Read, Seek};
 use std::rc::{Rc, Weak};
 
-use crate::plugin::FieldInterface;
 use crate::*;
 
 mod field;
@@ -14,6 +14,7 @@ pub use group::*;
 
 mod record;
 pub use record::*;
+use std::path::Path;
 
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
@@ -194,5 +195,57 @@ impl Plugin {
             let index = form_id.index() as usize;
             (&self.masters[index][..], Rc::downgrade(record))
         })
+    }
+}
+
+impl PluginInterface for Plugin {
+    /// Loads a plugin from a file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an I/O error occurs or if the plugin file is invalid.
+    fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, TesError> {
+        let f = File::open(path)?;
+        let reader = BufReader::new(f);
+        Plugin::read(reader)
+    }
+
+    /// Saves a plugin to a file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an I/O error occurs
+    fn save_file<P: AsRef<Path>>(&self, _: P) -> Result<(), TesError> {
+        unimplemented!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static TEST_PLUGIN: &[u8] = include_bytes!("plugin/test/Data/sample.esp");
+
+    #[test]
+    fn load_plugin() {
+        let cursor = io::Cursor::new(TEST_PLUGIN);
+        let plugin = Plugin::read(cursor).unwrap();
+
+        let record = plugin.get_record(FormId(0x51a8)).unwrap();
+        for field in record.iter() {
+            match field.name() {
+                b"EDID" => assert_eq!(field.get_zstring().unwrap(), "fPotionT1AleDurMult"),
+                b"DATA" => assert_eq!(field.get_f32().unwrap(), -0.01),
+                _ => panic!("Unexpected field {}", field.display_name()),
+            }
+        }
+        drop(record);
+
+        assert_eq!(plugin.author.unwrap(), "tesutil");
+        assert_eq!(
+            plugin.description.unwrap(),
+            "This is the description for the sample plugin"
+        );
+        assert_eq!(plugin.masters, ["Oblivion.esm", "Knights.esp"]);
     }
 }
