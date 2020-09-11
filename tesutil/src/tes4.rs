@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::{Attribute, TesError};
+use crate::{Attribute, Specialization, TesError};
 use enum_map::{Enum, EnumMap};
 use num_enum::TryFromPrimitive;
 
@@ -135,7 +135,7 @@ impl From<Attribute> for ActorValue {
 pub type ActorValues<T> = EnumMap<ActorValue, T>;
 
 /// All possible skills
-#[derive(Copy, Clone, Debug, Enum, TryFromPrimitive)]
+#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Skill {
     Armorer,
@@ -159,6 +159,29 @@ pub enum Skill {
     Security,
     Sneak,
     Speechcraft,
+}
+
+impl Skill {
+    /// Gets the skill's specialization
+    pub fn specialization(&self) -> Specialization {
+        match *self {
+            Skill::HeavyArmor => Specialization::Combat,
+            Skill::Armorer => Specialization::Combat,
+            Skill::Blade => Specialization::Combat,
+            Skill::Blunt => Specialization::Combat,
+            Skill::Block => Specialization::Combat,
+            Skill::Athletics => Specialization::Combat,
+            Skill::HandToHand => Specialization::Combat,
+            Skill::Acrobatics => Specialization::Stealth,
+            Skill::LightArmor => Specialization::Stealth,
+            Skill::Marksman => Specialization::Stealth,
+            Skill::Sneak => Specialization::Stealth,
+            Skill::Mercantile => Specialization::Stealth,
+            Skill::Speechcraft => Specialization::Stealth,
+            Skill::Security => Specialization::Stealth,
+            _ => Specialization::Magic,
+        }
+    }
 }
 
 impl TryFrom<ActorValue> for Skill {

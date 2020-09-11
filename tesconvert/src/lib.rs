@@ -10,6 +10,7 @@ mod config;
 pub use config::*;
 
 mod morrowind;
+mod oblivion;
 
 pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     let mw_save = Tes3Plugin::load_file(&config.source_path)?;

@@ -89,6 +89,17 @@ impl Tes4World {
         None
     }
 
+    /// Gets a float game setting by name
+    pub fn get_float_setting(&self, name: &str, default: f32) -> Result<f32, TesError> {
+        for (_, plugin) in self.plugins.iter().rev() {
+            if let Some(value) = plugin.get_float_setting(name)? {
+                return Ok(value);
+            }
+        }
+
+        Ok(default)
+    }
+
     /// Gets a form by form ID
     pub fn get<T: Form<Field = Tes4Field, Record = Tes4Record>>(
         &self,

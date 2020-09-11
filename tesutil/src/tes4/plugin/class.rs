@@ -43,7 +43,7 @@ pub struct Class {
     description: Option<String>,
     icon: Option<String>,
     primary_attributes: [Attribute; 2],
-    specialization: Specialization,
+    pub specialization: Specialization,
     major_skills: [Skill; 7],
     pub is_playable: bool,
     pub is_guard: bool,
@@ -185,6 +185,11 @@ impl Class {
             skill_trained,
             max_training_level,
         })
+    }
+
+    /// Checks whether a given skill is a major skill for this class
+    pub fn is_major_skill(&self, skill: Skill) -> bool {
+        self.major_skills.iter().any(|s| *s == skill)
     }
 
     /// Writes a custom class to a binary stream

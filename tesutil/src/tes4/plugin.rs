@@ -77,6 +77,7 @@ pub struct Tes4Plugin {
     masters: Vec<(String, String)>,
     groups: HashMap<[u8; 4], Group>,
     id_map: HashMap<FormId, Rc<RefCell<Tes4Record>>>,
+    settings: HashMap<String, Rc<RefCell<Tes4Record>>>,
 }
 
 /// Version value for Oblivion plugins
@@ -95,6 +96,7 @@ impl Tes4Plugin {
             masters: vec![],
             groups: HashMap::new(),
             id_map: HashMap::new(),
+            settings: HashMap::new(),
         }
     }
 
@@ -159,7 +161,9 @@ impl Tes4Plugin {
         while here != eof {
             let group = Group::read(&mut f)?;
             for record in group.iter_rc() {
-                let id = record.borrow().id();
+                let rb = record.borrow();
+                let id = rb.id();
+                let record_type = rb.name();
                 let index = id.index();
                 if index > max_index {
                     return Err(decode_failed(format!(
@@ -167,6 +171,19 @@ impl Tes4Plugin {
                         max_index, index
                     )));
                 }
+
+                // GMSTs don't have fixed form IDs, so we have to track them by name
+                if record_type == b"GMST" {
+                    for field in rb.iter() {
+                        if field.name() == b"EDID" {
+                            let key = String::from(field.get_zstring()?);
+                            plugin.settings.insert(key, Rc::clone(&record));
+                            break;
+                        }
+                    }
+                }
+
+                drop(rb);
                 plugin.id_map.insert(id, record);
             }
 
@@ -185,6 +202,21 @@ impl Tes4Plugin {
     /// Gets a record by form ID
     pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
         self.id_map.get(&form_id).map(|r| r.borrow())
+    }
+
+    /// Gets a game setting as a float by name
+    pub fn get_float_setting(&self, name: &str) -> Result<Option<f32>, TesError> {
+        if let Some(record) = self.settings.get(name) {
+            for field in record.borrow().iter() {
+                if field.name() == b"DATA" {
+                    return Ok(Some(field.get_f32()?));
+                }
+            }
+
+            Err(decode_failed(format!("Game setting {} has no data", name)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets a record by master and form ID
