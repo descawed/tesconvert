@@ -1,7 +1,7 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
 use std::rc::Rc;
 use std::str;
@@ -23,6 +23,12 @@ pub use record::*;
 
 mod reference;
 pub use reference::*;
+
+mod class;
+pub use class::*;
+
+mod gmst;
+pub use gmst::*;
 
 /// Save game information
 ///
@@ -162,7 +168,7 @@ impl SaveInfo {
 /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 /// [`new`]: #method.new
 #[derive(Debug)]
-pub struct Plugin {
+pub struct Tes3Plugin {
     version: f32,
     /// Indicates whether this plugin is a master
     pub is_master: bool,
@@ -171,9 +177,9 @@ pub struct Plugin {
     save: Option<SaveInfo>,
     screen_data: Vec<u8>,
     masters: Vec<(String, u64)>,
-    records: Vec<Rc<RefCell<Record>>>,
-    id_map: HashMap<String, HashMap<[u8; 4], Rc<RefCell<Record>>>>,
-    type_map: HashMap<[u8; 4], Vec<Rc<RefCell<Record>>>>,
+    records: Vec<Rc<RefCell<Tes3Record>>>,
+    id_map: HashMap<String, HashMap<[u8; 4], Rc<RefCell<Tes3Record>>>>,
+    type_map: HashMap<[u8; 4], Vec<Rc<RefCell<Tes3Record>>>>,
 }
 
 const HEADER_LENGTH: usize = 300;
@@ -194,7 +200,7 @@ pub const VERSION_1_2: f32 = 1.2;
 pub const VERSION_1_3: f32 = 1.3;
 
 // FIXME: figure out how to handle the ID of a record changing after being put in the map
-impl Plugin {
+impl Tes3Plugin {
     /// Create a new, empty plugin
     ///
     /// Add masters and records to the empty plugin with [`add_master`] and [`add_record`]
@@ -212,7 +218,7 @@ impl Plugin {
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
+    /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// plugin.is_master = true;
     /// # Ok(())
     /// # }
@@ -223,14 +229,14 @@ impl Plugin {
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`AUTHOR_LENGTH`]: constant.AUTHOR_LENGTH.html
     /// [`DESCRIPTION_LENGTH`]: constant.DESCRIPTION_LENGTH.html
-    pub fn new(author: String, description: String) -> Result<Plugin, TesError> {
+    pub fn new(author: String, description: String) -> Result<Tes3Plugin, TesError> {
         check_size(&author, AUTHOR_LENGTH, "author value too long")?;
         check_size(
             &description,
             DESCRIPTION_LENGTH,
             "description value too long",
         )?;
-        Ok(Plugin {
+        Ok(Tes3Plugin {
             version: VERSION_1_3,
             is_master: false,
             author,
@@ -260,15 +266,15 @@ impl Plugin {
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let buf: Vec<u8> = vec![/* raw plugin data */];
-    /// let plugin = Plugin::read(&mut &buf[..])?;
+    /// let plugin = Tes3Plugin::read(&mut &buf[..])?;
     /// println!("Plugin info: author {}, description {}", plugin.author(), plugin.description());
     /// # Ok(())
     /// # }
     /// ```
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    pub fn read<T: Read + Seek>(mut f: T) -> Result<Plugin, TesError> {
-        let header = Record::read(&mut f)?;
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<Tes3Plugin, TesError> {
+        let header = Tes3Record::read(&mut f)?;
         if header.name() != b"TES3" {
             return Err(decode_failed(format!(
                 "Expected TES3 record, got {}",
@@ -296,7 +302,7 @@ impl Plugin {
         let description = extract_string(DESCRIPTION_LENGTH, &mut head_reader)?;
         let num_records = extract!(head_reader as u32)? as usize;
 
-        let mut plugin = Plugin {
+        let mut plugin = Tes3Plugin {
             version,
             is_master: flags & FLAG_MASTER != 0,
             author,
@@ -374,7 +380,7 @@ impl Plugin {
         f.seek(SeekFrom::Start(here))?;
 
         while here != eof {
-            plugin.add_record(Record::read(&mut f)?)?;
+            plugin.add_record(Tes3Record::read(&mut f)?)?;
             here = f.seek(SeekFrom::Current(0))?;
         }
 
@@ -394,7 +400,7 @@ impl Plugin {
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
+    /// let plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// assert_eq!(plugin.version(), VERSION_1_3);
     /// # Ok(())
     /// # }
@@ -416,7 +422,7 @@ impl Plugin {
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
-    /// let plugin = Plugin::load_file("Morrowind.esm")?;
+    /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
     /// assert_eq!(plugin.author(), "Bethesda Softworks");
     /// # Ok(())
     /// # }
@@ -438,7 +444,7 @@ impl Plugin {
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Plugin::new(String::from("wrong author"), String::from("some description"))?;
+    /// let mut plugin = Tes3Plugin::new(String::from("wrong author"), String::from("some description"))?;
     /// plugin.set_author(String::from("correct author"))?;
     /// # Ok(())
     /// # }
@@ -458,11 +464,11 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
-    /// use tesutil::PluginInterface;
+    /// use tesutil::Plugin;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
-    /// let plugin = Plugin::load_file("Bloodmoon.esm")?;
+    /// let plugin = Tes3Plugin::load_file("Bloodmoon.esm")?;
     /// assert_eq!(plugin.description(), "The main data file for BloodMoon.\r\n(requires Morrowind.esm to run)");
     /// # Ok(())
     /// # }
@@ -484,7 +490,7 @@ impl Plugin {
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Plugin::new(String::from("author"), String::from("some description"))?;
+    /// let mut plugin = Tes3Plugin::new(String::from("author"), String::from("some description"))?;
     /// plugin.set_description(String::from("updated description"))?;
     /// # Ok(())
     /// # }
@@ -531,7 +537,7 @@ impl Plugin {
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Plugin::new(String::from("author"), String::from("some description"))?;
+    /// let mut plugin = Tes3Plugin::new(String::from("author"), String::from("some description"))?;
     /// plugin.add_master(String::from("Morrowind.esm"), 79837557)?;
     /// # Ok(())
     /// # }
@@ -569,10 +575,10 @@ impl Plugin {
     /// use tesutil::tes3::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
-    /// let mut record = Record::new(b"GMST");
-    /// record.add_field(Field::new_string(b"NAME", String::from("iDispKilling"))?);
-    /// record.add_field(Field::new_i32(b"INTV", -50));
+    /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
+    /// let mut record = Tes3Record::new(b"GMST");
+    /// record.add_field(Tes3Field::new_string(b"NAME", String::from("iDispKilling"))?);
+    /// record.add_field(Tes3Field::new_i32(b"INTV", -50));
     /// plugin.add_record(record)?;
     /// # Ok(())
     /// # }
@@ -580,7 +586,7 @@ impl Plugin {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`PluginError::DuplicateId`]: enum.PluginError.html#variant.DuplicateId
-    pub fn add_record(&mut self, record: Record) -> Result<(), TesError> {
+    pub fn add_record(&mut self, record: Tes3Record) -> Result<(), TesError> {
         let r = Rc::new(RefCell::new(record));
         let rb = r.borrow();
         if let Some(id) = rb.id() {
@@ -614,18 +620,18 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
-    /// use tesutil::PluginInterface;
+    /// use tesutil::Plugin;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
-    /// let plugin = Plugin::load_file("Morrowind.esm")?;
+    /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
     /// if let Some(record) = plugin.get_record("HortatorVotes") {
     ///     // do something with record
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_record(&self, id: &str) -> Result<Option<Ref<Record>>, TesError> {
+    pub fn get_record(&self, id: &str) -> Result<Option<Ref<Tes3Record>>, TesError> {
         if let Some(ref type_map) = self.id_map.get(id) {
             if type_map.is_empty() {
                 Ok(None)
@@ -644,12 +650,15 @@ impl Plugin {
     }
 
     /// Finds a record by ID and type
-    pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Record>> {
+    pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Tes3Record>> {
         self.id_map.get(id)?.get(name).map(|v| v.borrow())
     }
 
     /// Gets an iterator over fields with a particular type
-    pub fn get_records_by_type(&self, name: &[u8; 4]) -> Option<impl Iterator<Item = Ref<Record>>> {
+    pub fn get_records_by_type(
+        &self,
+        name: &[u8; 4],
+    ) -> Option<impl Iterator<Item = Ref<Tes3Record>>> {
         self.type_map
             .get(name)
             .map(|v| v.iter().map(|r| r.borrow()))
@@ -667,18 +676,18 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
-    /// use tesutil::PluginInterface;
+    /// use tesutil::Plugin;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
-    /// let mut plugin = Plugin::load_file("Morrowind.esm")?;
+    /// let mut plugin = Tes3Plugin::load_file("Morrowind.esm")?;
     /// if let Some(mut record) = plugin.get_record_mut("HortatorVotes") {
     ///     // change something with record
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_record_mut(&mut self, id: &str) -> Result<Option<RefMut<Record>>, TesError> {
+    pub fn get_record_mut(&mut self, id: &str) -> Result<Option<RefMut<Tes3Record>>, TesError> {
         if let Some(type_map) = self.id_map.get_mut(id) {
             if type_map.is_empty() {
                 Ok(None)
@@ -696,8 +705,27 @@ impl Plugin {
         }
     }
 
+    /// Loads a form by ID and type
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data.
+    pub fn get<T: Form<Field = Tes3Field, Record = Tes3Record>>(
+        &self,
+        id: &str,
+    ) -> Result<Option<T>, TesError> {
+        Ok(match self.get_record_with_type(id, T::record_type()) {
+            Some(record) => Some(T::read(&*record)?),
+            None => None,
+        })
+    }
+
     /// Finds a record by ID and type and returns a mutable reference
-    pub fn get_record_with_type_mut(&mut self, id: &str, name: &[u8; 4]) -> Option<RefMut<Record>> {
+    pub fn get_record_with_type_mut(
+        &mut self,
+        id: &str,
+        name: &[u8; 4],
+    ) -> Option<RefMut<Tes3Record>> {
         self.id_map
             .get_mut(id)?
             .get_mut(name)
@@ -723,11 +751,11 @@ impl Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
-    /// use tesutil::PluginInterface;
+    /// use tesutil::Plugin;
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let mut buf: Vec<u8> = vec![];
-    /// let plugin = Plugin::load_file("Morrowind.esm")?;
+    /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
     /// plugin.write(&mut &mut buf)?;
     /// assert_eq!(buf.len(), 79837557);
     /// # Ok(())
@@ -736,8 +764,8 @@ impl Plugin {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
-        let mut header = Record::new(b"TES3");
+    pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
+        let mut header = Tes3Record::new(b"TES3");
         let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LENGTH);
         let mut buf_writer = &mut buf;
 
@@ -755,12 +783,12 @@ impl Plugin {
         serialize_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
         serialize!(num_records => buf_writer)?;
 
-        header.add_field(Field::new(b"HEDR", buf).unwrap());
+        header.add_field(Tes3Field::new(b"HEDR", buf).unwrap());
 
         for (name, size) in &self.masters {
-            let mast = Field::new_zstring(b"MAST", name.clone())?;
+            let mast = Tes3Field::new_zstring(b"MAST", name.clone())?;
             header.add_field(mast);
-            header.add_field(Field::new_u64(b"DATA", *size));
+            header.add_field(Tes3Field::new_u64(b"DATA", *size));
         }
 
         if let Some(ref save) = self.save {
@@ -774,13 +802,13 @@ impl Plugin {
             writer.write_exact(&save.unknown2)?;
             serialize_str(&save.player_name, NAME_LENGTH, &mut writer)?;
 
-            header.add_field(Field::new(b"GMDT", game_data).unwrap());
+            header.add_field(Tes3Field::new(b"GMDT", game_data).unwrap());
         }
 
         if !self.screen_data.is_empty() {
             // as far as I can tell, the contents of this field are always the same
             header.add_field(
-                Field::new(
+                Tes3Field::new(
                     b"SCRD",
                     vec![
                         0, 0, 0xff, 0, 0, 0xff, 0, 0, 0xff, 0, 0, 0, 0, 0, 0, 0, 0x20, 0, 0, 0,
@@ -788,7 +816,7 @@ impl Plugin {
                 )
                 .unwrap(),
             );
-            header.add_field(Field::new(b"SCRS", self.screen_data.clone()).unwrap());
+            header.add_field(Tes3Field::new(b"SCRS", self.screen_data.clone()).unwrap());
         }
 
         header.write(&mut f)?;
@@ -801,7 +829,7 @@ impl Plugin {
     }
 }
 
-impl PluginInterface for Plugin {
+impl Plugin for Tes3Plugin {
     /// Reads a plugin from a file
     ///
     /// Reads a plugin from the file at `path`. The entire plugin is read into memory and retains
@@ -816,11 +844,11 @@ impl PluginInterface for Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
-    /// use tesutil::PluginInterface;
+    /// use tesutil::Plugin;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
-    /// let plugin = Plugin::load_file("Morrowind.esm")?;
+    /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
     /// assert!(plugin.is_master);
     /// # Ok(())
     /// # }
@@ -828,10 +856,10 @@ impl PluginInterface for Plugin {
     ///
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Plugin::read`]: #method.read
-    fn load_file<P: AsRef<Path>>(path: P) -> Result<Plugin, TesError> {
+    fn load_file<P: AsRef<Path>>(path: P) -> Result<Tes3Plugin, TesError> {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
-        Plugin::read(reader)
+        Tes3Plugin::read(reader)
     }
 
     /// Save a plugin to a file
@@ -847,11 +875,11 @@ impl PluginInterface for Plugin {
     ///
     /// ```no_run
     /// use tesutil::tes3::plugin::*;
-    /// use tesutil::PluginInterface;
+    /// use tesutil::Plugin;
     /// use tesutil::TesError;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Plugin::new(String::from("test"), String::from("sample plugin"))?;
+    /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
     /// plugin.is_master = true;
     /// plugin.save_file("sample.esm")?;
     /// # Ok(())
@@ -876,7 +904,7 @@ mod tests {
     #[test]
     fn read_plugin() {
         let cursor = io::Cursor::new(TEST_PLUGIN);
-        let plugin = Plugin::read(cursor).unwrap();
+        let plugin = Tes3Plugin::read(cursor).unwrap();
         assert_eq!(plugin.version, VERSION_1_3);
         assert!(!plugin.is_master);
         assert_eq!(plugin.author, "tes3cmd multipatch");
@@ -890,8 +918,8 @@ mod tests {
 
     #[test]
     fn write_plugin() {
-        let mut buf: Vec<u8> = Vec::with_capacity(EXPECTED_PLUGIN.len());
-        let mut plugin = Plugin::new(
+        let buf: Vec<u8> = Vec::with_capacity(EXPECTED_PLUGIN.len());
+        let mut plugin = Tes3Plugin::new(
             String::from("test"),
             String::from("This is an empty test plugin"),
         )
@@ -901,20 +929,22 @@ mod tests {
             .add_master(String::from("Morrowind.esm"), 79837557)
             .unwrap();
 
-        let mut test_record = Record::new(b"GMST");
-        test_record.add_field(Field::new_string(b"NAME", String::from("iDispKilling")).unwrap());
-        test_record.add_field(Field::new_i32(b"INTV", -50));
+        let mut test_record = Tes3Record::new(b"GMST");
+        test_record
+            .add_field(Tes3Field::new_string(b"NAME", String::from("iDispKilling")).unwrap());
+        test_record.add_field(Tes3Field::new_i32(b"INTV", -50));
         plugin.add_record(test_record).unwrap();
 
-        plugin.write(&mut &mut buf).unwrap();
+        let mut cursor = io::Cursor::new(buf);
+        plugin.write(&mut cursor).unwrap();
 
-        assert_eq!(buf, EXPECTED_PLUGIN);
+        assert_eq!(cursor.into_inner(), EXPECTED_PLUGIN);
     }
 
     #[test]
     fn fetch_record() {
         let cursor = io::Cursor::new(TEST_PLUGIN);
-        let plugin = Plugin::read(cursor).unwrap();
+        let plugin = Tes3Plugin::read(cursor).unwrap();
         let record = plugin.get_record("BM_wolf_grey_summon").unwrap().unwrap();
         assert_eq!(record.len(), 9);
         for field in record.iter() {

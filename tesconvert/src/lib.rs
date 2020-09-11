@@ -9,8 +9,10 @@ use tesutil::*;
 mod config;
 pub use config::*;
 
+mod morrowind;
+
 pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
-    let mw_save = Plugin::load_file(&config.source_path)?;
+    let mw_save = Tes3Plugin::load_file(&config.source_path)?;
     let mut ob_save = Save::load_file(&config.target_path)?;
 
     // set name that appears in the save list

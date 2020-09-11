@@ -13,8 +13,11 @@ use crate::TesError;
 mod field;
 pub use field::*;
 
+mod record;
+pub use record::*;
+
 /// Common functionality between different games' plugin implementations
-pub trait PluginInterface: Sized {
+pub trait Plugin: Sized {
     fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, TesError>;
 
     fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError>;

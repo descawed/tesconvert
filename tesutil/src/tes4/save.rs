@@ -7,7 +7,7 @@ pub use actor::*;
 mod actorref;
 pub use actorref::*;
 
-use crate::tes4::plugin::{FormId, Record};
+use crate::tes4::plugin::{FormId, Tes4Record};
 use crate::*;
 use std::collections::HashMap;
 use std::fs::File;
@@ -54,7 +54,7 @@ pub struct Save {
     spec_event_data: Vec<u8>,
     weather_data: Vec<u8>,
     player_combat_count: u32,
-    created_records: Vec<Record>,
+    created_records: Vec<Tes4Record>,
     quick_keys: Vec<Option<u32>>,
     reticle_data: Vec<u8>,
     interface_data: Vec<u8>,
@@ -158,7 +158,7 @@ impl Save {
         let num_created = extract!(f as u32)? as usize;
         let mut created_records = Vec::with_capacity(num_created);
         for _ in 0..num_created {
-            created_records.push(Record::read(&mut f)?.0);
+            created_records.push(Tes4Record::read(&mut f)?);
         }
 
         let quick_keys_size = extract!(f as u16)? as usize;

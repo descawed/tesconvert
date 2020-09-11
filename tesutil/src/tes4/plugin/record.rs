@@ -1,12 +1,11 @@
 #![allow(clippy::single_component_path_imports)]
 
 use std::io::{Read, Seek, Write};
-use std::str;
 
-use super::field::Field;
+use super::field::Tes4Field;
 use super::group::Group;
 use super::FormId;
-use crate::plugin::FieldInterface;
+use crate::plugin::*;
 use crate::*;
 
 // this line is only to help the IDE
@@ -60,32 +59,26 @@ const COMPRESSION_LEVEL: u32 = 6;
 ///
 /// [`Field::new`]: #method.new
 #[derive(Debug)]
-pub struct Record {
+pub struct Tes4Record {
     name: [u8; 4],
     flags: RecordFlags,
     form_id: FormId,
     vcs_info: u32,
-    fields: Vec<Field>,
+    fields: Vec<Tes4Field>,
     groups: Vec<Group>,
 }
 
-// FIXME: change Record so that add_field can efficiently check if adding the field would exceed
-//  the maximum record size and then remove the check from write. obstacles: size method is O(n);
-//  a caller could edit fields with iter_mut() and Record won't be notified of the new size.
-impl Record {
-    /// Creates a new, empty record
-    pub fn new(name: &[u8; 4]) -> Record {
-        Record {
-            name: *name,
-            flags: RecordFlags::empty(),
-            form_id: FormId(0),
-            vcs_info: 0,
-            fields: vec![],
-            groups: vec![],
-        }
-    }
+impl IntoIterator for Tes4Record {
+    type Item = Tes4Field;
+    type IntoIter = <Vec<Tes4Field> as IntoIterator>::IntoIter;
 
-    /// Reads a record from a binary stream with the name already provided
+    fn into_iter(self) -> Self::IntoIter {
+        self.fields.into_iter()
+    }
+}
+
+impl Record<Tes4Field> for Tes4Record {
+    /// Reads a record from a binary stream and returns it with the number of bytes read
     ///
     /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
     /// On success, this function returns a `(Record, usize)`, where the `usize` is the number of
@@ -99,7 +92,133 @@ impl Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    pub fn read_with_name<T: Read>(mut f: T, name: [u8; 4]) -> Result<(Record, usize), TesError> {
+    fn read<T: Read>(mut f: T) -> Result<Tes4Record, TesError> {
+        let mut name = [0u8; 4];
+        f.read_exact(&mut name)?;
+
+        if name == *b"GRUP" {
+            return Err(decode_failed("Expected record, found group"));
+        }
+
+        Tes4Record::read_with_name(f, name)
+    }
+
+    /// Returns a reference to the record name
+    fn name(&self) -> &[u8; 4] {
+        &self.name
+    }
+
+    /// Returns an iterator over this record's fields
+    fn iter(&self) -> Box<dyn Iterator<Item = &Tes4Field> + '_> {
+        Box::new(self.fields.iter())
+    }
+
+    /// Returns a mutable iterator over this record's fields
+    fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut Tes4Field> + '_> {
+        Box::new(self.fields.iter_mut())
+    }
+
+    /// Writes the record to the provided writer
+    ///
+    /// Writes a record to any type that implements [`Write`] and [`Seek`] or a mutable reference to such a type.
+    /// On success, returns number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an I/O error occurs.
+    ///
+    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
+    /// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+    fn write<T: Write + Seek>(&self, f: &mut T) -> Result<(), TesError> {
+        let size = self.field_size();
+
+        // technically, if the record is compressed, we should do this check on the compressed data,
+        // but I don't think this will ever happen anyway
+        if size > MAX_DATA {
+            return Err(TesError::LimitExceeded {
+                description: String::from("Record data too long to be serialized"),
+                max_size: MAX_DATA,
+                actual_size: size,
+            });
+        }
+
+        f.write_exact(&self.name)?;
+
+        if self.flags.contains(RecordFlags::COMPRESSED) {
+            let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
+            for field in self.fields.iter() {
+                field.write(&mut &mut raw_buf)?;
+            }
+
+            let mut buf_reader: &[u8] = raw_buf.as_ref();
+            let mut encoder =
+                ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
+            let mut comp_buf: Vec<u8> = vec![];
+            encoder.read_to_end(&mut comp_buf)?;
+
+            f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
+            f.write_exact(&self.flags.bits.to_le_bytes())?;
+            f.write_exact(&self.form_id.0.to_le_bytes())?;
+            f.write_exact(&self.vcs_info.to_le_bytes())?;
+            f.write_exact(&(size as u32).to_le_bytes())?;
+            f.write_exact(&comp_buf)?;
+
+            // 24 = name + compressed size + flags + form ID + VCS info + uncompressed size
+            comp_buf.len() + 24
+        } else {
+            f.write_exact(&(size as u32).to_le_bytes())?;
+            f.write_exact(&self.flags.bits.to_le_bytes())?;
+            f.write_exact(&self.form_id.0.to_le_bytes())?;
+            f.write_exact(&self.vcs_info.to_le_bytes())?;
+
+            for field in self.fields.iter() {
+                field.write(&mut *f)?;
+            }
+
+            // 20 = name + size + flags + form ID + VCS info
+            size + 20
+        };
+
+        for group in self.groups.iter() {
+            group.write(&mut *f)?;
+        }
+
+        Ok(())
+    }
+}
+
+// FIXME: change Record so that add_field can efficiently check if adding the field would exceed
+//  the maximum record size and then remove the check from write. obstacles: size method is O(n);
+//  a caller could edit fields with iter_mut() and Record won't be notified of the new size.
+impl Tes4Record {
+    /// Creates a new, empty record
+    pub fn new(name: &[u8; 4]) -> Tes4Record {
+        Tes4Record {
+            name: *name,
+            flags: RecordFlags::empty(),
+            form_id: FormId(0),
+            vcs_info: 0,
+            fields: vec![],
+            groups: vec![],
+        }
+    }
+
+    /// Reads a record from a binary stream with the name already provided
+    ///
+    /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
+    /// On success, this function returns a `Record`. This function takes the record `name` instead
+    /// of reading it because the caller must have already verified that this is a record and not
+    /// a [`Group`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if an I/O error occurs.
+    ///
+    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
+    /// [`Group`']: struct.Group.html
+    pub fn read_with_name<T: Read>(mut f: T, name: [u8; 4]) -> Result<Tes4Record, TesError> {
         let size = extract!(f as u32)? as usize;
 
         let mut buf = [0u8; 4];
@@ -111,7 +230,7 @@ impl Record {
         let form_id = FormId(extract!(f as u32)?);
         let vcs_info = extract!(f as u32)?;
 
-        let mut record = Record {
+        let mut record = Tes4Record {
             name,
             flags,
             form_id,
@@ -132,38 +251,12 @@ impl Record {
             record.field_read_helper(reader, size)?;
         };
 
-        // 20 = type + size + flags + form ID = VCS info
-        Ok((record, size + 20))
-    }
-
-    /// Reads a record from a binary stream and returns it with the number of bytes read
-    ///
-    /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
-    /// On success, this function returns a `(Record, usize)`, where the `usize` is the number of
-    /// bytes read. This function takes the record `name` instead of reading it because the caller
-    /// must have already verified that this is a record and not a [`Group`].
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`std::io::Error`] if an I/O error occurs.
-    ///
-    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    /// [`Group`']: struct.Group.html
-    pub fn read<T: Read>(mut f: T) -> Result<(Record, usize), TesError> {
-        let mut name = [0u8; 4];
-        f.read_exact(&mut name)?;
-
-        if name == *b"GRUP" {
-            return Err(decode_failed("Expected record, found group"));
-        }
-
-        Record::read_with_name(f, name)
+        Ok(record)
     }
 
     fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> Result<(), TesError> {
         while size > 0 {
-            let field = Field::read(&mut f)?;
+            let field = Tes4Field::read(&mut f)?;
             let field_size = field.size();
             if field_size > size {
                 return Err(decode_failed("Field size exceeds record size"));
@@ -208,88 +301,6 @@ impl Record {
         }
     }
 
-    /// Writes the record to the provided writer
-    ///
-    /// Writes a record to any type that implements [`Write`] and [`Seek`] or a mutable reference to such a type.
-    /// On success, returns number of bytes written.
-    ///
-    /// # Errors
-    ///
-    /// Returns a [`std::io::Error`] if an I/O error occurs.
-    ///
-    /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-    /// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write + Seek>(&self, f: &mut T) -> Result<usize, TesError> {
-        let size = self.field_size();
-
-        // technically, if the record is compressed, we should do this check on the compressed data,
-        // but I don't think this will ever happen anyway
-        if size > MAX_DATA {
-            return Err(TesError::LimitExceeded {
-                description: String::from("Record data too long to be serialized"),
-                max_size: MAX_DATA,
-                actual_size: size,
-            });
-        }
-
-        f.write_exact(&self.name)?;
-
-        let mut full_size = if self.flags.contains(RecordFlags::COMPRESSED) {
-            let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
-            for field in self.fields.iter() {
-                field.write(&mut &mut raw_buf)?;
-            }
-
-            let mut buf_reader: &[u8] = raw_buf.as_ref();
-            let mut encoder =
-                ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
-            let mut comp_buf: Vec<u8> = vec![];
-            encoder.read_to_end(&mut comp_buf)?;
-
-            f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
-            f.write_exact(&self.flags.bits.to_le_bytes())?;
-            f.write_exact(&self.form_id.0.to_le_bytes())?;
-            f.write_exact(&self.vcs_info.to_le_bytes())?;
-            f.write_exact(&(size as u32).to_le_bytes())?;
-            f.write_exact(&comp_buf)?;
-
-            // 24 = name + compressed size + flags + form ID + VCS info + uncompressed size
-            comp_buf.len() + 24
-        } else {
-            f.write_exact(&(size as u32).to_le_bytes())?;
-            f.write_exact(&self.flags.bits.to_le_bytes())?;
-            f.write_exact(&self.form_id.0.to_le_bytes())?;
-            f.write_exact(&self.vcs_info.to_le_bytes())?;
-
-            for field in self.fields.iter() {
-                field.write(&mut *f)?;
-            }
-
-            // 20 = name + size + flags + form ID + VCS info
-            size + 20
-        };
-
-        for group in self.groups.iter() {
-            full_size += group.write(&mut *f)?;
-        }
-
-        Ok(full_size)
-    }
-
-    /// Returns a reference to the record name
-    pub fn name(&self) -> &[u8] {
-        &self.name
-    }
-
-    /// Returns the record name as a string
-    ///
-    /// If the record name cannot be decoded as UTF-8 (which will never happen in a valid plugin
-    /// file), the string `"<invalid>"` will be returned.
-    pub fn display_name(&self) -> &str {
-        str::from_utf8(&self.name).unwrap_or("<invalid>")
-    }
-
     /// Returns the form ID
     pub fn id(&self) -> FormId {
         self.form_id
@@ -302,7 +313,7 @@ impl Record {
     /// instead.
     ///
     /// [`is_deleted`]: #structfield.is_deleted
-    pub fn add_field(&mut self, field: Field) {
+    pub fn add_field(&mut self, field: Tes4Field) {
         self.fields.push(field);
     }
 
@@ -328,23 +339,6 @@ impl Record {
         self.fields.is_empty()
     }
 
-    /// Consumes the record and returns an iterator over its fields
-    // see tes3's Record for why this is allowed
-    #[allow(clippy::should_implement_trait)]
-    pub fn into_iter(self) -> impl Iterator<Item = Field> {
-        self.fields.into_iter()
-    }
-
-    /// Returns an iterator over this record's fields
-    pub fn iter(&self) -> impl Iterator<Item = &Field> {
-        self.fields.iter()
-    }
-
-    /// Returns a mutable iterator over this record's fields
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Field> {
-        self.fields.iter_mut()
-    }
-
     /// Removes all fields from this record
     pub fn clear(&mut self) {
         self.fields.clear();
@@ -360,7 +354,7 @@ mod tests {
     fn read_record() {
         let data = b"GLOB\x21\0\0\0\0\0\0\0\x3a\0\0\0\0\0\0\0EDID\x0a\0TimeScale\0FNAM\x01\0sFLTV\x04\0\0\0\xf0\x41".to_vec();
         let cursor = io::Cursor::new(data);
-        let record = Record::read(cursor).unwrap().0;
+        let record = Tes4Record::read(cursor).unwrap();
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted());
         assert!(!record.is_persistent());
@@ -370,14 +364,14 @@ mod tests {
 
     #[test]
     fn write_record() {
-        let mut record = Record::new(b"DIAL");
+        let mut record = Tes4Record::new(b"DIAL");
         record.form_id = FormId(0xaa);
         record.vcs_info = 0x181f1c;
-        record.add_field(Field::new(b"EDID", b"ADMIREHATE\0".to_vec()).unwrap());
-        record.add_field(Field::new_u32(b"QSTI", 0x1e722));
-        record.add_field(Field::new_u32(b"QSTI", 0x10602));
-        record.add_field(Field::new(b"FULL", b"ADMIRE_HATE\0".to_vec()).unwrap());
-        record.add_field(Field::new_u8(b"DATA", 3));
+        record.add_field(Tes4Field::new(b"EDID", b"ADMIREHATE\0".to_vec()).unwrap());
+        record.add_field(Tes4Field::new_u32(b"QSTI", 0x1e722));
+        record.add_field(Tes4Field::new_u32(b"QSTI", 0x10602));
+        record.add_field(Tes4Field::new(b"FULL", b"ADMIRE_HATE\0".to_vec()).unwrap());
+        record.add_field(Tes4Field::new_u8(b"DATA", 3));
 
         let mut writer = Cursor::new(vec![]);
         record.write(&mut writer).unwrap();

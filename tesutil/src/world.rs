@@ -7,8 +7,8 @@ use crate::*;
 ///
 /// The World type manages the current load order of plugins and allows looking up records from
 /// the appropriate plugin based on load order.
-pub trait WorldInterface {
-    type Plugin: PluginInterface;
+pub trait World {
+    type Plugin: Plugin;
 
     fn load_plugins<P, S, T>(
         plugin_dir: P,

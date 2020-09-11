@@ -1,6 +1,7 @@
 use super::*;
-use crate::plugin::FieldInterface;
+use crate::plugin::Field;
 use crate::tes3::Skills;
+use crate::Form;
 
 /// Information about the state of a resting player
 #[derive(Debug)]
@@ -114,16 +115,21 @@ pub struct PlayerData {
     werewolf_data: Vec<u8>,
 }
 
-impl PlayerData {
+impl Form for PlayerData {
+    type Field = Tes3Field;
+    type Record = Tes3Record;
+
+    fn record_type() -> &'static [u8; 4] {
+        b"PCDT"
+    }
+
     /// Read player data from a raw record
     ///
     /// # Errors
     ///
     /// Fails if an I/O error occurs or the data is not valid
-    pub fn read(record: &Record) -> Result<PlayerData, TesError> {
-        if record.name() != b"PCDT" {
-            return Err(decode_failed("Record was not a PCDT record"));
-        }
+    fn read(record: &Tes3Record) -> Result<PlayerData, TesError> {
+        PlayerData::assert(record)?;
 
         let mut player_data = PlayerData::default();
         for field in record.iter() {
@@ -254,5 +260,9 @@ impl PlayerData {
         }
 
         Ok(player_data)
+    }
+
+    fn write(&self, _: &mut Tes3Record) -> Result<(), TesError> {
+        unimplemented!()
     }
 }

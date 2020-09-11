@@ -2,8 +2,9 @@
 
 use std::collections::HashMap;
 
-use super::record::Record;
-use crate::plugin::FieldInterface;
+use super::field::Tes3Field;
+use super::record::Tes3Record;
+use crate::plugin::Field;
 use crate::tes3::Skills;
 use crate::*;
 
@@ -128,16 +129,21 @@ pub struct Npc {
     packages: Vec<Package>,
 }
 
-impl Npc {
-    /// Read NPC data from a raw record
+impl Form for Npc {
+    type Field = Tes3Field;
+    type Record = Tes3Record;
+
+    fn record_type() -> &'static [u8; 4] {
+        b"NPC_"
+    }
+
+    /// Reads NPC data from a raw record
     ///
     /// # Errors
     ///
     /// Fails if the provided record is not an `b"NPC_"` record or if the record data is invalid.
-    pub fn read(record: &Record) -> Result<Npc, TesError> {
-        if record.name() != b"NPC_" {
-            return Err(decode_failed("Record was not an NPC_ record"));
-        }
+    fn read(record: &Tes3Record) -> Result<Npc, TesError> {
+        Npc::assert(record)?;
 
         // initialize an empty struct which we'll fill in based on what's available
         let mut npc = Npc {
@@ -403,6 +409,12 @@ impl Npc {
         Ok(npc)
     }
 
+    fn write(&self, _: &mut Tes3Record) -> Result<(), TesError> {
+        unimplemented!()
+    }
+}
+
+impl Npc {
     /// Gets the character's name
     pub fn name(&self) -> Option<&str> {
         self.name.as_ref().map(|v| &v[..])
@@ -466,7 +478,7 @@ mod tests {
 
     #[test]
     fn parse_record() {
-        let record = Record::read(&mut NPC_RECORD.as_ref()).unwrap();
+        let record = Tes3Record::read(&mut NPC_RECORD.as_ref()).unwrap();
         let npc = Npc::read(&record).unwrap();
         assert_eq!(npc.id, "player");
         assert_eq!(npc.name.unwrap(), "Cirfenath");

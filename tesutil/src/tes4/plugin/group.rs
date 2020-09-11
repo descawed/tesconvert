@@ -3,7 +3,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
-use super::record::Record;
+use super::record::Tes4Record;
 use crate::*;
 
 /// Indicates the type of group a group is
@@ -128,7 +128,7 @@ pub struct Group {
     kind: GroupKind,
     stamp: u32,
     groups: Vec<Group>,
-    records: Vec<Rc<RefCell<Record>>>,
+    records: Vec<Rc<RefCell<Tes4Record>>>,
 }
 
 impl Group {
@@ -149,7 +149,7 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
-    pub fn read_without_name<T: Read>(mut f: &mut T) -> Result<(Group, usize), TesError> {
+    pub fn read_without_name<T: Read + Seek>(mut f: &mut T) -> Result<Group, TesError> {
         let full_size = extract!(f as u32)? as usize;
         // size includes this header, so subtract that
         let mut size = full_size - 20;
@@ -157,16 +157,13 @@ impl Group {
         let stamp = extract!(f as u32)?;
 
         let mut groups = vec![];
-        let mut records: Vec<Rc<RefCell<Record>>> = vec![];
+        let mut records: Vec<Rc<RefCell<Tes4Record>>> = vec![];
+        let mut start = f.seek(SeekFrom::Current(0))?;
         while size > 0 {
             let mut name = [0u8; 4];
             f.read_exact(&mut name)?;
             if name == *b"GRUP" {
-                let (group, group_size) = Group::read_without_name(&mut *f)?;
-                if group_size > size {
-                    return Err(decode_failed("Sub-group size exceeds group size"));
-                }
-                size -= group_size;
+                let group = Group::read_without_name(&mut *f)?;
 
                 if let Some(last_record) = records.last_mut() {
                     last_record.borrow_mut().add_group(group);
@@ -174,24 +171,24 @@ impl Group {
                     groups.push(group);
                 }
             } else {
-                let (record, record_size) = Record::read_with_name(&mut f, name)?;
-                if record_size > size {
-                    return Err(decode_failed("Record size exceeds group size"));
-                }
-                size -= record_size;
+                let record = Tes4Record::read_with_name(&mut f, name)?;
                 records.push(Rc::new(RefCell::new(record)));
             }
+            let end = f.seek(SeekFrom::Current(0))?;
+            let bytes_read = (end - start) as usize;
+            if bytes_read > size {
+                return Err(decode_failed("Data size exceeds group size"));
+            }
+            size -= bytes_read;
+            start = end;
         }
 
-        Ok((
-            Group {
-                kind,
-                stamp,
-                groups,
-                records,
-            },
-            full_size,
-        ))
+        Ok(Group {
+            kind,
+            stamp,
+            groups,
+            records,
+        })
     }
 
     /// Reads a group from a binary stream
@@ -199,7 +196,7 @@ impl Group {
     /// # Errors
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
-    pub fn read<T: Read>(mut f: T) -> Result<(Group, usize), TesError> {
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<Group, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -212,7 +209,7 @@ impl Group {
 
     /// Returns an iterator over Rc smart pointers to this group's records
     // need Box because the iterator is recursive
-    pub fn iter_rc(&self) -> Box<dyn Iterator<Item = Rc<RefCell<Record>>> + '_> {
+    pub fn iter_rc(&self) -> Box<dyn Iterator<Item = Rc<RefCell<Tes4Record>>> + '_> {
         Box::new(
             self.records
                 .iter()
@@ -238,7 +235,7 @@ impl Group {
     //  creates an infinite number of versions of this method each with an extra `&mut` at the
     //  beginning, which fails to compile. With `f: &mut T`, we can pass group.write(&mut *f), which
     //  ensures each recursive call sees the same type for T. Is there a better way?
-    pub fn write<T: Write + Seek>(&self, f: &mut T) -> Result<usize, TesError> {
+    pub fn write<T: Write + Seek>(&self, f: &mut T) -> Result<(), TesError> {
         f.write_exact(b"GRUP")?;
 
         let len_offset = f.seek(SeekFrom::Current(0))?;
@@ -262,6 +259,6 @@ impl Group {
         serialize!(total_size as u32 => f)?;
         f.seek(SeekFrom::Start(end_offset))?; // return to where we were
 
-        Ok(total_size as usize)
+        Ok(())
     }
 }

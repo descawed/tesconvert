@@ -1,7 +1,7 @@
 use std::io;
 use std::mem::size_of;
 
-use crate::plugin::FieldInterface;
+use crate::plugin::Field;
 use crate::*;
 
 /// An attribute of a record
@@ -18,12 +18,12 @@ use crate::*;
 /// The data, on the other hand, is taken as an owned value, because this is much more likely to be
 /// dynamic.
 #[derive(Debug)]
-pub struct Field {
+pub struct Tes4Field {
     name: [u8; 4],
     data: Vec<u8>,
 }
 
-impl FieldInterface for Field {
+impl Field for Tes4Field {
     /// Creates a new field with the specified data
     ///
     /// # Errors
@@ -38,16 +38,16 @@ impl FieldInterface for Field {
     /// use tesutil::tes4::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let field = Field::new(b"DATA", vec![/* binary gobbledygook */])?;
+    /// let field = Tes4Field::new(b"DATA", vec![/* binary gobbledygook */])?;
     /// # Ok(())
     /// # }
     /// ```
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
-    fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Field, TesError> {
+    fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Tes4Field, TesError> {
         check_size(&data, MAX_DATA, "field data too large")?;
-        Ok(Field { name: *name, data })
+        Ok(Tes4Field { name: *name, data })
     }
 
     /// Reads a field from a binary stream
@@ -68,7 +68,7 @@ impl FieldInterface for Field {
     ///
     /// # fn main() -> io::Result<()> {
     /// let data = b"NAME\x09\0\0\0GameHour\0";
-    /// let field = Field::read(&mut data.as_ref())?;
+    /// let field = Tes4Field::read(&mut data.as_ref())?;
     /// assert_eq!(field.name(), b"NAME");
     /// # Ok(())
     /// # }
@@ -76,7 +76,7 @@ impl FieldInterface for Field {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn read(f: &mut dyn Read) -> io::Result<Field> {
+    fn read(f: &mut dyn Read) -> io::Result<Tes4Field> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -95,7 +95,7 @@ impl FieldInterface for Field {
 
         f.read_exact(&mut data)?;
 
-        Ok(Field { name, data })
+        Ok(Tes4Field { name, data })
     }
 
     /// Returns the field name
@@ -107,10 +107,10 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::Field;
+    /// use tesutil::tes4::plugin::Tes4Field;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let field = Field::new(b"NAME", vec![])?;
+    /// let field = Tes4Field::new(b"NAME", vec![])?;
     /// assert_eq!(field.name(), b"NAME");
     /// # Ok(())
     /// # }
@@ -129,7 +129,7 @@ impl FieldInterface for Field {
     /// use tesutil::tes4::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
+    /// let field = Tes4Field::new(b"DATA", vec![1, 2, 3])?;
     /// assert_eq!(*field.get(), [1, 2, 3]);
     /// # Ok(())
     /// # }
@@ -145,10 +145,10 @@ impl FieldInterface for Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::Field;
+    /// use tesutil::tes4::plugin::Tes4Field;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let field = Field::new(b"DATA", vec![1, 2, 3])?;
+    /// let field = Tes4Field::new(b"DATA", vec![1, 2, 3])?;
     /// let data = field.consume();
     /// assert_eq!(data[..], [1, 2, 3]);
     /// # Ok(())
@@ -174,7 +174,7 @@ impl FieldInterface for Field {
     /// use tesutil::tes4::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
+    /// let field = Tes4Field::new(b"NAME", vec![1, 2, 3])?;
     /// assert_eq!(field.size(), 9); // 4 bytes for the name + 2 bytes for the length + 3 bytes of data
     /// # Ok(())
     /// # }
@@ -202,7 +202,7 @@ impl FieldInterface for Field {
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf: Vec<u8> = vec![];
-    /// let field = Field::new(b"NAME", vec![1, 2, 3])?;
+    /// let field = Tes4Field::new(b"NAME", vec![1, 2, 3])?;
     /// field.write(&mut &mut buf)?;
     /// assert!(buf.len() > 0);
     /// # Ok(())
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn write_tes4_field() {
-        let field = Field::new(b"EDID", b"sNoTalkFleeing\0".to_vec()).unwrap();
+        let field = Tes4Field::new(b"EDID", b"sNoTalkFleeing\0".to_vec()).unwrap();
         let mut buf = vec![];
         field.write(&mut buf).unwrap();
         assert_eq!(buf, *b"EDID\x0f\0sNoTalkFleeing\0");
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn read_tes4_field() {
         let data = b"EDID\x13\0fDialogSpeachDelay\0";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes4Field::read(&mut data.as_ref()).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(s, "fDialogSpeachDelay");
     }
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn read_long_tes4_field() {
         let data = b"XXXX\x04\0\x51\0\0\0DATA\0\0Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.\0";
-        let field = Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes4Field::read(&mut data.as_ref()).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(field.name, *b"DATA");
         assert_eq!(

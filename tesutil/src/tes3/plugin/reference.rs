@@ -1,5 +1,6 @@
 use crate::tes3::plugin::*;
 use crate::tes3::Skills;
+use crate::Form;
 
 /// A statistic, such as an attribute, skill, health, etc.
 #[derive(Debug, Default)]
@@ -49,19 +50,21 @@ pub struct PlayerReference {
     pub skills: Skills<Stat<u32>>,
 }
 
-impl PlayerReference {
+impl Form for PlayerReference {
+    type Field = Tes3Field;
+    type Record = Tes3Record;
+
+    fn record_type() -> &'static [u8; 4] {
+        b"REFR"
+    }
+
     /// Reads a player reference change from a raw record
     ///
     /// # Errors
     ///
     /// Fails if an I/O error occurs or if the data is invalid
-    pub fn read(record: &Record) -> Result<PlayerReference, TesError> {
-        if record.name() != b"REFR" {
-            return Err(TesError::DecodeFailed {
-                description: String::from("Record was not a REFR record"),
-                source: None,
-            });
-        }
+    fn read(record: &Tes3Record) -> Result<PlayerReference, TesError> {
+        PlayerReference::assert(record)?;
 
         let mut player = PlayerReference {
             unknown1: [0; 12],
@@ -129,7 +132,7 @@ impl PlayerReference {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write(&self, record: &mut Record) -> Result<(), TesError> {
+    fn write(&self, record: &mut Tes3Record) -> Result<(), TesError> {
         for field in record.iter_mut() {
             match field.name() {
                 b"ACDT" => {
@@ -186,7 +189,7 @@ mod tests {
     #[test]
     fn read() {
         let cursor = io::Cursor::new(REFR_RECORD);
-        let record = Record::read(cursor).unwrap();
+        let record = Tes3Record::read(cursor).unwrap();
         let player = PlayerReference::read(&record).unwrap();
         assert_eq!(player.attributes[Attribute::Strength].base, 38.);
         assert_eq!(player.skills[Skill::Destruction].base, 91);

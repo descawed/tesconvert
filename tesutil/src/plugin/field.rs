@@ -46,7 +46,7 @@ macro_rules! from_num {
 /// An attribute of a record
 ///
 /// This trait is a general interface to the field types of different games.
-pub trait FieldInterface: Sized {
+pub trait Field: Sized {
     fn new(name: &[u8; 4], data: Vec<u8>) -> Result<Self, TesError>;
 
     /// Creates a new field with the specified string data
@@ -107,11 +107,10 @@ pub trait FieldInterface: Sized {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
     /// use tesutil::tes4::plugin::*;
     ///
     /// # fn main() -> Result<(), TesError> {
-    /// let mut field = Field::new(b"DATA", vec![])?;
+    /// let mut field = Tes4Field::new(b"DATA", vec![])?;
     /// field.set(b"new data to use".to_vec())?;
     /// # Ok(())
     /// # }

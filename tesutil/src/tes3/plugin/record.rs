@@ -2,8 +2,8 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::str;
 
-use super::field::Field;
-use crate::plugin::FieldInterface;
+use super::field::Tes3Field;
+use crate::plugin::*;
 use crate::*;
 
 const FLAG_DELETED: u32 = 0x0020;
@@ -23,7 +23,7 @@ const FLAG_BLOCKED: u32 = 0x2000;
 ///
 /// [`Field::new`]: #method.new
 #[derive(Debug)]
-pub struct Record {
+pub struct Tes3Record {
     name: [u8; 4],
     /// Whether the record is deleted
     ///
@@ -39,27 +39,22 @@ pub struct Record {
     pub is_initially_disabled: bool,
     // TODO: figure out what this does
     pub is_blocked: bool,
-    fields: Vec<Field>,
+    fields: Vec<Tes3Field>,
 }
 
 const DELETED_FIELD_SIZE: usize = 12;
 
-// FIXME: change Record so that add_field can efficiently check if adding the field would exceed
-//  the maximum record size and then remove the check from write. obstacles: size method is O(n);
-//  a caller could edit fields with iter_mut() and Record won't be notified of the new size.
-impl Record {
-    /// Creates a new, empty record
-    pub fn new(name: &[u8; 4]) -> Record {
-        Record {
-            name: *name,
-            is_deleted: false,
-            is_persistent: false,
-            is_initially_disabled: false,
-            is_blocked: false,
-            fields: vec![],
-        }
-    }
+impl IntoIterator for Tes3Record {
+    type Item = Tes3Field;
+    type IntoIter = <Vec<Tes3Field> as IntoIterator>::IntoIter;
 
+    /// Consumes the record and returns an iterator over its fields
+    fn into_iter(self) -> Self::IntoIter {
+        self.fields.into_iter()
+    }
+}
+
+impl Record<Tes3Field> for Tes3Record {
     /// Reads a record from a binary stream
     ///
     /// Reads a record from any type that implements [`Read`] or a mutable reference to
@@ -72,7 +67,7 @@ impl Record {
     /// Returns an error if an I/O error occurs.
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    pub fn read<T: Read>(mut f: T) -> Result<Record, TesError> {
+    fn read<T: Read>(mut f: T) -> Result<Tes3Record, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -86,7 +81,7 @@ impl Record {
 
         let flags = u32::from_le_bytes(buf);
 
-        let mut record = Record {
+        let mut record = Tes3Record {
             name,
             is_deleted: flags & FLAG_DELETED != 0,
             is_persistent: flags & FLAG_PERSISTENT != 0,
@@ -101,7 +96,7 @@ impl Record {
 
         let mut data_ref: &[u8] = data.as_ref();
         while size > 0 {
-            let field = Field::read(&mut data_ref)?;
+            let field = Tes3Field::read(&mut data_ref)?;
             let field_size = field.size();
             if field_size > size {
                 return Err(decode_failed("Field size exceeds record size"));
@@ -114,6 +109,21 @@ impl Record {
         Ok(record)
     }
 
+    /// Returns a reference to the record name
+    fn name(&self) -> &[u8; 4] {
+        &self.name
+    }
+
+    /// Returns an iterator over this record's fields
+    fn iter(&self) -> Box<dyn Iterator<Item = &Tes3Field> + '_> {
+        Box::new(self.fields.iter())
+    }
+
+    /// Returns a mutable iterator over this record's fields
+    fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut Tes3Field> + '_> {
+        Box::new(self.fields.iter_mut())
+    }
+
     /// Writes the record to the provided writer
     ///
     /// Writes a record to any type that implements [`Write`] or a mutable reference to such a type.
@@ -123,7 +133,7 @@ impl Record {
     /// Returns an error if an I/O error occurs.
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
+    fn write<T: Write>(&self, mut f: &mut T) -> Result<(), TesError> {
         let size = self.field_size();
 
         if size > MAX_DATA {
@@ -157,24 +167,28 @@ impl Record {
         }
 
         if self.is_deleted {
-            let del = Field::new(b"DELE", vec![0; 4]).unwrap();
+            let del = Tes3Field::new(b"DELE", vec![0; 4]).unwrap();
             del.write(&mut f)?;
         }
 
         Ok(())
     }
+}
 
-    /// Returns a reference to the record name
-    pub fn name(&self) -> &[u8; 4] {
-        &self.name
-    }
-
-    /// Returns the record name as a string
-    ///
-    /// If the record name cannot be decoded as UTF-8 (which will never happen in a valid plugin
-    /// file), the string `"<invalid>"` will be returned.
-    pub fn display_name(&self) -> &str {
-        str::from_utf8(&self.name).unwrap_or("<invalid>")
+// FIXME: change Record so that add_field can efficiently check if adding the field would exceed
+//  the maximum record size and then remove the check from write. obstacles: size method is O(n);
+//  a caller could edit fields with iter_mut() and Record won't be notified of the new size.
+impl Tes3Record {
+    /// Creates a new, empty record
+    pub fn new(name: &[u8; 4]) -> Tes3Record {
+        Tes3Record {
+            name: *name,
+            is_deleted: false,
+            is_persistent: false,
+            is_initially_disabled: false,
+            is_blocked: false,
+            fields: vec![],
+        }
     }
 
     /// Returns the record ID
@@ -209,7 +223,7 @@ impl Record {
     /// instead.
     ///
     /// [`is_deleted`]: #structfield.is_deleted
-    pub fn add_field(&mut self, field: Field) {
+    pub fn add_field(&mut self, field: Tes3Field) {
         if field.name() == b"DELE" {
             // we'll add this field automatically based on the deleted flag, so don't add it to
             // the fields vector
@@ -245,27 +259,6 @@ impl Record {
         self.fields.is_empty()
     }
 
-    /// Consumes the record and returns an iterator over its fields
-    // we allow this here because of the return type. returning `impl Iterator` decouples the result
-    // of this method from the particular collection we're using behind the scenes. you can't return
-    // an impl from a trait method, and furthermore the IntoIterator trait requires you to name the
-    // iterator type as an associated type, so we would have to explicitly return alloc::vec::IntoIter,
-    // coupling this method to the data type of self.fields unnecessarily.
-    #[allow(clippy::should_implement_trait)]
-    pub fn into_iter(self) -> impl Iterator<Item = Field> {
-        self.fields.into_iter()
-    }
-
-    /// Returns an iterator over this record's fields
-    pub fn iter(&self) -> impl Iterator<Item = &Field> {
-        self.fields.iter()
-    }
-
-    /// Returns a mutable iterator over this record's fields
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Field> {
-        self.fields.iter_mut()
-    }
-
     /// Removes all fields from this record
     pub fn clear(&mut self) {
         self.fields.clear();
@@ -280,7 +273,7 @@ mod tests {
     fn read_record() {
         let data = b"GLOB\x27\0\0\0\0\0\0\0\0\0\0\0NAME\x0a\0\0\0TimeScale\0FNAM\x01\0\0\0fFLTV\x04\0\0\0\0\0\x20\x41".to_vec();
         let cursor = io::Cursor::new(data);
-        let record = Record::read(cursor).unwrap();
+        let record = Tes3Record::read(cursor).unwrap();
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted);
         assert!(!record.is_persistent);
@@ -294,20 +287,21 @@ mod tests {
         let data = b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0".to_vec();
         let len = data.len();
         let cursor = io::Cursor::new(data);
-        let record = Record::read(cursor).unwrap();
+        let record = Tes3Record::read(cursor).unwrap();
         assert!(record.is_deleted);
         assert_eq!(record.size(), len);
     }
 
     #[test]
     fn write_record() {
-        let mut record = Record::new(b"DIAL");
+        let mut record = Tes3Record::new(b"DIAL");
         record.is_deleted = true;
-        record.add_field(Field::new(b"NAME", b"Berel Sala\0".to_vec()).unwrap());
-        record.add_field(Field::new(b"DATA", vec![0; 4]).unwrap());
+        record.add_field(Tes3Field::new(b"NAME", b"Berel Sala\0".to_vec()).unwrap());
+        record.add_field(Tes3Field::new(b"DATA", vec![0; 4]).unwrap());
 
-        let mut buf = vec![];
-        record.write(&mut buf).unwrap();
-        assert_eq!(buf, b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0".to_vec());
+        let buf = vec![];
+        let mut cursor = io::Cursor::new(buf);
+        record.write(&mut cursor).unwrap();
+        assert_eq!(cursor.into_inner(), b"DIAL\x2b\0\0\0\0\0\0\0\x20\0\0\0NAME\x0b\0\0\0Berel Sala\0DATA\x04\0\0\0\0\0\0\0DELE\x04\0\0\0\0\0\0\0".to_vec());
     }
 }

@@ -10,7 +10,7 @@ mod world;
 pub use world::*;
 
 /// All possible actor values
-#[derive(Copy, Clone, Debug, Enum)]
+#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq)]
 pub enum ActorValue {
     Strength,
     Intelligence,

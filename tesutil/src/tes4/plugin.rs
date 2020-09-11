@@ -60,7 +60,7 @@ impl FormId {
 /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
 /// [`new`]: #method.new
 #[derive(Debug)]
-pub struct Plugin {
+pub struct Tes4Plugin {
     version: f32,
     /// Indicates whether this plugin is a master
     pub is_master: bool,
@@ -69,19 +69,19 @@ pub struct Plugin {
     description: Option<String>,
     // these two fields are optional and only seen in Oblivion.esm; we store them so we can write
     // them back out, but we don't do anything with them
-    offsets: Option<Field>,
-    deleted: Option<Field>,
-    masters: Vec<String>,
+    offsets: Option<Tes4Field>,
+    deleted: Option<Tes4Field>,
+    masters: Vec<(String, String)>,
     groups: HashMap<[u8; 4], Group>,
-    id_map: HashMap<FormId, Rc<RefCell<Record>>>,
+    id_map: HashMap<FormId, Rc<RefCell<Tes4Record>>>,
 }
 
 /// Version value for Oblivion plugins
 pub const VERSION: f32 = 1.;
 
-impl Plugin {
-    pub fn new(author: Option<String>, description: Option<String>) -> Plugin {
-        Plugin {
+impl Tes4Plugin {
+    pub fn new(author: Option<String>, description: Option<String>) -> Tes4Plugin {
+        Tes4Plugin {
             version: VERSION,
             is_master: false,
             next_form_id: 1,
@@ -100,13 +100,13 @@ impl Plugin {
     /// # Errors
     ///
     /// Fails if an I/O error occurs or if the plugin data is invalid.
-    pub fn read<T: Read + Seek>(mut f: T) -> Result<Plugin, TesError> {
-        let (record, _) = Record::read(&mut f)?;
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<Tes4Plugin, TesError> {
+        let record = Tes4Record::read(&mut f)?;
         if record.name() != b"TES4" {
             return Err(decode_failed("Not a valid TES4 plugin file"));
         }
 
-        let mut plugin = Plugin::new(None, None);
+        let mut plugin = Tes4Plugin::new(None, None);
         plugin.is_master = record.is_master();
 
         for field in record.into_iter() {
@@ -122,7 +122,13 @@ impl Plugin {
                 b"DELE" => plugin.deleted = Some(field),
                 b"CNAM" => plugin.author = Some(String::from(field.get_zstring()?)),
                 b"SNAM" => plugin.description = Some(String::from(field.get_zstring()?)),
-                b"MAST" => plugin.masters.push(String::from(field.get_zstring()?)),
+                b"MAST" => {
+                    // we keep the original case so we can write the plugin back unmodified, but we
+                    // also keep a lowercase copy for matching
+                    let master = String::from(field.get_zstring()?);
+                    let lc_master = master.to_lowercase();
+                    plugin.masters.push((master, lc_master));
+                }
                 b"DATA" => (),
                 _ => {
                     return Err(decode_failed(format!(
@@ -148,7 +154,7 @@ impl Plugin {
         f.seek(SeekFrom::Start(here))?;
 
         while here != eof {
-            let (group, _) = Group::read(&mut f)?;
+            let group = Group::read(&mut f)?;
             for record in group.iter_rc() {
                 let id = record.borrow().id();
                 let index = id.index();
@@ -174,31 +180,41 @@ impl Plugin {
     }
 
     /// Gets a record by form ID
-    pub fn get_record(&self, form_id: FormId) -> Option<Ref<Record>> {
+    pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
         self.id_map.get(&form_id).map(|r| r.borrow())
     }
 
     /// Gets a record by master and form ID
     ///
     /// This allows you to get a record without knowing the exact index that the master is loaded at.
-    pub fn get_record_by_master(&self, master: &str, mut form_id: FormId) -> Option<Ref<Record>> {
-        let index = self.masters.iter().position(|m| m == master)?;
+    /// A value of None indicates that the record is defined in this plugin itself.
+    pub fn get_record_by_master(
+        &self,
+        master: Option<&str>,
+        mut form_id: FormId,
+    ) -> Option<Ref<Tes4Record>> {
+        let index = match master {
+            Some(name) => self.masters.iter().position(|(_, m)| m == name)?,
+            None => self.masters.len(),
+        };
         form_id.set_index(index as u8);
         self.get_record(form_id)
     }
 
     /// Iterate over this plugin's records with the corresponding master
-    pub fn iter_records_with_masters(&self) -> impl Iterator<Item = (&str, Weak<RefCell<Record>>)> {
+    pub fn iter_records_with_masters(
+        &self,
+    ) -> impl Iterator<Item = (&str, Weak<RefCell<Tes4Record>>)> {
         // the move is necessary to take ownership of the reference to self, which would otherwise
         // be dropped at the end of the function
         self.id_map.iter().map(move |(form_id, record)| {
             let index = form_id.index() as usize;
-            (&self.masters[index][..], Rc::downgrade(record))
+            (&self.masters[index].0[..], Rc::downgrade(record))
         })
     }
 }
 
-impl PluginInterface for Plugin {
+impl Plugin for Tes4Plugin {
     /// Loads a plugin from a file
     ///
     /// # Errors
@@ -207,7 +223,7 @@ impl PluginInterface for Plugin {
     fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, TesError> {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
-        Plugin::read(reader)
+        Tes4Plugin::read(reader)
     }
 
     /// Saves a plugin to a file
@@ -229,7 +245,7 @@ mod tests {
     #[test]
     fn load_plugin() {
         let cursor = io::Cursor::new(TEST_PLUGIN);
-        let plugin = Plugin::read(cursor).unwrap();
+        let plugin = Tes4Plugin::read(cursor).unwrap();
 
         let record = plugin.get_record(FormId(0x51a8)).unwrap();
         for field in record.iter() {
@@ -246,6 +262,13 @@ mod tests {
             plugin.description.unwrap(),
             "This is the description for the sample plugin"
         );
-        assert_eq!(plugin.masters, ["Oblivion.esm", "Knights.esp"]);
+        assert_eq!(
+            plugin
+                .masters
+                .into_iter()
+                .map(|(m, _)| m)
+                .collect::<Vec<String>>(),
+            ["Oblivion.esm", "Knights.esp"]
+        );
     }
 }

@@ -17,13 +17,14 @@ pub use world::*;
 use std::error;
 use std::ffi::CStr;
 use std::io;
-use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{Error, ErrorKind, Read, SeekFrom, Write};
 use std::iter;
 use std::str;
 
 use enum_map::{Enum, EnumMap};
 use ini::ini;
 use len_trait::len::Len;
+use num_enum::TryFromPrimitive;
 use thiserror::*;
 
 #[macro_use]
@@ -48,7 +49,8 @@ macro_rules! serialize {
 }
 
 /// All possible attributes
-#[derive(Copy, Clone, Debug, Enum)]
+#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]
+#[repr(u8)]
 pub enum Attribute {
     Strength,
     Intelligence,
@@ -64,7 +66,8 @@ pub enum Attribute {
 pub type Attributes<T> = EnumMap<Attribute, T>;
 
 /// All possible specializations
-#[derive(Copy, Clone, Debug, Enum)]
+#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]
+#[repr(u8)]
 pub enum Specialization {
     Combat,
     Magic,
@@ -116,6 +119,33 @@ pub enum TesError {
     /// Error parsing an INI file
     #[error(transparent)]
     IniError(#[from] ini::Error),
+}
+
+/// A concrete game object, as opposed to a generic record
+pub trait Form: Sized {
+    type Field: Field;
+    type Record: Record<Self::Field>;
+
+    /// The 4-byte ID for this form's record
+    fn record_type() -> &'static [u8; 4];
+
+    fn read(record: &Self::Record) -> Result<Self, TesError>;
+
+    /// Assert that a record matches this Form type
+    fn assert(record: &Self::Record) -> Result<(), TesError> {
+        let rt = Self::record_type();
+        if record.name() != rt {
+            return Err(decode_failed(format!(
+                "Expected {} record, got {}",
+                str::from_utf8(rt).unwrap_or("<invalid>"),
+                record.display_name()
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn write(&self, record: &mut Self::Record) -> Result<(), TesError>;
 }
 
 // doing only a partial write could result in invalid plugins, so we want to treat this as an error
