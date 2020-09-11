@@ -2,6 +2,7 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
+use std::path::Path;
 use std::rc::{Rc, Weak};
 
 use crate::*;
@@ -14,7 +15,9 @@ pub use group::*;
 
 mod record;
 pub use record::*;
-use std::path::Path;
+
+mod class;
+pub use class::*;
 
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves

@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use crate::{Attribute, TesError};
 use enum_map::{Enum, EnumMap};
+use num_enum::TryFromPrimitive;
 
 pub mod plugin;
 pub mod save;
@@ -10,7 +11,8 @@ mod world;
 pub use world::*;
 
 /// All possible actor values
-#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]
+#[repr(u8)]
 pub enum ActorValue {
     Strength,
     Intelligence,
@@ -133,7 +135,8 @@ impl From<Attribute> for ActorValue {
 pub type ActorValues<T> = EnumMap<ActorValue, T>;
 
 /// All possible skills
-#[derive(Copy, Clone, Debug, Enum)]
+#[derive(Copy, Clone, Debug, Enum, TryFromPrimitive)]
+#[repr(u8)]
 pub enum Skill {
     Armorer,
     Athletics,

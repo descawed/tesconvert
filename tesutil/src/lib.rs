@@ -14,6 +14,7 @@ pub use plugin::*;
 mod world;
 pub use world::*;
 
+use std::convert::TryFrom;
 use std::error;
 use std::ffi::CStr;
 use std::io;
@@ -60,6 +61,27 @@ pub enum Attribute {
     Endurance,
     Personality,
     Luck,
+}
+
+impl TryFrom<tes4::ActorValue> for Attribute {
+    type Error = TesError;
+
+    fn try_from(value: tes4::ActorValue) -> Result<Self, Self::Error> {
+        match value {
+            tes4::ActorValue::Strength => Ok(Attribute::Strength),
+            tes4::ActorValue::Intelligence => Ok(Attribute::Intelligence),
+            tes4::ActorValue::Willpower => Ok(Attribute::Willpower),
+            tes4::ActorValue::Agility => Ok(Attribute::Agility),
+            tes4::ActorValue::Speed => Ok(Attribute::Speed),
+            tes4::ActorValue::Endurance => Ok(Attribute::Endurance),
+            tes4::ActorValue::Personality => Ok(Attribute::Personality),
+            tes4::ActorValue::Luck => Ok(Attribute::Luck),
+            invalid => Err(TesError::InvalidMapping(
+                format!("{:?}", invalid),
+                String::from("Attribute"),
+            )),
+        }
+    }
 }
 
 /// Character skills
