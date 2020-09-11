@@ -1,11 +1,12 @@
 #![allow(clippy::single_component_path_imports)]
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::io::{Cursor, Seek, SeekFrom};
 
+use crate::tes4::plugin::Class;
 use crate::tes4::save::{ChangeRecord, ChangeType, FORM_PLAYER_REF};
-use crate::tes4::{ActorValue, ActorValues, Skill, Skills};
+use crate::tes4::{ActorValues, Skills};
 use crate::*;
 
 use bitflags;
@@ -432,91 +433,6 @@ impl ActiveEffect {
     }
 }
 
-/// A class, if the player created a custom class
-#[derive(Debug)]
-pub struct CustomClass {
-    favored_attributes: [Attribute; 2],
-    specialization: Specialization,
-    major_skills: [Skill; 7],
-    flags: u32,
-    services: u32,
-    skill_trained: u8,
-    max_training: u8,
-    name: String,
-    icon: String,
-}
-
-impl CustomClass {
-    /// Reads a custom class from a binary stream
-    ///
-    /// # Errors
-    ///
-    /// Fails if an I/O error occurs
-    pub fn read<T: Read>(mut f: T) -> Result<CustomClass, TesError> {
-        let mut favored_attributes = [Attribute::Strength; 2];
-        for favored_attribute in &mut favored_attributes {
-            let val = extract!(f as u32)? as usize;
-            *favored_attribute = <Attribute as Enum<()>>::from_usize(val);
-        }
-
-        let specialization = <Specialization as Enum<()>>::from_usize(extract!(f as u32)? as usize);
-
-        let mut major_skills = [Skill::Acrobatics; 7];
-        for major_skill in &mut major_skills {
-            let av = <ActorValue as Enum<()>>::from_usize(extract!(f as u32)? as usize);
-            *major_skill = av.try_into()?;
-        }
-
-        let flags = extract!(f as u32)?;
-        let services = extract!(f as u32)?;
-        let skill_trained = extract!(f as u8)?;
-        let max_training = extract!(f as u8)?;
-        extract!(f as u16)?; // dummy
-        let name = extract_bstring(&mut f)?;
-        let icon = extract_bstring(&mut f)?;
-
-        Ok(CustomClass {
-            favored_attributes,
-            specialization,
-            major_skills,
-            flags,
-            services,
-            skill_trained,
-            max_training,
-            name,
-            icon,
-        })
-    }
-
-    /// Writes a custom class to a binary stream
-    ///
-    /// # Errors
-    ///
-    /// Fails if an I/O error occurs
-    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
-        for attribute in self.favored_attributes.iter() {
-            serialize!(<Attribute as Enum<()>>::to_usize(*attribute) as u32 => f)?;
-        }
-
-        serialize!(<Specialization as Enum<()>>::to_usize(self.specialization) as u32 => f)?;
-
-        for skill in self.major_skills.iter() {
-            let av: ActorValue = (*skill).into();
-            serialize!(<ActorValue as Enum<()>>::to_usize(av) as u32 => f)?;
-        }
-
-        serialize!(self.flags => f)?;
-        serialize!(self.services => f)?;
-        serialize!(self.skill_trained => f)?;
-        serialize!(self.max_training => f)?;
-        serialize!(0u16 => f)?;
-        serialize_bstring(&mut f, &self.name)?;
-        serialize_bstring(&mut f, &self.icon)?;
-
-        Ok(())
-    }
-}
-
 /// Changes to the player
 ///
 /// This is a subset of the functionality for change records detailing changes to a placed instance
@@ -580,7 +496,7 @@ pub struct PlayerReferenceChange {
     pub is_female: bool,
     name: String,
     class: u32,
-    custom_class: Option<CustomClass>,
+    custom_class: Option<Class>,
     stat_unknown9: u32,
 }
 
@@ -816,7 +732,7 @@ impl PlayerReferenceChange {
         let there = reader.seek(SeekFrom::End(0))?;
         reader.seek(SeekFrom::Start(here))?;
         let custom_class = if there - here > 4 {
-            Some(CustomClass::read(&mut reader)?)
+            Some(Class::read_custom(&mut reader)?)
         } else {
             None
         };
@@ -1029,7 +945,7 @@ impl PlayerReferenceChange {
         serialize!(self.class => writer)?;
 
         if let Some(ref custom_class) = self.custom_class {
-            custom_class.write(&mut writer)?;
+            custom_class.write_custom(&mut writer)?;
         }
 
         serialize!(self.stat_unknown9 => writer)?;
