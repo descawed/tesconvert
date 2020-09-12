@@ -1,4 +1,4 @@
-use std::cell::Ref;
+use std::cell::{Ref, RefMut};
 use std::fs;
 use std::path::Path;
 
@@ -16,6 +16,7 @@ static PLUGIN_DIR: &str = "Data";
 #[derive(Debug)]
 pub struct Tes4World {
     plugins: Vec<(String, Tes4Plugin)>,
+    save: Option<Save>,
 }
 
 impl Tes4World {
@@ -25,7 +26,11 @@ impl Tes4World {
     ///
     /// Returns an error if an I/O error occurs while reading Plugins.txt or a plugin file,
     /// or if a plugin file contains invalid data.
-    pub fn load_world<P: AsRef<Path>>(game_dir: P, plugins_path: P) -> Result<Tes4World, TesError> {
+    pub fn load_world<P, Q>(game_dir: P, plugins_path: Q) -> Result<Tes4World, TesError>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
         let mut plugin_names: Vec<String> = fs::read_to_string(plugins_path)?
             .lines()
             .map(|s| s.to_lowercase())
@@ -38,7 +43,10 @@ impl Tes4World {
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, plugin_names.into_iter())?;
 
-        Ok(Tes4World { plugins })
+        Ok(Tes4World {
+            plugins,
+            save: None,
+        })
     }
 
     /// Loads the world from the Oblivion game directory and a save
@@ -47,16 +55,40 @@ impl Tes4World {
     ///
     /// Returns an error if an I/O error occurs while reading a plugin file or if a plugin file
     /// contains invalid data.
-    pub fn load_from_save<P: AsRef<Path>>(game_dir: P, save: &Save) -> Result<Tes4World, TesError> {
+    pub fn load_from_save<P, Q>(game_dir: P, save_path: Q) -> Result<Tes4World, TesError>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let save = Save::load_file(save_path)?;
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, save.iter_plugins())?;
 
-        Ok(Tes4World { plugins })
+        Ok(Tes4World {
+            plugins,
+            save: Some(save),
+        })
+    }
+
+    /// Gets the currently loaded save, if there is one
+    pub fn get_save(&self) -> Option<&Save> {
+        self.save.as_ref()
+    }
+
+    /// Gets the currently load save mutably, if there is one
+    pub fn get_save_mut(&mut self) -> Option<&mut Save> {
+        self.save.as_mut()
     }
 
     /// Gets a record by form ID
     pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
         let index = form_id.index() as usize;
+        if index == 0xff {
+            if let Some(ref save) = self.save {
+                return save.get_record(form_id);
+            }
+        }
+
         if index >= self.plugins.len() {
             return None;
         }
@@ -75,6 +107,40 @@ impl Tes4World {
             };
 
             if let Some(record) = plugin.get_record_by_master(master, form_id) {
+                return Some(record);
+            }
+        }
+
+        None
+    }
+
+    /// Gets a record by form ID
+    pub fn get_record_mut(&self, form_id: FormId) -> Option<RefMut<Tes4Record>> {
+        let index = form_id.index() as usize;
+        if index == 0xff {
+            if let Some(ref save) = self.save {
+                return save.get_record_mut(form_id);
+            }
+        }
+
+        if index >= self.plugins.len() {
+            return None;
+        }
+
+        // a record in one plugin may have been overridden by a record in another plugin later in the
+        // load order which has that plugin as a master. to handle this, we first figure out which plugin
+        // the record originates from. then we iterate through every plugin at a position >= that in the
+        // load order in reverse order, looking for the latest plugin that contains that record from that
+        // master.
+        let target_name = self.plugins[index].0.to_lowercase();
+        for (name, plugin) in self.plugins.iter().skip(index).rev() {
+            let master: Option<&str> = if *name == target_name {
+                None
+            } else {
+                Some(target_name.as_ref())
+            };
+
+            if let Some(record) = plugin.get_record_by_master_mut(master, form_id) {
                 return Some(record);
             }
         }
@@ -101,6 +167,17 @@ impl Tes4World {
         match self.get_record(form_id) {
             Some(record) => Ok(Some(T::read(&*record)?)),
             None => Ok(None),
+        }
+    }
+
+    /// Updates a form by form ID
+    pub fn update<T>(&self, form: &T, form_id: FormId) -> Result<(), TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        match self.get_record_mut(form_id) {
+            Some(mut record) => form.write(&mut record),
+            None => Err(TesError::InvalidFormId { form_id }),
         }
     }
 }

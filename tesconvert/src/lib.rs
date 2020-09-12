@@ -1,9 +1,10 @@
 use anyhow::*;
 
-use tesutil::tes3::plugin::*;
+use tesutil::tes3;
 use tesutil::tes3::Skill as Skill3;
 use tesutil::tes4::save::*;
 use tesutil::tes4::Skill as Skill4;
+use tesutil::tes4;
 use tesutil::*;
 
 mod config;
@@ -19,41 +20,35 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     let mw = Morrowind::load(config.mw_path.as_ref(), &config.source_path)?;
     let mut ob = Oblivion::load(config.ob_path.as_ref(), &config.target_path)?;
 
+    let mw_save = mw.world.get_save().unwrap();
+    let ob_save = ob.world.get_save_mut().unwrap();
+
     // set name that appears in the save list
-    let mw_save_info = mw
-        .save
+    let mw_save_info = mw_save
         .get_save_info()
         .ok_or_else(|| anyhow!("Morrowind plugin did not contain save information"))?;
-    ob.save
-        .set_player_name(String::from(mw_save_info.player_name()))?;
+    ob_save.set_player_name(String::from(mw_save_info.player_name()))?;
 
-    // get Morrowind player information
-    let mw_record = mw
-        .save
-        .get_record("player")?
+    let mw_player_base: tes3::Npc = mw
+        .world
+        .get("player")?
         .ok_or_else(|| anyhow!("Missing player record in Morrowind save"))?;
-    let mw_player_base = Npc::read(&mw_record)?;
-
-    let mw_record = mw
-        .save
-        .get_record_with_type("PlayerSaveGame", b"REFR")
+    let mw_player_ref: tes3::PlayerReference = mw
+        .world
+        .get("PlayerSaveGame")?
         .ok_or_else(|| anyhow!("Missing player reference record in Morrowind save"))?;
-    let mw_player_ref = PlayerReference::read(&mw_record)?;
 
-    let mw_record = mw
-        .save
+    let mw_record = mw_save
         .get_records_by_type(b"PCDT")
         .ok_or_else(|| anyhow!("Missing player data record (PCDT) in Morrowind save"))?
         .next()
         .ok_or_else(|| anyhow!("Missing player data record (PCDT) in Morrowind save"))?;
-    let mw_player_data = PlayerData::read(&mw_record)?;
+    let mw_player_data = tes3::PlayerData::read(&mw_record)?;
 
     // get Oblivion player information
-    let mut ob_record_base = ob
-        .save
-        .get_change_record_mut(FORM_PLAYER)
+    let mut ob_player_base: ActorChange = ob_save
+        .get_form_change(FORM_PLAYER)?
         .ok_or_else(|| anyhow!("Missing player change record in Oblivion save"))?;
-    let mut ob_player_base = ActorChange::read(&ob_record_base)?;
     // set attributes
     let attributes = ob_player_base
         .attributes_mut()
@@ -105,14 +100,12 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     base.level = mw_player_base.level as i16;
 
     // save skills and attributes
-    ob_player_base.write(&mut ob_record_base)?;
+    ob_save.update_form_change(&ob_player_base, FORM_PLAYER)?;
 
     // set name and level/skill progress
-    let mut ob_record_ref = ob
-        .save
-        .get_change_record_mut(FORM_PLAYER_REF)
+    let mut ob_player_ref: PlayerReferenceChange = ob_save
+        .get_form_change(FORM_PLAYER_REF)?
         .ok_or_else(|| anyhow!("Missing player reference change record in Oblivion save"))?;
-    let mut ob_player_ref = PlayerReferenceChange::read(&ob_record_ref)?;
     ob_player_ref.set_name(String::from(mw_player_base.name().unwrap_or("")))?;
 
     ob_player_ref.major_skill_advancements = mw_player_data.level_progress;
@@ -140,12 +133,25 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     }
     ob_player_ref.advancements = advancements;
 
-    // TODO: skill usage and XP
+    // skill XP
+    let mw_class: tes3::Class = mw
+        .world
+        .get(mw_player_base.class())?
+        .ok_or_else(|| anyhow!("Invalid Morrowind player class"))?;
+    let mut mw_progress = tes3::Skills::new();
+    for (skill, value) in mw_progress.iter_mut() {
+        *value = mw_player_data.skill_progress[skill]
+            / mw.calculate_skill_xp(skill, mw_player_ref.skills[skill].base as u16, &mw_class);
+    }
 
-    ob_player_ref.write(&mut ob_record_ref)?;
+    for (skill, value) in ob_player_ref.skill_xp.iter_mut() {
+        // TODO: calculate Oblivion skill XP once we have class conversion in place
+    }
+
+    ob_save.update_form_change(&ob_player_ref, FORM_PLAYER_REF)?;
 
     // save all the changes
-    ob.save.save_file(&config.output_path)?;
+    ob_save.save_file(&config.output_path)?;
 
     Ok(())
 }

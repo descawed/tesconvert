@@ -1,13 +1,17 @@
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use crate::tes4::plugin::{FormId, Tes4Record};
+use crate::tes4::plugin::{FormId, Tes4Field, Tes4Record};
 use crate::*;
 
 mod change;
 pub use change::*;
+
+mod form;
+pub use form::*;
 
 mod actor;
 pub use actor::*;
@@ -16,11 +20,11 @@ mod actorref;
 pub use actorref::*;
 
 /// Form ID of the player's base record
-pub const FORM_PLAYER: u32 = 7;
+pub const FORM_PLAYER: FormId = FormId(7);
 /// Form ID of the player's reference
-pub const FORM_PLAYER_REF: u32 = 0x14;
+pub const FORM_PLAYER_REF: FormId = FormId(0x14);
 /// Form ID of the player's custom class
-pub const FORM_PLAYER_CUSTOM_CLASS: u32 = 0x00022843;
+pub const FORM_PLAYER_CUSTOM_CLASS: FormId = FormId(0x00022843);
 
 /// An Oblivion save game
 ///
@@ -56,13 +60,14 @@ pub struct Save {
     spec_event_data: Vec<u8>,
     weather_data: Vec<u8>,
     player_combat_count: u32,
-    created_records: Vec<Tes4Record>,
+    created_ids: Vec<FormId>,
+    created_records: HashMap<FormId, RefCell<Tes4Record>>,
     quick_keys: Vec<Option<u32>>,
     reticle_data: Vec<u8>,
     interface_data: Vec<u8>,
     region_data: Vec<u8>,
-    change_ids: Vec<u32>,
-    change_records: HashMap<u32, ChangeRecord>,
+    change_ids: Vec<FormId>,
+    change_records: HashMap<FormId, ChangeRecord>,
     temporary_effects: Vec<u8>,
     form_ids: Vec<FormId>,
     world_spaces: Vec<u32>,
@@ -158,9 +163,13 @@ impl Save {
         let player_combat_count = extract!(f as u32)?;
 
         let num_created = extract!(f as u32)? as usize;
-        let mut created_records = Vec::with_capacity(num_created);
+        let mut created_ids = Vec::with_capacity(num_created);
+        let mut created_records = HashMap::with_capacity(num_created);
         for _ in 0..num_created {
-            created_records.push(Tes4Record::read(&mut f)?);
+            let record = Tes4Record::read(&mut f)?;
+            let form_id = record.id();
+            created_ids.push(form_id);
+            created_records.insert(form_id, RefCell::new(record));
         }
 
         let quick_keys_size = extract!(f as u16)? as usize;
@@ -255,6 +264,7 @@ impl Save {
             spec_event_data,
             weather_data,
             player_combat_count,
+            created_ids,
             created_records,
             quick_keys,
             reticle_data,
@@ -302,22 +312,84 @@ impl Save {
     /// Gets a change record by form ID
     ///
     /// Returns `None` if no change record exists for the given form ID.
-    pub fn get_change_record(&self, form_id: u32) -> Option<&ChangeRecord> {
+    pub fn get_change_record(&self, form_id: FormId) -> Option<&ChangeRecord> {
         self.change_records.get(&form_id)
     }
 
     /// Gets a change record by form ID, mutably
     ///
     /// Returns `None` if no change record exists for the given form ID.
-    pub fn get_change_record_mut(&mut self, form_id: u32) -> Option<&mut ChangeRecord> {
+    pub fn get_change_record_mut(&mut self, form_id: FormId) -> Option<&mut ChangeRecord> {
         self.change_records.get_mut(&form_id)
+    }
+
+    /// Gets a form change by form ID
+    pub fn get_form_change<T: FormChange>(&self, form_id: FormId) -> Result<Option<T>, TesError> {
+        Ok(match self.get_change_record(form_id) {
+            Some(record) => Some(T::read(record)?),
+            None => None,
+        })
+    }
+
+    /// Updates the save from a form with a given form ID
+    pub fn update_form_change<T: FormChange>(
+        &mut self,
+        form: &T,
+        form_id: FormId,
+    ) -> Result<(), TesError> {
+        form.write(
+            &mut *self
+                .get_change_record_mut(form_id)
+                .ok_or(TesError::InvalidFormId { form_id })?,
+        )
+    }
+
+    /// Gets a created record by form ID
+    ///
+    /// Returns `None` if no created record exists for the given form ID.
+    pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
+        self.created_records.get(&form_id).map(|r| r.borrow())
+    }
+
+    /// Gets a created record by form ID, mutably
+    ///
+    /// Returns `None` if no created record exists for the given form ID.
+    pub fn get_record_mut(&self, form_id: FormId) -> Option<RefMut<Tes4Record>> {
+        self.created_records.get(&form_id).map(|r| r.borrow_mut())
+    }
+
+    /// Gets a created form by form ID, mutably
+    pub fn get_form<T>(&self, form_id: FormId) -> Result<Option<T>, TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        Ok(match self.get_record(form_id) {
+            Some(record) => Some(T::read(&*record)?),
+            None => None,
+        })
+    }
+
+    /// Updates the save from a form with a given form ID
+    pub fn update_form<T>(&mut self, form: &T, form_id: FormId) -> Result<(), TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        form.write(
+            &mut *self
+                .get_record_mut(form_id)
+                .ok_or(TesError::InvalidFormId { form_id })?,
+        )
     }
 
     /// Gets the form ID for an iref, if one exists
     ///
     /// Returns `None` if there is no form ID for the given iref
     pub fn iref(&self, iref: u32) -> Option<FormId> {
-        self.form_ids.get(iref as usize).copied()
+        if iref > 0xff000000 {
+            Some(FormId(iref))
+        } else {
+            self.form_ids.get(iref as usize).copied()
+        }
     }
 
     /// Iterates over this save's plugins
@@ -400,8 +472,10 @@ impl Save {
         serialize!(self.player_combat_count => f)?;
 
         serialize!(self.created_records.len() as u32 => f)?;
-        for record in self.created_records.iter() {
-            record.write(&mut f)?;
+        for form_id in &self.created_ids {
+            if let Some(created_record) = self.created_records.get(form_id) {
+                created_record.borrow().write(&mut f)?;
+            }
         }
 
         serialize!(0u16 => f)?;
@@ -429,7 +503,7 @@ impl Save {
         serialize!(self.region_data.len() as u16 => f)?;
         f.write_exact(&self.region_data)?;
 
-        for id in self.change_ids.iter() {
+        for id in &self.change_ids {
             if let Some(change_record) = self.change_records.get(id) {
                 change_record.write(&mut f)?;
             }

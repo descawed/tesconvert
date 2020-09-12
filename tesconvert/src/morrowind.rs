@@ -1,8 +1,6 @@
 use std::path::Path;
 
-use tesutil::tes3::plugin::*;
 use tesutil::tes3::*;
-use tesutil::Plugin;
 
 use anyhow::*;
 #[cfg(windows)]
@@ -13,7 +11,6 @@ use winreg::RegKey;
 /// Container for Morrowind-related state and functionality
 pub struct Morrowind {
     pub world: Tes3World,
-    pub save: Tes3Plugin,
     major_skill_bonus: f32,
     minor_skill_bonus: f32,
     misc_skill_bonus: f32,
@@ -75,11 +72,10 @@ impl Morrowind {
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let save = Tes3Plugin::load_file(save_path)?;
         let world = match game_dir {
             // two calls because we're calling different functions here if P is not String
-            Some(path) => Tes3World::load_from_save(path.as_ref(), &save),
-            None => Tes3World::load_from_save(Morrowind::detect_dir()?, &save),
+            Some(path) => Tes3World::load_from_save(path.as_ref(), save_path),
+            None => Tes3World::load_from_save(Morrowind::detect_dir()?, save_path),
         }?;
         let major_skill_bonus = Morrowind::get_float_setting(&world, "fMajorSkillBonus", 0.75)?;
         let minor_skill_bonus = Morrowind::get_float_setting(&world, "fMinorSkillBonus", 1.0)?;
@@ -88,7 +84,6 @@ impl Morrowind {
 
         Ok(Morrowind {
             world,
-            save,
             major_skill_bonus,
             minor_skill_bonus,
             misc_skill_bonus,

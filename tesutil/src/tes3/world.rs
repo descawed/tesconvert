@@ -4,7 +4,7 @@ use std::path::Path;
 use ini::Ini;
 
 use super::plugin::*;
-use crate::{decode_failed, Form, TesError, World};
+use crate::{decode_failed, Form, Plugin, TesError, World};
 
 static INI_FILE: &str = "Morrowind.ini";
 static PLUGIN_DIR: &str = "Data Files";
@@ -16,6 +16,7 @@ static PLUGIN_DIR: &str = "Data Files";
 #[derive(Debug)]
 pub struct Tes3World {
     plugins: Vec<Tes3Plugin>,
+    has_save: bool, // if we have one, it's always the last plugin
 }
 
 impl Tes3World {
@@ -26,9 +27,11 @@ impl Tes3World {
     {
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
         let plugins = Tes3World::load_plugins(plugin_dir, plugin_names)?;
-        // we keep the plugins in reverse order so we search the most recent one first
-        let plugins = plugins.into_iter().map(|(_, p)| p).rev().collect();
-        Ok(Tes3World { plugins })
+        let plugins = plugins.into_iter().map(|(_, p)| p).collect();
+        Ok(Tes3World {
+            plugins,
+            has_save: false,
+        })
     }
 
     /// Loads the world from the Morrowind game directory
@@ -53,11 +56,34 @@ impl Tes3World {
     ///
     /// Returns an error if an I/O error occurs while reading a plugin file or if a plugin file
     /// contains invalid data.
-    pub fn load_from_save<P: AsRef<Path>>(
-        game_dir: P,
-        save: &Tes3Plugin,
-    ) -> Result<Tes3World, TesError> {
-        Tes3World::load_from_plugins(game_dir, save.iter_masters())
+    pub fn load_from_save<P, Q>(game_dir: P, save_path: Q) -> Result<Tes3World, TesError>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let save = Tes3Plugin::load_file(save_path)?;
+        let mut world = Tes3World::load_from_plugins(game_dir, save.iter_masters())?;
+        world.plugins.push(save);
+        world.has_save = true;
+        Ok(world)
+    }
+
+    /// Gets the currently loaded save, if there is one
+    pub fn get_save(&self) -> Option<&Tes3Plugin> {
+        if self.has_save {
+            self.plugins.iter().last()
+        } else {
+            None
+        }
+    }
+
+    /// Gets the currently load save mutably, if there is one
+    pub fn get_save_mut(&mut self) -> Option<&mut Tes3Plugin> {
+        if self.has_save {
+            self.plugins.iter_mut().last()
+        } else {
+            None
+        }
     }
 
     /// Gets the active version of a record by ID
@@ -68,7 +94,7 @@ impl Tes3World {
     ///
     /// Fails if there is more than one record with the given ID.
     pub fn get_record(&self, id: &str) -> Result<Option<Ref<Tes3Record>>, TesError> {
-        for plugin in &self.plugins {
+        for plugin in self.plugins.iter().rev() {
             if let Some(record) = plugin.get_record(id)? {
                 return Ok(Some(record));
             }
@@ -87,6 +113,7 @@ impl Tes3World {
     pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Tes3Record>> {
         self.plugins
             .iter()
+            .rev()
             .fold(None, |a, p| a.or_else(|| p.get_record_with_type(id, name)))
     }
 
@@ -101,6 +128,7 @@ impl Tes3World {
     ) -> Result<Option<T>, TesError> {
         self.plugins
             .iter()
+            .rev()
             .fold(Ok(None), |a, p| if a.is_ok() { Ok(p.get(id)?) } else { a })
     }
 }

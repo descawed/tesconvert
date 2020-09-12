@@ -2,7 +2,7 @@
 
 use std::io::Read;
 
-use crate::tes4::save::{Attributes, ChangeRecord, ChangeType};
+use crate::tes4::save::{Attributes, ChangeRecord, ChangeType, FormChange};
 use crate::tes4::Skills;
 use crate::*;
 
@@ -83,13 +83,13 @@ pub struct ActorChange {
     combat_style: Option<u32>,
 }
 
-impl ActorChange {
+impl FormChange for ActorChange {
     /// Read an `ActorChange` from a raw change record
     ///
     /// # Errors
     ///
     /// Fails if the format is not of the right type or if the data is invalid.
-    pub fn read(record: &ChangeRecord) -> Result<ActorChange, TesError> {
+    fn read(record: &ChangeRecord) -> Result<ActorChange, TesError> {
         let change_type = record.change_type();
         if change_type != ChangeType::Npc && change_type != ChangeType::Creature {
             return Err(TesError::DecodeFailed {
@@ -207,68 +207,12 @@ impl ActorChange {
         Ok(actor_change)
     }
 
-    /// Gets the actor's attributes
-    pub fn attributes(&self) -> Option<&Attributes<u8>> {
-        self.attributes.as_ref()
-    }
-
-    /// Gets the actor's attributes mutably
-    pub fn attributes_mut(&mut self) -> Option<&mut Attributes<u8>> {
-        self.attributes.as_mut()
-    }
-
-    /// Gets the actor's skills
-    pub fn skills(&self) -> Option<&Skills<u8>> {
-        self.skills.as_ref()
-    }
-
-    /// Gets the actor's skills mutably
-    pub fn skills_mut(&mut self) -> Option<&mut Skills<u8>> {
-        self.skills.as_mut()
-    }
-
-    /// Gets the actor's full name
-    pub fn full_name(&self) -> Option<&str> {
-        self.full_name.as_ref().map(|v| &v[..])
-    }
-
-    /// Gets the actor's base information
-    pub fn actor_base(&self) -> Option<&ActorBase> {
-        self.base.as_ref()
-    }
-
-    /// Gets the actor's base information mutably
-    pub fn actor_base_mut(&mut self) -> Option<&mut ActorBase> {
-        self.base.as_mut()
-    }
-
-    /// Sets the actor's base data
-    pub fn set_actor_base(&mut self, base: Option<ActorBase>) {
-        self.base = base;
-    }
-
-    /// Sets the actor's full name
-    ///
-    /// # Errors
-    ///
-    /// Fails if the length of the name exceeds [`MAX_BSTRING`].
-    ///
-    /// [`MAX_BSTRING`]: constant.MAX_BSTRING.html
-    pub fn set_full_name(&mut self, name: Option<String>) -> Result<(), TesError> {
-        if let Some(ref s) = name {
-            check_size(s, MAX_BSTRING, "NPC full name too long")?;
-        }
-
-        self.full_name = name;
-        Ok(())
-    }
-
     /// Writes this actor change to the provided change record
     ///
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
+    fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
         let mut buf: Vec<u8> = vec![];
         let mut writer = &mut &mut buf;
         let mut flags = ActorChangeFlags::empty();
@@ -353,6 +297,64 @@ impl ActorChange {
         }
 
         record.set_data(flags.bits, buf)?;
+        Ok(())
+    }
+}
+
+impl ActorChange {
+    /// Gets the actor's attributes
+    pub fn attributes(&self) -> Option<&Attributes<u8>> {
+        self.attributes.as_ref()
+    }
+
+    /// Gets the actor's attributes mutably
+    pub fn attributes_mut(&mut self) -> Option<&mut Attributes<u8>> {
+        self.attributes.as_mut()
+    }
+
+    /// Gets the actor's skills
+    pub fn skills(&self) -> Option<&Skills<u8>> {
+        self.skills.as_ref()
+    }
+
+    /// Gets the actor's skills mutably
+    pub fn skills_mut(&mut self) -> Option<&mut Skills<u8>> {
+        self.skills.as_mut()
+    }
+
+    /// Gets the actor's full name
+    pub fn full_name(&self) -> Option<&str> {
+        self.full_name.as_ref().map(|v| &v[..])
+    }
+
+    /// Gets the actor's base information
+    pub fn actor_base(&self) -> Option<&ActorBase> {
+        self.base.as_ref()
+    }
+
+    /// Gets the actor's base information mutably
+    pub fn actor_base_mut(&mut self) -> Option<&mut ActorBase> {
+        self.base.as_mut()
+    }
+
+    /// Sets the actor's base data
+    pub fn set_actor_base(&mut self, base: Option<ActorBase>) {
+        self.base = base;
+    }
+
+    /// Sets the actor's full name
+    ///
+    /// # Errors
+    ///
+    /// Fails if the length of the name exceeds [`MAX_BSTRING`].
+    ///
+    /// [`MAX_BSTRING`]: constant.MAX_BSTRING.html
+    pub fn set_full_name(&mut self, name: Option<String>) -> Result<(), TesError> {
+        if let Some(ref s) = name {
+            check_size(s, MAX_BSTRING, "NPC full name too long")?;
+        }
+
+        self.full_name = name;
         Ok(())
     }
 }

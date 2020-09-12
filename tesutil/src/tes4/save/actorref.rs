@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::tes4::plugin::Class;
-use crate::tes4::save::{ChangeRecord, ChangeType, FORM_PLAYER_REF};
+use crate::tes4::save::{ChangeRecord, ChangeType, FormChange, FORM_PLAYER_REF};
 use crate::tes4::{ActorValues, Skills};
 use crate::*;
 
@@ -500,13 +500,13 @@ pub struct PlayerReferenceChange {
     stat_unknown9: u32,
 }
 
-impl PlayerReferenceChange {
+impl FormChange for PlayerReferenceChange {
     /// Reads a player reference change from a raw change record
     ///
     /// # Errors
     ///
     /// Fails if an I/O error occurs or if the data is invalid
-    pub fn read(record: &ChangeRecord) -> Result<PlayerReferenceChange, TesError> {
+    fn read(record: &ChangeRecord) -> Result<PlayerReferenceChange, TesError> {
         if record.form_id() != FORM_PLAYER_REF {
             return Err(decode_failed(
                 "Only the player's change record may currently be decoded",
@@ -795,30 +795,12 @@ impl PlayerReferenceChange {
         })
     }
 
-    /// Gets the player's name
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Sets the player's name
-    ///
-    /// # Errors
-    ///
-    /// Fails if the player's name is longer than [`MAX_BSTRING`]
-    ///
-    /// [`MAX_BSTRING`]: constant.MAX_BSTRING.html
-    pub fn set_name(&mut self, name: String) -> Result<(), TesError> {
-        check_size(&name, MAX_BSTRING, "Player name too long")?;
-        self.name = name;
-        Ok(())
-    }
-
     /// Writes a player reference change to a raw change record
     ///
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
+    fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
         let mut buf: Vec<u8> = vec![];
         let mut writer = &mut &mut buf;
 
@@ -952,6 +934,26 @@ impl PlayerReferenceChange {
 
         record.set_data(self.flags, buf)?;
 
+        Ok(())
+    }
+}
+
+impl PlayerReferenceChange {
+    /// Gets the player's name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Sets the player's name
+    ///
+    /// # Errors
+    ///
+    /// Fails if the player's name is longer than [`MAX_BSTRING`]
+    ///
+    /// [`MAX_BSTRING`]: constant.MAX_BSTRING.html
+    pub fn set_name(&mut self, name: String) -> Result<(), TesError> {
+        check_size(&name, MAX_BSTRING, "Player name too long")?;
+        self.name = name;
         Ok(())
     }
 }

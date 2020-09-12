@@ -128,6 +128,12 @@ pub enum TesError {
     /// Cannot map one value to another
     #[error("Could not map {0} to {1}")]
     InvalidMapping(String, String),
+    /// A provided ID is not valid
+    #[error("Invalid ID {0}")]
+    InvalidId(String),
+    /// A provided form ID is not valid
+    #[error("Invalid form ID {}", .form_id.0)]
+    InvalidFormId { form_id: tes4::plugin::FormId },
     /// Failed to decode binary data as the expected type or format
     #[error("Decode failed: {description}")]
     DecodeFailed {

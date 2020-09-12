@@ -5,7 +5,8 @@ use num_enum::TryFromPrimitive;
 
 use crate::Specialization;
 
-pub mod plugin;
+mod plugin;
+pub use plugin::*;
 
 mod world;
 pub use world::*;

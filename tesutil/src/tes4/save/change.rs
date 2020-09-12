@@ -1,3 +1,4 @@
+use crate::tes4::plugin::FormId;
 use crate::*;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::{Into, TryFrom};
@@ -34,7 +35,7 @@ pub enum ChangeType {
 /// A record in a save that records changes to objects
 #[derive(Debug)]
 pub struct ChangeRecord {
-    form_id: u32,
+    form_id: FormId,
     change_type: ChangeType,
     flags: u32,
     version: u8,
@@ -44,7 +45,7 @@ pub struct ChangeRecord {
 impl ChangeRecord {
     /// Reads a change record from a binary stream
     pub fn read<T: Read>(mut f: T) -> Result<(ChangeRecord, usize), TesError> {
-        let form_id = extract!(f as u32)?;
+        let form_id = FormId(extract!(f as u32)?);
         let change_type = ChangeType::try_from(extract!(f as u8)?)
             .map_err(|e| decode_failed_because("Invalid change type", e))?;
         let flags = extract!(f as u32)?;
@@ -71,7 +72,7 @@ impl ChangeRecord {
     }
 
     /// Gets the form ID being changed
-    pub fn form_id(&self) -> u32 {
+    pub fn form_id(&self) -> FormId {
         self.form_id
     }
 
@@ -105,7 +106,7 @@ impl ChangeRecord {
 
     /// Writes a change record to a binary stream
     pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
-        serialize!(self.form_id => f)?;
+        serialize!(self.form_id.0 => f)?;
         serialize!(Into::<u8>::into(self.change_type) => f)?;
         serialize!(self.flags => f)?;
         serialize!(self.version => f)?;

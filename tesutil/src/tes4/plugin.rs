@@ -1,9 +1,9 @@
-use std::cell::{Ref, RefCell};
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::path::Path;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 use crate::*;
 
@@ -204,6 +204,22 @@ impl Tes4Plugin {
         self.id_map.get(&form_id).map(|r| r.borrow())
     }
 
+    /// Gets a record by form ID
+    pub fn get_record_mut(&self, form_id: FormId) -> Option<RefMut<Tes4Record>> {
+        self.id_map.get(&form_id).map(|r| r.borrow_mut())
+    }
+
+    /// Gets a form by form ID
+    pub fn get<T>(&self, form_id: FormId) -> Result<Option<T>, TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        Ok(match self.get_record(form_id) {
+            Some(record) => Some(T::read(&*record)?),
+            None => None,
+        })
+    }
+
     /// Gets a game setting as a float by name
     pub fn get_float_setting(&self, name: &str) -> Result<Option<f32>, TesError> {
         if let Some(record) = self.settings.get(name) {
@@ -222,7 +238,7 @@ impl Tes4Plugin {
     /// Gets a record by master and form ID
     ///
     /// This allows you to get a record without knowing the exact index that the master is loaded at.
-    /// A value of None indicates that the record is defined in this plugin itself.
+    /// A value of `None` indicates that the record is defined in this plugin itself.
     pub fn get_record_by_master(
         &self,
         master: Option<&str>,
@@ -236,16 +252,65 @@ impl Tes4Plugin {
         self.get_record(form_id)
     }
 
-    /// Iterate over this plugin's records with the corresponding master
-    pub fn iter_records_with_masters(
+    /// Gets a record by master and form ID, mutably
+    ///
+    /// This allows you to get a record without knowing the exact index that the master is loaded at.
+    /// A value of `None` indicates that the record is defined in this plugin itself.
+    pub fn get_record_by_master_mut(
         &self,
-    ) -> impl Iterator<Item = (&str, Weak<RefCell<Tes4Record>>)> {
-        // the move is necessary to take ownership of the reference to self, which would otherwise
-        // be dropped at the end of the function
-        self.id_map.iter().map(move |(form_id, record)| {
-            let index = form_id.index() as usize;
-            (&self.masters[index].0[..], Rc::downgrade(record))
+        master: Option<&str>,
+        mut form_id: FormId,
+    ) -> Option<RefMut<Tes4Record>> {
+        let index = match master {
+            Some(name) => self.masters.iter().position(|(_, m)| m == name)?,
+            None => self.masters.len(),
+        };
+        form_id.set_index(index as u8);
+        self.get_record_mut(form_id)
+    }
+
+    /// Gets a form by master and form ID
+    pub fn get_by_master<T>(
+        &self,
+        master: Option<&str>,
+        form_id: FormId,
+    ) -> Result<Option<T>, TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        Ok(match self.get_record_by_master(master, form_id) {
+            Some(record) => Some(T::read(&*record)?),
+            None => None,
         })
+    }
+
+    /// Updates the plugin from a form with a given form ID
+    pub fn update<T>(&mut self, form: &T, form_id: FormId) -> Result<(), TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        form.write(
+            &mut *self
+                .get_record_mut(form_id)
+                .ok_or(TesError::InvalidFormId { form_id })?,
+        )
+    }
+
+    /// Updates the plugin from a form with a given master and form ID
+    pub fn update_by_master<T>(
+        &mut self,
+        form: &T,
+        master: Option<&str>,
+        form_id: FormId,
+    ) -> Result<(), TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        form.write(
+            &mut *self
+                .get_record_by_master_mut(master, form_id)
+                .ok_or(TesError::InvalidFormId { form_id })?,
+        )
     }
 }
 

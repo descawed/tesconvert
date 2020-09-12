@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use tesutil::tes4::plugin::*;
-use tesutil::tes4::save::*;
 use tesutil::tes4::*;
 
 use anyhow::*;
@@ -13,7 +12,6 @@ use winreg::RegKey;
 /// Container for Oblivion-related state and functionality
 pub struct Oblivion {
     pub world: Tes4World,
-    pub save: Save,
     skill_use_exp: f32,
     skill_use_factor: f32,
     major_skill_mult: f32,
@@ -28,10 +26,9 @@ impl Oblivion {
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let save = Save::load_file(save_path)?;
         let world = match game_dir {
-            Some(path) => Tes4World::load_from_save(path, &save),
-            None => Tes4World::load_from_save(Oblivion::detect_dir()?, &save),
+            Some(path) => Tes4World::load_from_save(path, save_path),
+            None => Tes4World::load_from_save(Oblivion::detect_dir()?, save_path),
         }?;
         // the defaults of 1.0 here are the hard-coded defaults in the exe, as you can see when opening
         // the CS without any plugins loaded.
@@ -43,7 +40,6 @@ impl Oblivion {
 
         Ok(Oblivion {
             world,
-            save,
             skill_use_exp,
             skill_use_factor,
             major_skill_mult,
