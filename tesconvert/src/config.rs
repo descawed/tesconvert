@@ -57,9 +57,9 @@ pub struct Config {
     /// Path to the new save file that will be created
     pub output_path: String,
     /// Path to the Morrowind directory
-    pub mw_path: String,
+    pub mw_path: Option<String>,
     /// Path to the Oblivion directory
-    pub ob_path: String,
+    pub ob_path: Option<String>,
     /// Strategy to use when combining skills
     pub skill_combine_strategy: SkillCombineStrategy,
 }
@@ -143,8 +143,8 @@ impl Config {
             source_path: String::from(sub_matches.value_of("SOURCE_PATH").unwrap()),
             target_path: String::from(sub_matches.value_of("TARGET_PATH").unwrap()),
             output_path: String::from(sub_matches.value_of("OUTPUT_PATH").unwrap()),
-            mw_path: String::from(""),
-            ob_path: String::from(""),
+            mw_path: matches.value_of("mw_path").map(String::from),
+            ob_path: matches.value_of("ob_path").map(String::from),
             skill_combine_strategy: match matches.value_of("combine").unwrap_or("highest") {
                 "highest" => SkillCombineStrategy::Highest,
                 "average" => SkillCombineStrategy::Average,

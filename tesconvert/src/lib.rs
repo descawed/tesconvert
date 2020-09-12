@@ -12,28 +12,36 @@ pub use config::*;
 mod morrowind;
 mod oblivion;
 
+use morrowind::Morrowind;
+use oblivion::Oblivion;
+
 pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
-    let mw_save = Tes3Plugin::load_file(&config.source_path)?;
-    let mut ob_save = Save::load_file(&config.target_path)?;
+    let mw = Morrowind::load(config.mw_path.as_ref(), &config.source_path)?;
+    let mut ob = Oblivion::load(config.ob_path.as_ref(), &config.target_path)?;
 
     // set name that appears in the save list
-    let mw_save_info = mw_save
+    let mw_save_info = mw
+        .save
         .get_save_info()
         .ok_or_else(|| anyhow!("Morrowind plugin did not contain save information"))?;
-    ob_save.set_player_name(String::from(mw_save_info.player_name()))?;
+    ob.save
+        .set_player_name(String::from(mw_save_info.player_name()))?;
 
     // get Morrowind player information
-    let mw_record = mw_save
+    let mw_record = mw
+        .save
         .get_record("player")?
         .ok_or_else(|| anyhow!("Missing player record in Morrowind save"))?;
     let mw_player_base = Npc::read(&mw_record)?;
 
-    let mw_record = mw_save
+    let mw_record = mw
+        .save
         .get_record_with_type("PlayerSaveGame", b"REFR")
         .ok_or_else(|| anyhow!("Missing player reference record in Morrowind save"))?;
     let mw_player_ref = PlayerReference::read(&mw_record)?;
 
-    let mw_record = mw_save
+    let mw_record = mw
+        .save
         .get_records_by_type(b"PCDT")
         .ok_or_else(|| anyhow!("Missing player data record (PCDT) in Morrowind save"))?
         .next()
@@ -41,7 +49,8 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     let mw_player_data = PlayerData::read(&mw_record)?;
 
     // get Oblivion player information
-    let mut ob_record_base = ob_save
+    let mut ob_record_base = ob
+        .save
         .get_change_record_mut(FORM_PLAYER)
         .ok_or_else(|| anyhow!("Missing player change record in Oblivion save"))?;
     let mut ob_player_base = ActorChange::read(&ob_record_base)?;
@@ -99,7 +108,8 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     ob_player_base.write(&mut ob_record_base)?;
 
     // set name and level/skill progress
-    let mut ob_record_ref = ob_save
+    let mut ob_record_ref = ob
+        .save
         .get_change_record_mut(FORM_PLAYER_REF)
         .ok_or_else(|| anyhow!("Missing player reference change record in Oblivion save"))?;
     let mut ob_player_ref = PlayerReferenceChange::read(&ob_record_ref)?;
@@ -135,7 +145,7 @@ pub fn morrowind_to_oblivion(config: &Config) -> Result<()> {
     ob_player_ref.write(&mut ob_record_ref)?;
 
     // save all the changes
-    ob_save.save_file(&config.output_path)?;
+    ob.save.save_file(&config.output_path)?;
 
     Ok(())
 }

@@ -1,3 +1,11 @@
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::Path;
+
+use crate::tes4::plugin::{FormId, Tes4Record};
+use crate::*;
+
 mod change;
 pub use change::*;
 
@@ -6,12 +14,6 @@ pub use actor::*;
 
 mod actorref;
 pub use actorref::*;
-
-use crate::tes4::plugin::{FormId, Tes4Record};
-use crate::*;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 /// Form ID of the player's base record
 pub const FORM_PLAYER: u32 = 7;
@@ -273,7 +275,7 @@ impl Save {
     /// Fails if the file cannot be found or if [`Save::read`] fails.
     ///
     /// [`Save::read`]: #method.read
-    pub fn load_file(path: &str) -> Result<Save, TesError> {
+    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Save, TesError> {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
         Save::read(reader)
@@ -460,7 +462,7 @@ impl Save {
     /// # Errors
     ///
     /// Fails if the file cannot be created or if an I/O error occurs.
-    pub fn save_file(&self, path: &str) -> Result<(), TesError> {
+    pub fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError> {
         let f = File::create(path)?;
         let writer = BufWriter::new(f);
         self.write(writer)

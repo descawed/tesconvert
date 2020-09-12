@@ -16,7 +16,6 @@ static PLUGIN_DIR: &str = "Data";
 #[derive(Debug)]
 pub struct Tes4World {
     plugins: Vec<(String, Tes4Plugin)>,
-    save: Option<Save>,
 }
 
 impl Tes4World {
@@ -39,10 +38,7 @@ impl Tes4World {
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, plugin_names.into_iter())?;
 
-        Ok(Tes4World {
-            plugins,
-            save: None,
-        })
+        Ok(Tes4World { plugins })
     }
 
     /// Loads the world from the Oblivion game directory and a save
@@ -51,14 +47,11 @@ impl Tes4World {
     ///
     /// Returns an error if an I/O error occurs while reading a plugin file or if a plugin file
     /// contains invalid data.
-    pub fn load_save<P: AsRef<Path>>(game_dir: P, save: Save) -> Result<Tes4World, TesError> {
+    pub fn load_from_save<P: AsRef<Path>>(game_dir: P, save: &Save) -> Result<Tes4World, TesError> {
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, save.iter_plugins())?;
 
-        Ok(Tes4World {
-            plugins,
-            save: Some(save),
-        })
+        Ok(Tes4World { plugins })
     }
 
     /// Gets a record by form ID
