@@ -37,10 +37,9 @@ impl Tes4World {
             .map(String::from)
             .collect();
         let ob_lowercase = BASE_GAME.to_lowercase();
-        if plugin_names
+        if !plugin_names
             .iter()
-            .position(|s| s.to_lowercase() == ob_lowercase)
-            .is_none()
+            .any(|s| s.to_lowercase() == ob_lowercase)
         {
             // Oblivion.esm always gets loaded even if it's not in plugins.txt, so insert it if we didn't find it
             plugin_names.push(String::from(BASE_GAME));
