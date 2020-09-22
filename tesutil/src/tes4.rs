@@ -4,11 +4,71 @@ use crate::{Attribute, Specialization, TesError};
 use enum_map::{Enum, EnumMap};
 use num_enum::TryFromPrimitive;
 
-pub mod plugin;
+mod plugin;
+pub use plugin::*;
+
 pub mod save;
 
 mod world;
 pub use world::*;
+
+/// A unique identifier for a record
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct FormId(pub u32);
+
+impl FormId {
+    /// Gets a form ID's index (i.e., which plugin in the load order it belongs to)
+    pub fn index(&self) -> u8 {
+        (self.0 >> 24) as u8
+    }
+
+    /// Sets a form ID's index
+    pub fn set_index(&mut self, index: u8) {
+        self.0 = ((index as u32) << 24) | (self.0 & 0xffffff);
+    }
+}
+
+/// Container for a search for a form by either plugin or index
+#[derive(Debug)]
+pub enum FindForm<'a> {
+    ByMaster(Option<&'a str>, u32),
+    ByIndex(FormId),
+}
+
+impl<'a> FindForm<'a> {
+    /// Get a concrete form ID from a FindForm
+    pub fn form_id<'b, T: Iterator<Item = &'b str>>(&self, mut plugins: T) -> Option<FormId> {
+        Some(match self {
+            FindForm::ByMaster(plugin, id) => {
+                let mut id = FormId(*id);
+                let index = match *plugin {
+                    Some(name) => plugins.position(|p| p == name)?,
+                    None => plugins.count(),
+                } as u8;
+
+                if index == 0xff {
+                    // index FF is reserved for saves and will never be a plugin index
+                    return None;
+                }
+
+                id.set_index(index);
+                id
+            }
+            FindForm::ByIndex(id) => *id,
+        })
+    }
+
+    /// Creates an error referring to this form search
+    pub fn err(&self) -> TesError {
+        match self {
+            FindForm::ByMaster(plugin, id) => TesError::InvalidPluginForm {
+                plugin: String::from(plugin.unwrap_or("<none>")),
+                form_id: FormId(*id),
+            },
+            FindForm::ByIndex(id) => TesError::InvalidFormId { form_id: *id },
+        }
+    }
+}
 
 /// All possible actor values
 #[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]

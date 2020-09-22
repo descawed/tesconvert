@@ -956,6 +956,17 @@ impl PlayerReferenceChange {
         self.name = name;
         Ok(())
     }
+
+    /// Gets the player's custom class, if any
+    pub fn class(&self) -> Option<&Class> {
+        self.custom_class.as_ref()
+    }
+
+    /// Sets the player's custom class
+    pub fn set_class(&mut self, class: Option<Class>, iref: u32) {
+        self.class = iref;
+        self.custom_class = class;
+    }
 }
 
 #[cfg(test)]

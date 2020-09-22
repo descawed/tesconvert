@@ -20,5 +20,8 @@ pub use record::*;
 pub trait Plugin: Sized {
     fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, TesError>;
 
+    fn is_master(&self) -> bool;
+    fn set_is_master(&mut self, is_master: bool);
+
     fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError>;
 }

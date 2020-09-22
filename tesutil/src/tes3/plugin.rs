@@ -170,8 +170,7 @@ impl SaveInfo {
 #[derive(Debug)]
 pub struct Tes3Plugin {
     version: f32,
-    /// Indicates whether this plugin is a master
-    pub is_master: bool,
+    is_master: bool,
     author: String,
     description: String,
     save: Option<SaveInfo>,
@@ -215,11 +214,11 @@ impl Tes3Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
-    /// plugin.is_master = true;
+    /// plugin.set_is_master(true);
     /// # Ok(())
     /// # }
     /// ```
@@ -262,7 +261,7 @@ impl Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let buf: Vec<u8> = vec![/* raw plugin data */];
@@ -397,7 +396,7 @@ impl Tes3Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
@@ -418,7 +417,7 @@ impl Tes3Plugin {
     ///
     /// ```no_run
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -441,7 +440,7 @@ impl Tes3Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Tes3Plugin::new(String::from("wrong author"), String::from("some description"))?;
@@ -463,7 +462,7 @@ impl Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
     /// # use std::io;
     ///
@@ -487,7 +486,7 @@ impl Tes3Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Tes3Plugin::new(String::from("author"), String::from("some description"))?;
@@ -534,7 +533,7 @@ impl Tes3Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Tes3Plugin::new(String::from("author"), String::from("some description"))?;
@@ -572,7 +571,7 @@ impl Tes3Plugin {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
@@ -619,7 +618,7 @@ impl Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
     /// # use std::io;
     ///
@@ -675,7 +674,7 @@ impl Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
     /// # use std::io;
     ///
@@ -750,7 +749,7 @@ impl Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
     ///
     /// # fn main() -> std::io::Result<()> {
@@ -843,13 +842,13 @@ impl Plugin for Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
     /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
-    /// assert!(plugin.is_master);
+    /// assert!(plugin.is_master());
     /// # Ok(())
     /// # }
     /// ```
@@ -860,6 +859,16 @@ impl Plugin for Tes3Plugin {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
         Tes3Plugin::read(reader)
+    }
+
+    /// Returns whether this plugin is a master on which other plugins can depend
+    fn is_master(&self) -> bool {
+        self.is_master
+    }
+
+    /// Set whether this plugin is a master
+    fn set_is_master(&mut self, is_master: bool) {
+        self.is_master = is_master;
     }
 
     /// Save a plugin to a file
@@ -874,13 +883,13 @@ impl Plugin for Tes3Plugin {
     /// # Examples
     ///
     /// ```no_run
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
     /// use tesutil::TesError;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
-    /// plugin.is_master = true;
+    /// plugin.set_is_master(true);
     /// plugin.save_file("sample.esm")?;
     /// # Ok(())
     /// # }

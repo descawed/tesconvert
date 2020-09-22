@@ -48,8 +48,8 @@ pub struct Class {
     pub is_playable: bool,
     pub is_guard: bool,
     services: ServiceFlags,
-    skill_trained: Skill,
-    max_training_level: u8,
+    pub skill_trained: Skill,
+    pub max_training_level: u8,
 }
 
 impl Form for Class {
@@ -69,20 +69,7 @@ impl Form for Class {
     fn read(record: &Tes4Record) -> Result<Class, TesError> {
         Class::assert(record)?;
 
-        let mut class = Class {
-            editor_id: None,
-            name: String::new(),
-            description: None,
-            icon: None,
-            primary_attributes: [Attribute::Strength; 2],
-            specialization: Specialization::Combat,
-            major_skills: [Skill::Armorer; 7],
-            is_playable: false,
-            is_guard: false,
-            services: ServiceFlags::empty(),
-            skill_trained: Skill::Armorer,
-            max_training_level: 0,
-        };
+        let mut class = Class::new(String::new()).unwrap();
 
         for field in record.iter() {
             match field.name() {
@@ -133,6 +120,26 @@ impl Form for Class {
 }
 
 impl Class {
+    /// Creates a new class with default settings
+    pub fn new(name: String) -> Result<Class, TesError> {
+        check_size(&name, MAX_BSTRING, "Class name too long")?;
+
+        Ok(Class {
+            editor_id: None,
+            name,
+            description: None,
+            icon: None,
+            primary_attributes: [Attribute::Strength; 2],
+            specialization: Specialization::Combat,
+            major_skills: [Skill::Armorer; 7],
+            is_playable: false,
+            is_guard: false,
+            services: ServiceFlags::empty(),
+            skill_trained: Skill::Armorer,
+            max_training_level: 0,
+        })
+    }
+
     //noinspection RsTypeCheck
     /// Reads a custom class from a binary stream
     ///
@@ -185,6 +192,66 @@ impl Class {
             skill_trained,
             max_training_level,
         })
+    }
+
+    /// Gets the primary attributes of this class
+    pub fn primary_attribute(&self) -> &[Attribute; 2] {
+        &self.primary_attributes
+    }
+
+    /// Sets the primary attributes of this class
+    ///
+    /// # Errors
+    ///
+    /// Fails if both provided attributes are the same.
+    pub fn set_primary_attributes(&mut self, attributes: &[Attribute]) -> Result<(), TesError> {
+        let num_attributes = self.primary_attributes.len() as u32;
+        check_range(
+            attributes.len() as u32,
+            num_attributes,
+            num_attributes,
+            "Wrong number of class attributes",
+        )?;
+
+        if attributes[0] == attributes[1] {
+            return Err(TesError::RequirementFailed(String::from(
+                "Class primary attributes must be unique",
+            )));
+        }
+
+        self.primary_attributes.copy_from_slice(attributes);
+        Ok(())
+    }
+
+    /// Gets the major skills of this class
+    pub fn major_skills(&self) -> &[Skill; 7] {
+        &self.major_skills
+    }
+
+    /// Sets the major skills of this class
+    ///
+    /// # Errors
+    ///
+    /// Fails if the same skill appears in the array more than once.
+    pub fn set_major_skills(&mut self, skills: &[Skill]) -> Result<(), TesError> {
+        let num_skills = self.major_skills.len() as u32;
+        check_range(
+            skills.len() as u32,
+            num_skills,
+            num_skills,
+            "Wrong number of class major skills",
+        )?;
+
+        for (i, skill) in skills.iter().enumerate() {
+            if skills.iter().skip(i + 1).any(|s| s == skill) {
+                return Err(TesError::RequirementFailed(String::from(
+                    "Class major skills must be unique",
+                )));
+            }
+        }
+
+        self.major_skills.copy_from_slice(skills);
+        Ok(())
     }
 
     /// Checks whether a given skill is a major skill for this class

@@ -1,4 +1,4 @@
-use crate::tes4::plugin::FormId;
+use crate::tes4::FormId;
 use crate::*;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::{Into, TryFrom};

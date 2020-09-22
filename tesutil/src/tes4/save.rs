@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use crate::tes4::plugin::{FormId, Tes4Field, Tes4Record};
+use crate::tes4::{FormId, Tes4Field, Tes4Record};
 use crate::*;
 
 mod change;
@@ -384,7 +384,7 @@ impl Save {
     /// Gets the form ID for an iref, if one exists
     ///
     /// Returns `None` if there is no form ID for the given iref
-    pub fn iref(&self, iref: u32) -> Option<FormId> {
+    pub fn iref_to_form_id(&self, iref: u32) -> Option<FormId> {
         if iref > 0xff000000 {
             Some(FormId(iref))
         } else {
@@ -392,9 +392,30 @@ impl Save {
         }
     }
 
+    /// Gets the iref of a form ID, if one exists
+    pub fn form_id_to_iref(&self, form_id: FormId) -> Option<u32> {
+        // if this becomes a bottleneck, make a reverse mapping of form IDs to irefs
+        self.form_ids
+            .iter()
+            .position(|f| *f == form_id)
+            .map(|i| i as u32)
+    }
+
+    /// Inserts a form ID if it does not already exist, returning its iref
+    pub fn insert_form_id(&mut self, form_id: FormId) -> u32 {
+        match self.form_id_to_iref(form_id) {
+            Some(iref) => iref,
+            None => {
+                let iref = self.form_ids.len() as u32;
+                self.form_ids.push(form_id);
+                iref
+            }
+        }
+    }
+
     /// Iterates over this save's plugins
     pub fn iter_plugins(&self) -> impl Iterator<Item = &str> {
-        self.plugins.iter().map(|s| &s[..])
+        self.plugins.iter().map(|s| s.as_str())
     }
 
     /// Write a save to a binary stream

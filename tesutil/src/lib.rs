@@ -125,6 +125,9 @@ pub enum TesError {
         max: f64,
         actual: f64,
     },
+    /// Some requirement not covered by another error type was not met
+    #[error("Requirement failed: {0}")]
+    RequirementFailed(String),
     /// Cannot map one value to another
     #[error("Could not map {0} to {1}")]
     InvalidMapping(String, String),
@@ -132,8 +135,14 @@ pub enum TesError {
     #[error("Invalid ID {0}")]
     InvalidId(String),
     /// A provided form ID is not valid
-    #[error("Invalid form ID {}", .form_id.0)]
-    InvalidFormId { form_id: tes4::plugin::FormId },
+    #[error("Invalid form ID {:08X}", .form_id.0)]
+    InvalidFormId { form_id: tes4::FormId },
+    /// A plugin/form ID combination was not found when one was required
+    #[error("Invalid form ID {:06X} in plugin {}", .form_id.0, .plugin)]
+    InvalidPluginForm {
+        plugin: String,
+        form_id: tes4::FormId,
+    },
     /// Failed to decode binary data as the expected type or format
     #[error("Decode failed: {description}")]
     DecodeFailed {

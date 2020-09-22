@@ -24,28 +24,29 @@ pub trait World {
         for filename in plugin_names {
             let plugin_path = plugin_path.join(filename.as_ref());
             let meta = fs::metadata(&plugin_path)?;
-            files.push((plugin_path, meta.modified()?));
-        }
-
-        files.sort_by(|(_, a), (_, b)| a.cmp(&b));
-
-        let mut plugins = Vec::with_capacity(files.len());
-        for (path, _) in files {
-            let plugin = Self::Plugin::load_file(&path)?;
+            let plugin = Self::Plugin::load_file(&plugin_path)?;
             // The file_name() unwrap should be safe because if this wasn't a path that pointed to a
             // file, Plugin::load_file would have failed. The into_string() unwrap should be safe
             // because I got these filenames from an iterator of strings to begin with, so the reverse
             // conversion should always be possible.
-            plugins.push((
-                path.file_name()
+            files.push((
+                plugin_path
+                    .file_name()
                     .unwrap()
                     .to_os_string()
                     .into_string()
-                    .unwrap(),
+                    .unwrap()
+                    .to_lowercase(),
                 plugin,
+                meta.modified()?,
             ));
         }
 
-        Ok(plugins)
+        files.sort_by(|(_, p1, m1), (_, p2, m2)| {
+            // masters go before non-masters, then older plugins before newer
+            p2.is_master().cmp(&p1.is_master()).then(m1.cmp(&m2))
+        });
+
+        Ok(files.into_iter().map(|(a, b, _)| (a, b)).collect())
     }
 }

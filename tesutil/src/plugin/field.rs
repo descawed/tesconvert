@@ -107,7 +107,7 @@ pub trait Field: Sized {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::tes4::plugin::*;
+    /// use tesutil::tes4::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut field = Tes4Field::new(b"DATA", vec![])?;

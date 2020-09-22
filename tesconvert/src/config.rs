@@ -1,9 +1,13 @@
 use std::cmp;
+use std::fs;
 use std::ops::{Add, Div};
+use std::path::Path;
 
+use anyhow::*;
 use clap::Result as ClapResult;
-use clap::*;
-use num::One;
+use clap::{App, AppSettings, Arg, SubCommand};
+use ini::Ini;
+use num::{Float, One};
 
 /// The command to be executed
 #[derive(Debug, PartialEq)]
@@ -43,6 +47,25 @@ impl SkillCombineStrategy {
             SkillCombineStrategy::Lowest => cmp::min(x, y),
         }
     }
+
+    /// Combines two skills with float values using the appropriate strategy
+    pub fn combine_float<T: Float>(&self, x: T, y: T) -> T {
+        match self {
+            SkillCombineStrategy::Highest => x.max(y),
+            SkillCombineStrategy::Average => (x + y) / (T::one() + T::one()),
+            SkillCombineStrategy::Lowest => x.min(y),
+        }
+    }
+}
+
+/// Iterate through INI files in a given directory
+pub fn iter_form_map<P: AsRef<Path>>(ini_dir: P) -> Result<impl Iterator<Item = Ini>> {
+    let mut files = vec![];
+    for entry in fs::read_dir(ini_dir)? {
+        files.push(Ini::load_from_file(entry?.path())?);
+    }
+
+    Ok(files.into_iter())
 }
 
 /// Configuration options for a conversion
@@ -56,6 +79,8 @@ pub struct Config {
     pub target_path: String,
     /// Path to the new save file that will be created
     pub output_path: String,
+    /// Path to the directory where our configuration files are stored
+    pub config_path: String,
     /// Path to the Morrowind directory
     pub mw_path: Option<String>,
     /// Path to the Oblivion directory
@@ -143,6 +168,7 @@ impl Config {
             source_path: String::from(sub_matches.value_of("SOURCE_PATH").unwrap()),
             target_path: String::from(sub_matches.value_of("TARGET_PATH").unwrap()),
             output_path: String::from(sub_matches.value_of("OUTPUT_PATH").unwrap()),
+            config_path: String::from("."),
             mw_path: matches.value_of("mw_path").map(String::from),
             ob_path: matches.value_of("ob_path").map(String::from),
             skill_combine_strategy: match matches.value_of("combine").unwrap_or("highest") {

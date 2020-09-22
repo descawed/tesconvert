@@ -4,9 +4,10 @@ use std::path::Path;
 
 use super::plugin::*;
 use super::save::*;
+use super::{FindForm, FormId};
 use crate::{Form, TesError, World};
 
-static BASE_GAME: &str = "oblivion.esm";
+static BASE_GAME: &str = "Oblivion.esm";
 static PLUGIN_DIR: &str = "Data";
 
 /// The full set of objects in the game world
@@ -33,9 +34,14 @@ impl Tes4World {
     {
         let mut plugin_names: Vec<String> = fs::read_to_string(plugins_path)?
             .lines()
-            .map(|s| s.to_lowercase())
+            .map(String::from)
             .collect();
-        if plugin_names.iter().position(|s| s == BASE_GAME).is_none() {
+        let ob_lowercase = BASE_GAME.to_lowercase();
+        if plugin_names
+            .iter()
+            .position(|s| s.to_lowercase() == ob_lowercase)
+            .is_none()
+        {
             // Oblivion.esm always gets loaded even if it's not in plugins.txt, so insert it if we didn't find it
             plugin_names.push(String::from(BASE_GAME));
         }
@@ -80,8 +86,14 @@ impl Tes4World {
         self.save.as_mut()
     }
 
+    /// Gets the form ID matching a search
+    pub fn get_form_id(&self, search: &FindForm) -> Option<FormId> {
+        search.form_id(self.plugins.iter().map(|(s, _)| s.as_str()))
+    }
+
     /// Gets a record by form ID
-    pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
+    pub fn get_record(&self, search: &FindForm) -> Option<Ref<Tes4Record>> {
+        let form_id = self.get_form_id(search)?;
         let index = form_id.index() as usize;
         if index == 0xff {
             if let Some(ref save) = self.save {
@@ -98,15 +110,14 @@ impl Tes4World {
         // the record originates from. then we iterate through every plugin at a position >= that in the
         // load order in reverse order, looking for the latest plugin that contains that record from that
         // master.
-        let target_name = self.plugins[index].0.to_lowercase();
+        let target_name = &self.plugins[index].0;
+        let self_search = FindForm::ByMaster(None, form_id.0);
         for (name, plugin) in self.plugins.iter().skip(index).rev() {
-            let master: Option<&str> = if *name == target_name {
-                None
+            if let Some(record) = plugin.get_record(if name == target_name {
+                &self_search
             } else {
-                Some(target_name.as_ref())
-            };
-
-            if let Some(record) = plugin.get_record_by_master(master, form_id) {
+                &search
+            }) {
                 return Some(record);
             }
         }
@@ -115,7 +126,8 @@ impl Tes4World {
     }
 
     /// Gets a record by form ID
-    pub fn get_record_mut(&self, form_id: FormId) -> Option<RefMut<Tes4Record>> {
+    pub fn get_record_mut(&self, search: &FindForm) -> Option<RefMut<Tes4Record>> {
+        let form_id = self.get_form_id(search)?;
         let index = form_id.index() as usize;
         if index == 0xff {
             if let Some(ref save) = self.save {
@@ -132,15 +144,14 @@ impl Tes4World {
         // the record originates from. then we iterate through every plugin at a position >= that in the
         // load order in reverse order, looking for the latest plugin that contains that record from that
         // master.
-        let target_name = self.plugins[index].0.to_lowercase();
+        let target_name = &self.plugins[index].0;
+        let self_search = FindForm::ByMaster(None, form_id.0);
         for (name, plugin) in self.plugins.iter().skip(index).rev() {
-            let master: Option<&str> = if *name == target_name {
-                None
+            if let Some(record) = plugin.get_record_mut(if name == target_name {
+                &self_search
             } else {
-                Some(target_name.as_ref())
-            };
-
-            if let Some(record) = plugin.get_record_by_master_mut(master, form_id) {
+                &search
+            }) {
                 return Some(record);
             }
         }
@@ -162,22 +173,22 @@ impl Tes4World {
     /// Gets a form by form ID
     pub fn get<T: Form<Field = Tes4Field, Record = Tes4Record>>(
         &self,
-        form_id: FormId,
+        search: &FindForm,
     ) -> Result<Option<T>, TesError> {
-        match self.get_record(form_id) {
+        match self.get_record(search) {
             Some(record) => Ok(Some(T::read(&*record)?)),
             None => Ok(None),
         }
     }
 
     /// Updates a form by form ID
-    pub fn update<T>(&self, form: &T, form_id: FormId) -> Result<(), TesError>
+    pub fn update<T>(&self, form: &T, search: &FindForm) -> Result<(), TesError>
     where
         T: Form<Field = Tes4Field, Record = Tes4Record>,
     {
-        match self.get_record_mut(form_id) {
+        match self.get_record_mut(search) {
             Some(mut record) => form.write(&mut record),
-            None => Err(TesError::InvalidFormId { form_id }),
+            None => Err(search.err()),
         }
     }
 }

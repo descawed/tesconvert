@@ -42,7 +42,7 @@ pub struct Class {
     pub specialization: Specialization,
     major_skills: [Skill; 5],
     minor_skills: [Skill; 5],
-    is_playable: bool,
+    pub is_playable: bool,
     auto_calc_flags: AutoCalcFlags,
 }
 
@@ -140,6 +140,31 @@ impl Class {
         } else {
             SkillType::Miscellaneous
         }
+    }
+
+    /// Returns this class's ID
+    pub fn id(&self) -> &str {
+        self.id.as_str()
+    }
+
+    /// Returns this class's name
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    /// Gets this class's primary attributes
+    pub fn primary_attribute(&self) -> &[Attribute; 2] {
+        &self.primary_attributes
+    }
+
+    /// Gets this class's major skills
+    pub fn major_skills(&self) -> &[Skill; 5] {
+        &self.major_skills
+    }
+
+    /// Gets this class's minor skills
+    pub fn minor_skills(&self) -> &[Skill; 5] {
+        &self.minor_skills
     }
 }
 

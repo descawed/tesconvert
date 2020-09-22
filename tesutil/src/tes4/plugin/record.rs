@@ -34,6 +34,8 @@ bitflags! {
     struct RecordFlags: u32 {
         const MASTER = 0x00001;
         const DELETED = 0x00020;
+        const BORDER_REGION = 0x00040;
+        const TURN_OFF_FIRE = 0x00080;
         const SHADOWS = 0x00200;
         const PERSISTENT = 0x00400;
         const INITIALLY_DISABLED = 0x00800;

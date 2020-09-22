@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use tesutil::tes4::plugin::*;
-use tesutil::tes4::*;
+use tesutil::tes3;
+use tesutil::tes4;
+use tesutil::tes4::Tes4World;
 
 use anyhow::*;
 #[cfg(windows)]
@@ -10,6 +11,7 @@ use winreg::enums::*;
 use winreg::RegKey;
 
 /// Container for Oblivion-related state and functionality
+#[derive(Debug)]
 pub struct Oblivion {
     pub world: Tes4World,
     skill_use_exp: f32,
@@ -69,8 +71,40 @@ impl Oblivion {
         Err(anyhow!("Could not detect Morrowind install path"))
     }
 
+    /// Gets the Morrowind skill equivalent to a given Oblivion skill, if one exists
+    pub fn morrowind_skill(skill: tes4::Skill) -> tes3::Skill {
+        match skill {
+            tes4::Skill::Block => tes3::Skill::Block,
+            tes4::Skill::Armorer => tes3::Skill::Armorer,
+            tes4::Skill::HeavyArmor => tes3::Skill::HeavyArmor,
+            tes4::Skill::Blunt => tes3::Skill::Blunt,
+            tes4::Skill::Blade => tes3::Skill::LongBlade,
+            tes4::Skill::Athletics => tes3::Skill::Athletics,
+            tes4::Skill::Destruction => tes3::Skill::Destruction,
+            tes4::Skill::Alteration => tes3::Skill::Alteration,
+            tes4::Skill::Illusion => tes3::Skill::Illusion,
+            tes4::Skill::Conjuration => tes3::Skill::Conjuration,
+            tes4::Skill::Mysticism => tes3::Skill::Mysticism,
+            tes4::Skill::Restoration => tes3::Skill::Restoration,
+            tes4::Skill::Alchemy => tes3::Skill::Alchemy,
+            tes4::Skill::Security => tes3::Skill::Security,
+            tes4::Skill::Sneak => tes3::Skill::Sneak,
+            tes4::Skill::Acrobatics => tes3::Skill::Acrobatics,
+            tes4::Skill::LightArmor => tes3::Skill::LightArmor,
+            tes4::Skill::Marksman => tes3::Skill::Marksman,
+            tes4::Skill::Mercantile => tes3::Skill::Mercantile,
+            tes4::Skill::Speechcraft => tes3::Skill::Speechcraft,
+            tes4::Skill::HandToHand => tes3::Skill::HandToHand,
+        }
+    }
+
     /// Calculates the XP required to level a skill up
-    pub fn calculate_skill_xp<T: Into<f32>>(&self, skill: Skill, level: T, class: &Class) -> f32 {
+    pub fn calculate_skill_xp<T: Into<f32>>(
+        &self,
+        skill: tes4::Skill,
+        level: T,
+        class: &tes4::Class,
+    ) -> f32 {
         let level = level.into();
         let mut mult = if class.is_major_skill(skill) {
             self.major_skill_mult

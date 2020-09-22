@@ -45,6 +45,42 @@ pub enum Skill {
 }
 
 impl Skill {
+    /// Returns an iterator over all skills
+    pub fn iter() -> impl Iterator<Item = Skill> {
+        use Skill::*;
+        static SKILLS: [Skill; 27] = [
+            Block,
+            Armorer,
+            MediumArmor,
+            HeavyArmor,
+            Blunt,
+            LongBlade,
+            Axe,
+            Spear,
+            Athletics,
+            Enchant,
+            Destruction,
+            Alteration,
+            Illusion,
+            Conjuration,
+            Mysticism,
+            Restoration,
+            Alchemy,
+            Unarmored,
+            Security,
+            Sneak,
+            Acrobatics,
+            LightArmor,
+            ShortBlade,
+            Marksman,
+            Mercantile,
+            Speechcraft,
+            HandToHand,
+        ];
+
+        SKILLS.iter().copied()
+    }
+
     /// Gets the skill's specialization
     pub fn specialization(&self) -> Specialization {
         match *self {

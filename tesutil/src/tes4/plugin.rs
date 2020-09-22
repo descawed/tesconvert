@@ -5,6 +5,7 @@ use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 use std::rc::Rc;
 
+use super::{FindForm, FormId};
 use crate::*;
 
 mod field;
@@ -22,22 +23,6 @@ pub use class::*;
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
 pub const MAX_MASTERS: usize = u8::MAX as usize - 2;
-
-/// A unique identifier for a record
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct FormId(pub u32);
-
-impl FormId {
-    /// Gets a form ID's index (i.e., which plugin in the load order it belongs to)
-    pub fn index(&self) -> u8 {
-        (self.0 >> 24) as u8
-    }
-
-    /// Sets a form ID's index
-    pub fn set_index(&mut self, index: u8) {
-        self.0 = ((index as u32) << 24) | (self.0 & 0xffffff);
-    }
-}
 
 /// Represents a plugin file
 ///
@@ -65,8 +50,7 @@ impl FormId {
 #[derive(Debug)]
 pub struct Tes4Plugin {
     version: f32,
-    /// Indicates whether this plugin is a master
-    pub is_master: bool,
+    is_master: bool,
     next_form_id: u32,
     author: Option<String>,
     description: Option<String>,
@@ -200,21 +184,25 @@ impl Tes4Plugin {
     }
 
     /// Gets a record by form ID
-    pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
-        self.id_map.get(&form_id).map(|r| r.borrow())
+    pub fn get_record(&self, search: &FindForm) -> Option<Ref<Tes4Record>> {
+        self.id_map
+            .get(&search.form_id(self.masters.iter().map(|(s, _)| s.as_str()))?)
+            .map(|r| r.borrow())
     }
 
     /// Gets a record by form ID
-    pub fn get_record_mut(&self, form_id: FormId) -> Option<RefMut<Tes4Record>> {
-        self.id_map.get(&form_id).map(|r| r.borrow_mut())
+    pub fn get_record_mut(&self, search: &FindForm) -> Option<RefMut<Tes4Record>> {
+        self.id_map
+            .get(&search.form_id(self.masters.iter().map(|(s, _)| s.as_str()))?)
+            .map(|r| r.borrow_mut())
     }
 
     /// Gets a form by form ID
-    pub fn get<T>(&self, form_id: FormId) -> Result<Option<T>, TesError>
+    pub fn get<T>(&self, search: &FindForm) -> Result<Option<T>, TesError>
     where
         T: Form<Field = Tes4Field, Record = Tes4Record>,
     {
-        Ok(match self.get_record(form_id) {
+        Ok(match self.get_record(search) {
             Some(record) => Some(T::read(&*record)?),
             None => None,
         })
@@ -235,82 +223,12 @@ impl Tes4Plugin {
         }
     }
 
-    /// Gets a record by master and form ID
-    ///
-    /// This allows you to get a record without knowing the exact index that the master is loaded at.
-    /// A value of `None` indicates that the record is defined in this plugin itself.
-    pub fn get_record_by_master(
-        &self,
-        master: Option<&str>,
-        mut form_id: FormId,
-    ) -> Option<Ref<Tes4Record>> {
-        let index = match master {
-            Some(name) => self.masters.iter().position(|(_, m)| m == name)?,
-            None => self.masters.len(),
-        };
-        form_id.set_index(index as u8);
-        self.get_record(form_id)
-    }
-
-    /// Gets a record by master and form ID, mutably
-    ///
-    /// This allows you to get a record without knowing the exact index that the master is loaded at.
-    /// A value of `None` indicates that the record is defined in this plugin itself.
-    pub fn get_record_by_master_mut(
-        &self,
-        master: Option<&str>,
-        mut form_id: FormId,
-    ) -> Option<RefMut<Tes4Record>> {
-        let index = match master {
-            Some(name) => self.masters.iter().position(|(_, m)| m == name)?,
-            None => self.masters.len(),
-        };
-        form_id.set_index(index as u8);
-        self.get_record_mut(form_id)
-    }
-
-    /// Gets a form by master and form ID
-    pub fn get_by_master<T>(
-        &self,
-        master: Option<&str>,
-        form_id: FormId,
-    ) -> Result<Option<T>, TesError>
-    where
-        T: Form<Field = Tes4Field, Record = Tes4Record>,
-    {
-        Ok(match self.get_record_by_master(master, form_id) {
-            Some(record) => Some(T::read(&*record)?),
-            None => None,
-        })
-    }
-
     /// Updates the plugin from a form with a given form ID
-    pub fn update<T>(&mut self, form: &T, form_id: FormId) -> Result<(), TesError>
+    pub fn update<T>(&mut self, form: &T, search: &FindForm) -> Result<(), TesError>
     where
         T: Form<Field = Tes4Field, Record = Tes4Record>,
     {
-        form.write(
-            &mut *self
-                .get_record_mut(form_id)
-                .ok_or(TesError::InvalidFormId { form_id })?,
-        )
-    }
-
-    /// Updates the plugin from a form with a given master and form ID
-    pub fn update_by_master<T>(
-        &mut self,
-        form: &T,
-        master: Option<&str>,
-        form_id: FormId,
-    ) -> Result<(), TesError>
-    where
-        T: Form<Field = Tes4Field, Record = Tes4Record>,
-    {
-        form.write(
-            &mut *self
-                .get_record_by_master_mut(master, form_id)
-                .ok_or(TesError::InvalidFormId { form_id })?,
-        )
+        form.write(&mut *self.get_record_mut(search).ok_or_else(|| search.err())?)
     }
 }
 
@@ -324,6 +242,16 @@ impl Plugin for Tes4Plugin {
         let f = File::open(path)?;
         let reader = BufReader::new(f);
         Tes4Plugin::read(reader)
+    }
+
+    /// Returns whether this plugin is a master on which other plugins can depend
+    fn is_master(&self) -> bool {
+        self.is_master
+    }
+
+    /// Set whether this plugin is a master
+    fn set_is_master(&mut self, is_master: bool) {
+        self.is_master = is_master;
     }
 
     /// Saves a plugin to a file
@@ -347,7 +275,9 @@ mod tests {
         let cursor = io::Cursor::new(TEST_PLUGIN);
         let plugin = Tes4Plugin::read(cursor).unwrap();
 
-        let record = plugin.get_record(FormId(0x51a8)).unwrap();
+        let record = plugin
+            .get_record(&FindForm::ByIndex(FormId(0x51a8)))
+            .unwrap();
         for field in record.iter() {
             match field.name() {
                 b"EDID" => assert_eq!(field.get_zstring().unwrap(), "fPotionT1AleDurMult"),

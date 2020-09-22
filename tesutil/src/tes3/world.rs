@@ -126,10 +126,13 @@ impl Tes3World {
         &self,
         id: &str,
     ) -> Result<Option<T>, TesError> {
-        self.plugins
-            .iter()
-            .rev()
-            .fold(Ok(None), |a, p| if a.is_ok() { Ok(p.get(id)?) } else { a })
+        self.plugins.iter().rev().fold(Ok(None), |a, p| {
+            if a.is_ok() && a.as_ref().unwrap().is_none() {
+                Ok(p.get(id)?)
+            } else {
+                a
+            }
+        })
     }
 }
 

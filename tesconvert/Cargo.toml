@@ -11,6 +11,7 @@ tesutil = { path = "../tesutil" }
 clap = "2.33"
 anyhow = "1.0"
 num = "0.3"
+rust-ini = "0.15"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.7"
