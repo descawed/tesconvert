@@ -232,6 +232,16 @@ impl MorrowindToOblivion {
         })
     }
 
+    fn convert_race(&self) -> Result<FormId> {
+        let mw_race = self.player_base.race();
+        self.form_map.get(mw_race).copied().ok_or_else(|| {
+            anyhow!(format!(
+                "Could not find Oblivion equivalent for race {}",
+                mw_race
+            ))
+        })
+    }
+
     fn convert_class(&self) -> Result<(tes4::Class, FormId)> {
         Ok(match self.form_map.get(self.class.id()) {
             Some(class_form_id) => {
@@ -303,6 +313,8 @@ impl MorrowindToOblivion {
         ob_player_ref: &mut PlayerReferenceChange,
         ob_class: &tes4::Class,
     ) -> Result<()> {
+        ob_player_ref.is_female = self.player_base.is_female();
+
         // set attributes
         let attributes = ob_player_base
             .attributes_mut()
@@ -413,13 +425,15 @@ impl MorrowindToOblivion {
             .ok_or_else(|| anyhow!("Missing player reference change record in Oblivion save"))?;
 
         // convert data
+        let ob_race_form_id = self.convert_race()?;
         let (ob_class, ob_class_form_id) = self.convert_class()?;
         self.convert_stats(&mut ob_player_base, &mut ob_player_ref, &ob_class)?;
 
         // apply changes to save
         let ob_save = self.ob.world.get_save_mut().unwrap();
 
-        // finalize converted class
+        // finalize converted forms
+        let ob_race_iref = ob_save.insert_form_id(ob_race_form_id);
         let ob_class_iref = ob_save.insert_form_id(ob_class_form_id);
         ob_player_ref.set_class(
             if ob_class_form_id == FORM_PLAYER_CUSTOM_CLASS {
@@ -429,6 +443,7 @@ impl MorrowindToOblivion {
             },
             ob_class_iref,
         );
+        ob_player_ref.set_race(ob_race_iref);
 
         // copy save metadata
         let mw_save = self.mw.world.get_save().unwrap();

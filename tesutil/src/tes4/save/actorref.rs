@@ -967,6 +967,16 @@ impl PlayerReferenceChange {
         self.class = iref;
         self.custom_class = class;
     }
+
+    /// Gets the player's race as an iref
+    pub fn race(&self) -> u32 {
+        self.race
+    }
+
+    /// Sets the player's race as an iref
+    pub fn set_race(&mut self, race: u32) {
+        self.race = race;
+    }
 }
 
 #[cfg(test)]

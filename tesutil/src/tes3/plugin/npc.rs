@@ -451,6 +451,16 @@ impl Npc {
         Ok(())
     }
 
+    /// Gets whether the character is female
+    pub fn is_female(&self) -> bool {
+        self.flags.contains(NpcFlags::FEMALE)
+    }
+
+    /// Sets whether the character is female
+    pub fn set_is_female(&mut self, is_female: bool) {
+        self.flags.set(NpcFlags::FEMALE, is_female);
+    }
+
     /// Gets the character's race
     pub fn race(&self) -> &str {
         &self.race
