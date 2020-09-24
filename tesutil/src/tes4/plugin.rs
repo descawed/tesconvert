@@ -147,7 +147,7 @@ impl Tes4Plugin {
             for record in group.iter_rc() {
                 let rb = record.borrow();
                 let id = rb.id();
-                let record_type = rb.name();
+                let record_type = *rb.name();
                 let index = id.index();
                 if index > max_index {
                     return Err(decode_failed(format!(
@@ -156,9 +156,13 @@ impl Tes4Plugin {
                     )));
                 }
 
+                drop(rb);
+
                 // GMSTs don't have fixed form IDs, so we have to track them by name
-                if record_type == b"GMST" {
-                    for field in rb.iter() {
+                if record_type == *b"GMST" {
+                    let mut rbm = record.borrow_mut();
+                    rbm.finalize()?;
+                    for field in rbm.iter() {
                         if field.name() == b"EDID" {
                             let key = String::from(field.get_zstring()?);
                             plugin.settings.insert(key, Rc::clone(&record));
@@ -167,7 +171,6 @@ impl Tes4Plugin {
                     }
                 }
 
-                drop(rb);
                 plugin.id_map.insert(id, record);
             }
 
@@ -187,14 +190,40 @@ impl Tes4Plugin {
     pub fn get_record(&self, search: &FindForm) -> Option<Ref<Tes4Record>> {
         self.id_map
             .get(&search.form_id(self.masters.iter().map(|(s, _)| s.as_str()))?)
-            .map(|r| r.borrow())
+            .and_then(|r| {
+                if r.borrow().status() == RecordStatus::Initialized {
+                    // FIXME: for now we're just suppressing records that fail to finalize. we
+                    //  really ought to return this result to the caller, but I don't feel like
+                    //  updating the plugin interface right now.
+                    let _ = r.borrow_mut().finalize();
+                }
+
+                let rb = r.borrow();
+                match rb.status() {
+                    RecordStatus::Failed => None,
+                    _ => Some(rb),
+                }
+            })
     }
 
     /// Gets a record by form ID
     pub fn get_record_mut(&self, search: &FindForm) -> Option<RefMut<Tes4Record>> {
         self.id_map
             .get(&search.form_id(self.masters.iter().map(|(s, _)| s.as_str()))?)
-            .map(|r| r.borrow_mut())
+            .and_then(|r| {
+                let mut rbm = r.borrow_mut();
+                if rbm.status() == RecordStatus::Initialized {
+                    // FIXME: for now we're just suppressing records that fail to finalize. we
+                    //  really ought to return this result to the caller, but I don't feel like
+                    //  updating the plugin interface right now.
+                    let _ = rbm.finalize();
+                }
+
+                match rbm.status() {
+                    RecordStatus::Failed => None,
+                    _ => Some(rbm),
+                }
+            })
     }
 
     /// Gets a form by form ID
@@ -210,6 +239,7 @@ impl Tes4Plugin {
 
     /// Gets a game setting as a float by name
     pub fn get_float_setting(&self, name: &str) -> Result<Option<f32>, TesError> {
+        // GMST records are eagerly finalized, so we don't need to worry about their status here
         if let Some(record) = self.settings.get(name) {
             for field in record.borrow().iter() {
                 if field.name() == b"DATA" {

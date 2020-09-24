@@ -171,7 +171,7 @@ impl Group {
                     groups.push(group);
                 }
             } else {
-                let record = Tes4Record::read_with_name(&mut f, name)?;
+                let record = Tes4Record::read_lazy_with_name(&mut f, name)?;
                 records.push(Rc::new(RefCell::new(record)));
             }
             let end = f.seek(SeekFrom::Current(0))?;
