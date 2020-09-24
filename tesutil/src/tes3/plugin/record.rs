@@ -226,29 +226,44 @@ impl Tes3Record {
         }
     }
 
+    /// Returns whether this is a record type that has an ID
+    ///
+    /// If this returns true, it does not guarantee that the `id` method will not return `None`.
+    /// That can still happen if the `b"NAME"` field is missing. This only indicates whether this
+    /// is a record type that is expected to have an ID.
+    pub fn has_id(&self) -> bool {
+        match &self.name {
+            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL"
+            | b"SSCR" | b"TES3" => false,
+            _ => true,
+        }
+    }
+
     /// Returns the record ID
     ///
     /// Not all record types have an ID; in this case, this method will return `None`. For record
     /// types that do have an ID, this method may also return `None` if the `b"NAME"` field
     /// containing the ID has not yet been added to the record.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this is a record type that has an ID and the record has not been finalized.
     pub fn id(&self) -> Option<&str> {
-        self.require_finalized();
-        match &self.name {
-            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL"
-            | b"SSCR" | b"TES3" => None,
-            _ => {
-                let mut id = None;
-                for field in self.fields.iter() {
-                    if field.name() == b"NAME" {
-                        id = match &self.name {
-                            b"GMST" | b"WEAP" => field.get_string().ok(),
-                            _ => field.get_zstring().ok(),
-                        };
-                        break;
-                    }
+        if self.has_id() {
+            self.require_finalized();
+            let mut id = None;
+            for field in self.fields.iter() {
+                if field.name() == b"NAME" {
+                    id = match &self.name {
+                        b"GMST" | b"WEAP" => field.get_string().ok(),
+                        _ => field.get_zstring().ok(),
+                    };
+                    break;
                 }
-                id
             }
+            id
+        } else {
+            None
         }
     }
 
