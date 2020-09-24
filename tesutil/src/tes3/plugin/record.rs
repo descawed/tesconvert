@@ -39,6 +39,9 @@ pub struct Tes3Record {
     pub is_initially_disabled: bool,
     // TODO: figure out what this does
     pub is_blocked: bool,
+    status: RecordStatus,
+    raw_data: Vec<u8>,
+    changed: bool,
     fields: Vec<Tes3Field>,
 }
 
@@ -55,23 +58,11 @@ impl IntoIterator for Tes3Record {
 }
 
 impl Record<Tes3Field> for Tes3Record {
-    /// Reads a record from a binary stream
-    ///
-    /// Reads a record from any type that implements [`Read`] or a mutable reference to
-    /// such a type. On success, this function returns an `Option<Record>`. A value of `None`
-    /// indicates that the stream was at EOF; otherwise, it will be `Some(Record)`. This is
-    /// necessary because EOF indicates that the end of a plugin file has been reached.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if an I/O error occurs.
-    ///
-    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    fn read<T: Read>(mut f: T) -> Result<Tes3Record, TesError> {
+    fn read_lazy<T: Read>(mut f: T) -> Result<Tes3Record, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
-        let mut size = extract!(f as u32)? as usize;
+        let size = extract!(f as u32)? as usize;
 
         let mut buf = [0u8; 4];
         // the next field is useless, but skipping bytes is apparently needlessly complicated
@@ -81,32 +72,21 @@ impl Record<Tes3Field> for Tes3Record {
 
         let flags = u32::from_le_bytes(buf);
 
-        let mut record = Tes3Record {
+        let mut data = vec![0u8; size];
+        // read in the field data
+        f.read_exact(&mut data)?;
+
+        Ok(Tes3Record {
             name,
             is_deleted: flags & FLAG_DELETED != 0,
             is_persistent: flags & FLAG_PERSISTENT != 0,
             is_initially_disabled: flags & FLAG_INITIALLY_DISABLED != 0,
             is_blocked: flags & FLAG_BLOCKED != 0,
+            status: RecordStatus::Initialized,
+            raw_data: data,
+            changed: false,
             fields: vec![],
-        };
-
-        let mut data = vec![0u8; size];
-        // read in the field data
-        f.read_exact(&mut data)?;
-
-        let mut data_ref: &[u8] = data.as_ref();
-        while size > 0 {
-            let field = Tes3Field::read(&mut data_ref)?;
-            let field_size = field.size();
-            if field_size > size {
-                return Err(decode_failed("Field size exceeds record size"));
-            }
-
-            size -= field.size();
-            record.add_field(field);
-        }
-
-        Ok(record)
+        })
     }
 
     /// Returns a reference to the record name
@@ -114,13 +94,57 @@ impl Record<Tes3Field> for Tes3Record {
         &self.name
     }
 
+    fn status(&self) -> RecordStatus {
+        self.status
+    }
+
+    fn finalize(&mut self) -> Result<(), TesError> {
+        if self.status == RecordStatus::Initialized {
+            let mut size = self.raw_data.len();
+            let mut reader: &mut &[u8] = &mut self.raw_data.as_ref();
+            while size > 0 {
+                match Tes3Field::read(&mut reader) {
+                    Ok(field) => {
+                        let field_size = field.size();
+                        if field_size > size {
+                            self.status = RecordStatus::Failed;
+                            return Err(decode_failed("Field size exceeds record size"));
+                        }
+
+                        size -= field.size();
+                        // calling add_field does some checks that are unncessary now, and also
+                        // causes problems with the borrow checker
+                        if field.name() == b"DELE" {
+                            // we'll add this field automatically based on the deleted flag, so don't add it to
+                            // the fields vector
+                            self.is_deleted = true;
+                        } else {
+                            self.fields.push(field);
+                        }
+                    }
+                    Err(e) => {
+                        self.status = RecordStatus::Failed;
+                        return Err(decode_failed_because("Failed decoding field", e));
+                    }
+                }
+            }
+
+            self.status = RecordStatus::Finalized;
+            self.changed = false;
+        }
+
+        Ok(())
+    }
+
     /// Returns an iterator over this record's fields
     fn iter(&self) -> Box<dyn Iterator<Item = &Tes3Field> + '_> {
+        self.require_finalized();
         Box::new(self.fields.iter())
     }
 
     /// Returns a mutable iterator over this record's fields
     fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut Tes3Field> + '_> {
+        self.require_finalized();
         Box::new(self.fields.iter_mut())
     }
 
@@ -134,16 +158,6 @@ impl Record<Tes3Field> for Tes3Record {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     fn write<T: Write>(&self, mut f: &mut T) -> Result<(), TesError> {
-        let size = self.field_size();
-
-        if size > MAX_DATA {
-            return Err(TesError::LimitExceeded {
-                description: String::from("Record data too long to be serialized"),
-                max_size: MAX_DATA,
-                actual_size: size,
-            });
-        }
-
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
             | if self.is_persistent {
                 FLAG_PERSISTENT
@@ -158,17 +172,35 @@ impl Record<Tes3Field> for Tes3Record {
             | if self.is_blocked { FLAG_BLOCKED } else { 0 };
 
         f.write_exact(&self.name)?;
-        f.write_exact(&(size as u32).to_le_bytes())?;
-        f.write_exact(b"\0\0\0\0")?; // dummy field
-        f.write_exact(&flags.to_le_bytes())?;
 
-        for field in self.fields.iter() {
-            field.write(&mut f)?;
-        }
+        if !self.changed {
+            f.write_exact(&(self.raw_data.len() as u32).to_le_bytes())?;
+            f.write_exact(b"\0\0\0\0")?; // dummy field
+            f.write_exact(&flags.to_le_bytes())?;
+            f.write_exact(&self.raw_data)?;
+        } else {
+            let size = self.field_size();
 
-        if self.is_deleted {
-            let del = Tes3Field::new(b"DELE", vec![0; 4]).unwrap();
-            del.write(&mut f)?;
+            if size > MAX_DATA {
+                return Err(TesError::LimitExceeded {
+                    description: String::from("Record data too long to be serialized"),
+                    max_size: MAX_DATA,
+                    actual_size: size,
+                });
+            }
+
+            f.write_exact(&(size as u32).to_le_bytes())?;
+            f.write_exact(b"\0\0\0\0")?; // dummy field
+            f.write_exact(&flags.to_le_bytes())?;
+
+            for field in self.fields.iter() {
+                field.write(&mut f)?;
+            }
+
+            if self.is_deleted {
+                let del = Tes3Field::new(b"DELE", vec![0; 4]).unwrap();
+                del.write(&mut f)?;
+            }
         }
 
         Ok(())
@@ -187,6 +219,9 @@ impl Tes3Record {
             is_persistent: false,
             is_initially_disabled: false,
             is_blocked: false,
+            status: RecordStatus::Finalized,
+            raw_data: vec![],
+            changed: false,
             fields: vec![],
         }
     }
@@ -197,6 +232,7 @@ impl Tes3Record {
     /// types that do have an ID, this method may also return `None` if the `b"NAME"` field
     /// containing the ID has not yet been added to the record.
     pub fn id(&self) -> Option<&str> {
+        self.require_finalized();
         match &self.name {
             b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL"
             | b"SSCR" | b"TES3" => None,
@@ -216,6 +252,12 @@ impl Tes3Record {
         }
     }
 
+    fn require_finalized(&self) {
+        if self.status != RecordStatus::Finalized {
+            panic!("Attempted to access partially loaded record data");
+        }
+    }
+
     /// Adds a field to this record
     ///
     /// Note: you should use the [`is_deleted`] member instead of directly adding `b"DELE"` fields
@@ -224,6 +266,8 @@ impl Tes3Record {
     ///
     /// [`is_deleted`]: #structfield.is_deleted
     pub fn add_field(&mut self, field: Tes3Field) {
+        self.require_finalized();
+        self.changed = true;
         if field.name() == b"DELE" {
             // we'll add this field automatically based on the deleted flag, so don't add it to
             // the fields vector
@@ -261,6 +305,8 @@ impl Tes3Record {
 
     /// Removes all fields from this record
     pub fn clear(&mut self) {
+        self.require_finalized();
+        self.changed = true;
         self.fields.clear();
     }
 }

@@ -66,6 +66,9 @@ pub struct Tes4Record {
     flags: RecordFlags,
     form_id: FormId,
     vcs_info: u32,
+    status: RecordStatus,
+    raw_data: Vec<u8>,
+    changed: bool,
     fields: Vec<Tes4Field>,
     groups: Vec<Group>,
 }
@@ -75,6 +78,7 @@ impl IntoIterator for Tes4Record {
     type IntoIter = <Vec<Tes4Field> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
+        self.require_finalized();
         self.fields.into_iter()
     }
 }
@@ -94,7 +98,7 @@ impl Record<Tes4Field> for Tes4Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    fn read<T: Read>(mut f: T) -> Result<Tes4Record, TesError> {
+    fn read_lazy<T: Read>(mut f: T) -> Result<Tes4Record, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -102,7 +106,7 @@ impl Record<Tes4Field> for Tes4Record {
             return Err(decode_failed("Expected record, found group"));
         }
 
-        Tes4Record::read_with_name(f, name)
+        Tes4Record::read_lazy_with_name(f, name)
     }
 
     /// Returns a reference to the record name
@@ -110,13 +114,80 @@ impl Record<Tes4Field> for Tes4Record {
         &self.name
     }
 
+    fn status(&self) -> RecordStatus {
+        self.status
+    }
+
+    fn finalize(&mut self) -> Result<(), TesError> {
+        if self.status == RecordStatus::Initialized {
+            let mut raw_reader: &[u8] = self.raw_data.as_ref();
+            let mut size = if self.uses_compression() {
+                match extract!(raw_reader as u32) {
+                    Ok(size) => size as usize,
+                    Err(e) => {
+                        self.status = RecordStatus::Failed;
+                        return Err(decode_failed_because(
+                            "Failed to read compressed data size",
+                            e,
+                        ));
+                    }
+                }
+            } else {
+                self.raw_data.len()
+            };
+
+            let mut zlib_reader =
+                ZlibDecoder::new(<Vec<u8> as AsRef<[u8]>>::as_ref(&self.raw_data));
+
+            while size > 0 {
+                let result = if self.uses_compression() {
+                    Tes4Field::read(&mut zlib_reader)
+                } else {
+                    Tes4Field::read(&mut raw_reader)
+                };
+
+                match result {
+                    Ok(field) => {
+                        let field_size = field.size();
+                        if field_size > size {
+                            self.status = RecordStatus::Failed;
+                            return Err(decode_failed("Field size exceeds record size"));
+                        }
+
+                        size -= field.size();
+                        self.fields.push(field);
+                    }
+                    Err(e) => {
+                        self.status = RecordStatus::Failed;
+                        return Err(decode_failed_because("Failed to decode record field", e));
+                    }
+                }
+            }
+
+            self.status = RecordStatus::Finalized;
+            self.changed = false;
+        }
+
+        Ok(())
+    }
+
     /// Returns an iterator over this record's fields
+    ///
+    /// # Panics
+    ///
+    /// Panics if this record has not been finalized.
     fn iter(&self) -> Box<dyn Iterator<Item = &Tes4Field> + '_> {
+        self.require_finalized();
         Box::new(self.fields.iter())
     }
 
     /// Returns a mutable iterator over this record's fields
+    ///
+    /// # Panics
+    ///
+    /// Panics if this record has not been finalized.
     fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut Tes4Field> + '_> {
+        self.require_finalized();
         Box::new(self.fields.iter_mut())
     }
 
@@ -133,54 +204,56 @@ impl Record<Tes4Field> for Tes4Record {
     /// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     fn write<T: Write + Seek>(&self, f: &mut T) -> Result<(), TesError> {
-        let size = self.field_size();
-
-        // technically, if the record is compressed, we should do this check on the compressed data,
-        // but I don't think this will ever happen anyway
-        if size > MAX_DATA {
-            return Err(TesError::LimitExceeded {
-                description: String::from("Record data too long to be serialized"),
-                max_size: MAX_DATA,
-                actual_size: size,
-            });
-        }
-
         f.write_exact(&self.name)?;
 
-        if self.flags.contains(RecordFlags::COMPRESSED) {
-            let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
-            for field in self.fields.iter() {
-                field.write(&mut &mut raw_buf)?;
-            }
-
-            let mut buf_reader: &[u8] = raw_buf.as_ref();
-            let mut encoder =
-                ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
-            let mut comp_buf: Vec<u8> = vec![];
-            encoder.read_to_end(&mut comp_buf)?;
-
-            f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
+        if !self.changed {
+            f.write_exact(&(self.raw_data.len() as u32).to_le_bytes())?;
             f.write_exact(&self.flags.bits.to_le_bytes())?;
             f.write_exact(&self.form_id.0.to_le_bytes())?;
             f.write_exact(&self.vcs_info.to_le_bytes())?;
-            f.write_exact(&(size as u32).to_le_bytes())?;
-            f.write_exact(&comp_buf)?;
-
-            // 24 = name + compressed size + flags + form ID + VCS info + uncompressed size
-            comp_buf.len() + 24
+            f.write_exact(&self.raw_data)?;
         } else {
-            f.write_exact(&(size as u32).to_le_bytes())?;
-            f.write_exact(&self.flags.bits.to_le_bytes())?;
-            f.write_exact(&self.form_id.0.to_le_bytes())?;
-            f.write_exact(&self.vcs_info.to_le_bytes())?;
+            let size = self.field_size();
 
-            for field in self.fields.iter() {
-                field.write(&mut *f)?;
+            // technically, if the record is compressed, we should do this check on the compressed data,
+            // but I don't think this will ever happen anyway
+            if size > MAX_DATA {
+                return Err(TesError::LimitExceeded {
+                    description: String::from("Record data too long to be serialized"),
+                    max_size: MAX_DATA,
+                    actual_size: size,
+                });
             }
 
-            // 20 = name + size + flags + form ID + VCS info
-            size + 20
-        };
+            if self.flags.contains(RecordFlags::COMPRESSED) {
+                let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
+                for field in self.fields.iter() {
+                    field.write(&mut &mut raw_buf)?;
+                }
+
+                let mut buf_reader: &[u8] = raw_buf.as_ref();
+                let mut encoder =
+                    ZlibEncoder::new(&mut buf_reader, Compression::new(COMPRESSION_LEVEL));
+                let mut comp_buf: Vec<u8> = vec![];
+                encoder.read_to_end(&mut comp_buf)?;
+
+                f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
+                f.write_exact(&self.flags.bits.to_le_bytes())?;
+                f.write_exact(&self.form_id.0.to_le_bytes())?;
+                f.write_exact(&self.vcs_info.to_le_bytes())?;
+                f.write_exact(&(size as u32).to_le_bytes())?;
+                f.write_exact(&comp_buf)?;
+            } else {
+                f.write_exact(&(size as u32).to_le_bytes())?;
+                f.write_exact(&self.flags.bits.to_le_bytes())?;
+                f.write_exact(&self.form_id.0.to_le_bytes())?;
+                f.write_exact(&self.vcs_info.to_le_bytes())?;
+
+                for field in self.fields.iter() {
+                    field.write(&mut *f)?;
+                }
+            }
+        }
 
         for group in self.groups.iter() {
             group.write(&mut *f)?;
@@ -201,6 +274,9 @@ impl Tes4Record {
             flags: RecordFlags::empty(),
             form_id: FormId(0),
             vcs_info: 0,
+            status: RecordStatus::Finalized,
+            raw_data: vec![],
+            changed: true,
             fields: vec![],
             groups: vec![],
         }
@@ -220,7 +296,7 @@ impl Tes4Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    pub fn read_with_name<T: Read>(mut f: T, name: [u8; 4]) -> Result<Tes4Record, TesError> {
+    pub fn read_lazy_with_name<T: Read>(mut f: T, name: [u8; 4]) -> Result<Tes4Record, TesError> {
         let size = extract!(f as u32)? as usize;
 
         let mut buf = [0u8; 4];
@@ -232,43 +308,27 @@ impl Tes4Record {
         let form_id = FormId(extract!(f as u32)?);
         let vcs_info = extract!(f as u32)?;
 
-        let mut record = Tes4Record {
-            name,
-            flags,
-            form_id,
-            vcs_info,
-            fields: vec![],
-            groups: vec![],
-        };
-
         let mut data = vec![0u8; size];
         // read in the field data
         f.read_exact(&mut data)?;
 
-        let reader = &mut &data[..];
-        if flags.contains(RecordFlags::COMPRESSED) {
-            let uncompressed_size = extract!(reader as u32)? as usize;
-            record.field_read_helper(ZlibDecoder::new(reader), uncompressed_size)?;
-        } else {
-            record.field_read_helper(reader, size)?;
-        };
-
-        Ok(record)
+        Ok(Tes4Record {
+            name,
+            flags,
+            form_id,
+            vcs_info,
+            status: RecordStatus::Initialized,
+            raw_data: data,
+            changed: false,
+            fields: vec![],
+            groups: vec![],
+        })
     }
 
-    fn field_read_helper<T: Read>(&mut self, mut f: T, mut size: usize) -> Result<(), TesError> {
-        while size > 0 {
-            let field = Tes4Field::read(&mut f)?;
-            let field_size = field.size();
-            if field_size > size {
-                return Err(decode_failed("Field size exceeds record size"));
-            }
-
-            size -= field.size();
-            self.add_field(field);
+    fn require_finalized(&self) {
+        if self.status != RecordStatus::Finalized {
+            panic!("Attempted to access partially loaded record data");
         }
-
-        Ok(())
     }
 
     flag_property!(is_master, set_master, MASTER);
@@ -289,7 +349,29 @@ impl Tes4Record {
     );
     flag_property!(is_dangerous, set_dangerous, OFF_LIMITS);
     flag_property!(is_off_limits, set_off_limits, OFF_LIMITS);
-    flag_property!(uses_compression, set_compression, COMPRESSED);
+
+    pub fn uses_compression(&self) -> bool {
+        self.flags.contains(RecordFlags::COMPRESSED)
+    }
+
+    /// Sets whether this record's data should be compressed
+    ///
+    /// # Panics
+    ///
+    /// Panics if the compression status of the record is changed and the record has not been
+    /// finalized.
+    pub fn set_compression(&mut self, value: bool) {
+        if self.uses_compression() != value {
+            self.require_finalized();
+            self.changed = true;
+        }
+
+        if value {
+            self.flags |= RecordFlags::COMPRESSED;
+        } else {
+            self.flags -= RecordFlags::COMPRESSED;
+        }
+    }
 
     pub fn can_wait(&self) -> bool {
         !self.flags.contains(RecordFlags::CANT_WAIT)
@@ -310,12 +392,12 @@ impl Tes4Record {
 
     /// Adds a field to this record
     ///
-    /// Note: you should use the [`is_deleted`] member instead of directly adding `b"DELE"` fields
-    /// to records. If you do attempt to add a `b"DELE"` field, [`is_deleted`] will be set to true
-    /// instead.
+    /// # Panics
     ///
-    /// [`is_deleted`]: #structfield.is_deleted
+    /// Panics if this record has not been finalized.
     pub fn add_field(&mut self, field: Tes4Field) {
+        self.require_finalized();
+        self.changed = true;
         self.fields.push(field);
     }
 
@@ -342,7 +424,13 @@ impl Tes4Record {
     }
 
     /// Removes all fields from this record
+    ///
+    /// # Panics
+    ///
+    /// Panics if this record has not been finalized.
     pub fn clear(&mut self) {
+        self.require_finalized();
+        self.changed = true;
         self.fields.clear();
     }
 }
@@ -356,7 +444,8 @@ mod tests {
     fn read_record() {
         let data = b"GLOB\x21\0\0\0\0\0\0\0\x3a\0\0\0\0\0\0\0EDID\x0a\0TimeScale\0FNAM\x01\0sFLTV\x04\0\0\0\xf0\x41".to_vec();
         let cursor = io::Cursor::new(data);
-        let record = Tes4Record::read(cursor).unwrap();
+        let mut record = Tes4Record::read_lazy(cursor).unwrap();
+        record.finalize().unwrap();
         assert_eq!(record.name, *b"GLOB");
         assert!(!record.is_deleted());
         assert!(!record.is_persistent());

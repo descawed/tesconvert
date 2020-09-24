@@ -293,7 +293,6 @@ impl Tes3Plugin {
         }
 
         // decode header structure
-        // TODO: I honestly don't understand why I have to use as_ref for the reader but I can just do &mut buf for the writer
         let mut head_reader: &[u8] = header_data.as_ref();
         let version = extract!(head_reader as f32)?;
         let flags = extract!(head_reader as u32)?;
@@ -379,6 +378,8 @@ impl Tes3Plugin {
         f.seek(SeekFrom::Start(here))?;
 
         while here != eof {
+            // we can't really leverage lazy reads here because we always need to know the ID, which
+            // requires parsing the record
             plugin.add_record(Tes3Record::read(&mut f)?)?;
             here = f.seek(SeekFrom::Current(0))?;
         }
@@ -585,7 +586,8 @@ impl Tes3Plugin {
     ///
     /// [`PluginError::LimitExceeded`]: enum.PluginError.html#variant.LimitExceeded
     /// [`PluginError::DuplicateId`]: enum.PluginError.html#variant.DuplicateId
-    pub fn add_record(&mut self, record: Tes3Record) -> Result<(), TesError> {
+    pub fn add_record(&mut self, mut record: Tes3Record) -> Result<(), TesError> {
+        record.finalize()?;
         let r = Rc::new(RefCell::new(record));
         let rb = r.borrow();
         if let Some(id) = rb.id() {
