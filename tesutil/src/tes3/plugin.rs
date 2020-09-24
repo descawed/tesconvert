@@ -378,9 +378,7 @@ impl Tes3Plugin {
         f.seek(SeekFrom::Start(here))?;
 
         while here != eof {
-            // we can't really leverage lazy reads here because we always need to know the ID, which
-            // requires parsing the record
-            plugin.add_record(Tes3Record::read(&mut f)?)?;
+            plugin.add_record(Tes3Record::read_lazy(&mut f)?)?;
             here = f.seek(SeekFrom::Current(0))?;
         }
 
@@ -590,19 +588,25 @@ impl Tes3Plugin {
         record.finalize()?;
         let r = Rc::new(RefCell::new(record));
         let rb = r.borrow();
-        if let Some(id) = rb.id() {
-            let key = String::from(id);
-            let name = rb.name();
-            let type_map = self.id_map.entry(key).or_insert_with(HashMap::new);
-            // FIXME: it appears there are duplicates in the save file even among the same type (specifically CREC records)
-            /*if type_map.contains_key(name) {
-                return Err(TesError::DuplicateId(key));
-            }*/
-
-            type_map.insert(*name, Rc::clone(&r));
-        }
         let key = *rb.name();
-        drop(rb); // otherwise the compiler complains that r is still borrowed below
+        let has_id = rb.has_id();
+        drop(rb);
+        // if this is a record type that doesn't have an ID, we can avoid finalizing it now
+        if has_id {
+            r.borrow_mut().finalize()?;
+            let rb = r.borrow();
+            if let Some(id) = rb.id() {
+                let key = String::from(id);
+                let name = rb.name();
+                let type_map = self.id_map.entry(key).or_insert_with(HashMap::new);
+                // FIXME: it appears there are duplicates in the save file even among the same type (specifically CREC records)
+                /*if type_map.contains_key(name) {
+                    return Err(TesError::DuplicateId(key));
+                }*/
+
+                type_map.insert(*name, Rc::clone(&r));
+            }
+        }
         let records = self.type_map.entry(key).or_insert_with(Vec::new);
         records.push(Rc::clone(&r));
         self.records.push(r);
@@ -660,9 +664,19 @@ impl Tes3Plugin {
         &self,
         name: &[u8; 4],
     ) -> Option<impl Iterator<Item = Ref<Tes3Record>>> {
-        self.type_map
-            .get(name)
-            .map(|v| v.iter().map(|r| r.borrow()))
+        self.type_map.get(name).map(|v| {
+            v.iter().filter_map(|r| {
+                if r.borrow().status() == RecordStatus::Initialized {
+                    let _ = r.borrow_mut().finalize();
+                }
+
+                let rb = r.borrow();
+                match rb.status() {
+                    RecordStatus::Finalized => Some(rb),
+                    _ => None,
+                }
+            })
+        })
     }
 
     /// Finds a record by ID and returns a mutable reference
