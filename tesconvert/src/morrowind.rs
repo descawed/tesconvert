@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::thread;
 
 use tesutil::tes3;
 use tesutil::tes3::{SkillType, Tes3World};
@@ -191,8 +192,22 @@ impl MorrowindToOblivion {
 
     /// Prepare a Morrowind-to-Oblivion conversion based on the provided configuration
     pub fn load(config: Config) -> Result<MorrowindToOblivion> {
-        let mw = Morrowind::load(config.mw_path.as_ref(), &config.source_path)?;
-        let ob = Oblivion::load(config.ob_path.as_ref(), &config.target_path)?;
+        // the compiler can't tell that config lives long enough for our threads to take references
+        // to these values, so we have to clone them so we can give owned values to the threads.
+        let mw_path = config.mw_path.clone();
+        let ob_path = config.ob_path.clone();
+        let source_path = config.source_path.clone();
+        let target_path = config.target_path.clone();
+
+        let mw_thread = thread::spawn(|| Morrowind::load(mw_path, source_path));
+        let ob_thread = thread::spawn(|| Oblivion::load(ob_path, target_path));
+
+        let mw = mw_thread
+            .join()
+            .map_err(|_| anyhow!("Morrowind load failed"))??;
+        let ob = ob_thread
+            .join()
+            .map_err(|_| anyhow!("Oblivion load failed"))??;
         let form_map = MorrowindToOblivion::load_map(&config.config_path, &ob.world)?;
 
         // the compiler actually requires a type here but not on player_ref or class

@@ -1,8 +1,8 @@
-use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::tes4::{FormId, Tes4Field, Tes4Record};
 use crate::*;
@@ -61,7 +61,7 @@ pub struct Save {
     weather_data: Vec<u8>,
     player_combat_count: u32,
     created_ids: Vec<FormId>,
-    created_records: HashMap<FormId, RefCell<Tes4Record>>,
+    created_records: HashMap<FormId, RwLock<Tes4Record>>,
     quick_keys: Vec<Option<u32>>,
     reticle_data: Vec<u8>,
     interface_data: Vec<u8>,
@@ -169,7 +169,7 @@ impl Save {
             let record = Tes4Record::read(&mut f)?;
             let form_id = record.id();
             created_ids.push(form_id);
-            created_records.insert(form_id, RefCell::new(record));
+            created_records.insert(form_id, RwLock::new(record));
         }
 
         let quick_keys_size = extract!(f as u16)? as usize;
@@ -347,15 +347,19 @@ impl Save {
     /// Gets a created record by form ID
     ///
     /// Returns `None` if no created record exists for the given form ID.
-    pub fn get_record(&self, form_id: FormId) -> Option<Ref<Tes4Record>> {
-        self.created_records.get(&form_id).map(|r| r.borrow())
+    pub fn get_record(&self, form_id: FormId) -> Option<RwLockReadGuard<Tes4Record>> {
+        self.created_records
+            .get(&form_id)
+            .map(|r| r.read().unwrap())
     }
 
     /// Gets a created record by form ID, mutably
     ///
     /// Returns `None` if no created record exists for the given form ID.
-    pub fn get_record_mut(&self, form_id: FormId) -> Option<RefMut<Tes4Record>> {
-        self.created_records.get(&form_id).map(|r| r.borrow_mut())
+    pub fn get_record_mut(&self, form_id: FormId) -> Option<RwLockWriteGuard<Tes4Record>> {
+        self.created_records
+            .get(&form_id)
+            .map(|r| r.write().unwrap())
     }
 
     /// Gets a created form by form ID, mutably
@@ -495,7 +499,7 @@ impl Save {
         serialize!(self.created_records.len() as u32 => f)?;
         for form_id in &self.created_ids {
             if let Some(created_record) = self.created_records.get(form_id) {
-                created_record.borrow().write(&mut f)?;
+                created_record.read().unwrap().write(&mut f)?;
             }
         }
 

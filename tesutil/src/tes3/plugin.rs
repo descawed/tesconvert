@@ -1,10 +1,9 @@
-use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::Path;
-use std::rc::Rc;
 use std::str;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::plugin::*;
 use crate::*;
@@ -176,9 +175,9 @@ pub struct Tes3Plugin {
     save: Option<SaveInfo>,
     screen_data: Vec<u8>,
     masters: Vec<(String, u64)>,
-    records: Vec<Rc<RefCell<Tes3Record>>>,
-    id_map: HashMap<String, HashMap<[u8; 4], Rc<RefCell<Tes3Record>>>>,
-    type_map: HashMap<[u8; 4], Vec<Rc<RefCell<Tes3Record>>>>,
+    records: Vec<Arc<RwLock<Tes3Record>>>,
+    id_map: HashMap<String, HashMap<[u8; 4], Arc<RwLock<Tes3Record>>>>,
+    type_map: HashMap<[u8; 4], Vec<Arc<RwLock<Tes3Record>>>>,
 }
 
 const HEADER_LENGTH: usize = 300;
@@ -586,15 +585,15 @@ impl Tes3Plugin {
     /// [`PluginError::DuplicateId`]: enum.PluginError.html#variant.DuplicateId
     pub fn add_record(&mut self, mut record: Tes3Record) -> Result<(), TesError> {
         record.finalize()?;
-        let r = Rc::new(RefCell::new(record));
-        let rb = r.borrow();
+        let r = Arc::new(RwLock::new(record));
+        let rb = r.read().unwrap();
         let key = *rb.name();
         let has_id = rb.has_id();
         drop(rb);
         // if this is a record type that doesn't have an ID, we can avoid finalizing it now
         if has_id {
-            r.borrow_mut().finalize()?;
-            let rb = r.borrow();
+            r.write().unwrap().finalize()?;
+            let rb = r.read().unwrap();
             if let Some(id) = rb.id() {
                 let key = String::from(id);
                 let name = rb.name();
@@ -604,11 +603,11 @@ impl Tes3Plugin {
                     return Err(TesError::DuplicateId(key));
                 }*/
 
-                type_map.insert(*name, Rc::clone(&r));
+                type_map.insert(*name, Arc::clone(&r));
             }
         }
         let records = self.type_map.entry(key).or_insert_with(Vec::new);
-        records.push(Rc::clone(&r));
+        records.push(Arc::clone(&r));
         self.records.push(r);
         Ok(())
     }
@@ -636,7 +635,7 @@ impl Tes3Plugin {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_record(&self, id: &str) -> Result<Option<Ref<Tes3Record>>, TesError> {
+    pub fn get_record(&self, id: &str) -> Result<Option<RwLockReadGuard<Tes3Record>>, TesError> {
         if let Some(ref type_map) = self.id_map.get(id) {
             if type_map.is_empty() {
                 Ok(None)
@@ -647,7 +646,7 @@ impl Tes3Plugin {
                     actual_size: type_map.len(),
                 })
             } else {
-                Ok(Some(type_map.values().next().unwrap().borrow()))
+                Ok(Some(type_map.values().next().unwrap().read().unwrap()))
             }
         } else {
             Ok(None)
@@ -655,22 +654,26 @@ impl Tes3Plugin {
     }
 
     /// Finds a record by ID and type
-    pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Tes3Record>> {
-        self.id_map.get(id)?.get(name).map(|v| v.borrow())
+    pub fn get_record_with_type(
+        &self,
+        id: &str,
+        name: &[u8; 4],
+    ) -> Option<RwLockReadGuard<Tes3Record>> {
+        self.id_map.get(id)?.get(name).map(|v| v.read().unwrap())
     }
 
     /// Gets an iterator over fields with a particular type
     pub fn get_records_by_type(
         &self,
         name: &[u8; 4],
-    ) -> Option<impl Iterator<Item = Ref<Tes3Record>>> {
+    ) -> Option<impl Iterator<Item = RwLockReadGuard<Tes3Record>>> {
         self.type_map.get(name).map(|v| {
             v.iter().filter_map(|r| {
-                if r.borrow().status() == RecordStatus::Initialized {
-                    let _ = r.borrow_mut().finalize();
+                if r.read().unwrap().status() == RecordStatus::Initialized {
+                    let _ = r.write().unwrap().finalize();
                 }
 
-                let rb = r.borrow();
+                let rb = r.read().unwrap();
                 match rb.status() {
                     RecordStatus::Finalized => Some(rb),
                     _ => None,
@@ -702,7 +705,10 @@ impl Tes3Plugin {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_record_mut(&mut self, id: &str) -> Result<Option<RefMut<Tes3Record>>, TesError> {
+    pub fn get_record_mut(
+        &mut self,
+        id: &str,
+    ) -> Result<Option<RwLockWriteGuard<Tes3Record>>, TesError> {
         if let Some(type_map) = self.id_map.get_mut(id) {
             if type_map.is_empty() {
                 Ok(None)
@@ -713,7 +719,7 @@ impl Tes3Plugin {
                     actual_size: type_map.len(),
                 })
             } else {
-                Ok(Some(type_map.values_mut().next().unwrap().borrow_mut()))
+                Ok(Some(type_map.values_mut().next().unwrap().write().unwrap()))
             }
         } else {
             Ok(None)
@@ -740,11 +746,11 @@ impl Tes3Plugin {
         &mut self,
         id: &str,
         name: &[u8; 4],
-    ) -> Option<RefMut<Tes3Record>> {
+    ) -> Option<RwLockWriteGuard<Tes3Record>> {
         self.id_map
             .get_mut(id)?
             .get_mut(name)
-            .map(|v| v.borrow_mut())
+            .map(|v| v.write().unwrap())
     }
 
     /// Gets an iterator over the names of this plugin's master files
@@ -837,7 +843,7 @@ impl Tes3Plugin {
         header.write(&mut f)?;
 
         for record in self.records.iter() {
-            record.borrow().write(&mut f)?;
+            record.read().unwrap().write(&mut f)?;
         }
 
         Ok(())

@@ -1,5 +1,5 @@
-use std::cell::{Ref, RefMut};
 use std::fs;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
 use super::plugin::*;
@@ -91,7 +91,7 @@ impl Tes4World {
     }
 
     /// Gets a record by form ID
-    pub fn get_record(&self, search: &FindForm) -> Option<Ref<Tes4Record>> {
+    pub fn get_record(&self, search: &FindForm) -> Option<impl Deref<Target = Tes4Record> + '_> {
         let form_id = self.get_form_id(search)?;
         let index = form_id.index() as usize;
         if index == 0xff {
@@ -125,7 +125,10 @@ impl Tes4World {
     }
 
     /// Gets a record by form ID
-    pub fn get_record_mut(&self, search: &FindForm) -> Option<RefMut<Tes4Record>> {
+    pub fn get_record_mut(
+        &self,
+        search: &FindForm,
+    ) -> Option<impl Deref<Target = Tes4Record> + DerefMut<Target = Tes4Record> + '_> {
         let form_id = self.get_form_id(search)?;
         let index = form_id.index() as usize;
         if index == 0xff {

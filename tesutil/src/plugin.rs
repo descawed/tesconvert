@@ -17,7 +17,7 @@ mod record;
 pub use record::*;
 
 /// Common functionality between different games' plugin implementations
-pub trait Plugin: Sized {
+pub trait Plugin: Sized + Send + Sync {
     fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, TesError>;
 
     fn is_master(&self) -> bool;
