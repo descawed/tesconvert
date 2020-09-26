@@ -1,9 +1,8 @@
-use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{FindForm, FormId};
 use crate::*;
@@ -60,8 +59,8 @@ pub struct Tes4Plugin {
     deleted: Option<Tes4Field>,
     masters: Vec<(String, String)>,
     groups: HashMap<[u8; 4], Group>,
-    id_map: HashMap<FormId, Rc<RefCell<Tes4Record>>>,
-    settings: HashMap<String, Rc<RefCell<Tes4Record>>>,
+    id_map: HashMap<FormId, Arc<RwLock<Tes4Record>>>,
+    settings: HashMap<String, Arc<RwLock<Tes4Record>>>,
 }
 
 /// Version value for Oblivion plugins
@@ -145,7 +144,7 @@ impl Tes4Plugin {
         while here != eof {
             let group = Group::read(&mut f)?;
             for record in group.iter_rc() {
-                let rb = record.borrow();
+                let rb = record.read().unwrap();
                 let id = rb.id();
                 let record_type = *rb.name();
                 let index = id.index();
@@ -160,12 +159,12 @@ impl Tes4Plugin {
 
                 // GMSTs don't have fixed form IDs, so we have to track them by name
                 if record_type == *b"GMST" {
-                    let mut rbm = record.borrow_mut();
+                    let mut rbm = record.write().unwrap();
                     rbm.finalize()?;
                     for field in rbm.iter() {
                         if field.name() == b"EDID" {
                             let key = String::from(field.get_zstring()?);
-                            plugin.settings.insert(key, Rc::clone(&record));
+                            plugin.settings.insert(key, Arc::clone(&record));
                             break;
                         }
                     }
@@ -187,18 +186,18 @@ impl Tes4Plugin {
     }
 
     /// Gets a record by form ID
-    pub fn get_record(&self, search: &FindForm) -> Option<Ref<Tes4Record>> {
+    pub fn get_record(&self, search: &FindForm) -> Option<RwLockReadGuard<Tes4Record>> {
         self.id_map
             .get(&search.form_id(self.masters.iter().map(|(s, _)| s.as_str()))?)
             .and_then(|r| {
-                if r.borrow().status() == RecordStatus::Initialized {
+                if r.read().unwrap().status() == RecordStatus::Initialized {
                     // FIXME: for now we're just suppressing records that fail to finalize. we
                     //  really ought to return this result to the caller, but I don't feel like
                     //  updating the plugin interface right now.
-                    let _ = r.borrow_mut().finalize();
+                    let _ = r.write().unwrap().finalize();
                 }
 
-                let rb = r.borrow();
+                let rb = r.read().unwrap();
                 match rb.status() {
                     RecordStatus::Failed => None,
                     _ => Some(rb),
@@ -207,11 +206,11 @@ impl Tes4Plugin {
     }
 
     /// Gets a record by form ID
-    pub fn get_record_mut(&self, search: &FindForm) -> Option<RefMut<Tes4Record>> {
+    pub fn get_record_mut(&self, search: &FindForm) -> Option<RwLockWriteGuard<Tes4Record>> {
         self.id_map
             .get(&search.form_id(self.masters.iter().map(|(s, _)| s.as_str()))?)
             .and_then(|r| {
-                let mut rbm = r.borrow_mut();
+                let mut rbm = r.write().unwrap();
                 if rbm.status() == RecordStatus::Initialized {
                     // FIXME: for now we're just suppressing records that fail to finalize. we
                     //  really ought to return this result to the caller, but I don't feel like
@@ -241,7 +240,7 @@ impl Tes4Plugin {
     pub fn get_float_setting(&self, name: &str) -> Result<Option<f32>, TesError> {
         // GMST records are eagerly finalized, so we don't need to worry about their status here
         if let Some(record) = self.settings.get(name) {
-            for field in record.borrow().iter() {
+            for field in record.read().unwrap().iter() {
                 if field.name() == b"DATA" {
                     return Ok(Some(field.get_f32()?));
                 }

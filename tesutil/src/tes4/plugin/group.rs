@@ -1,7 +1,6 @@
-use std::cell::RefCell;
 use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use super::record::Tes4Record;
 use crate::*;
@@ -128,7 +127,7 @@ pub struct Group {
     kind: GroupKind,
     stamp: u32,
     groups: Vec<Group>,
-    records: Vec<Rc<RefCell<Tes4Record>>>,
+    records: Vec<Arc<RwLock<Tes4Record>>>,
 }
 
 impl Group {
@@ -157,7 +156,7 @@ impl Group {
         let stamp = extract!(f as u32)?;
 
         let mut groups = vec![];
-        let mut records: Vec<Rc<RefCell<Tes4Record>>> = vec![];
+        let mut records: Vec<Arc<RwLock<Tes4Record>>> = vec![];
         let mut start = f.seek(SeekFrom::Current(0))?;
         while size > 0 {
             let mut name = [0u8; 4];
@@ -166,13 +165,13 @@ impl Group {
                 let group = Group::read_without_name(&mut *f)?;
 
                 if let Some(last_record) = records.last_mut() {
-                    last_record.borrow_mut().add_group(group);
+                    last_record.write().unwrap().add_group(group);
                 } else {
                     groups.push(group);
                 }
             } else {
                 let record = Tes4Record::read_lazy_with_name(&mut f, name)?;
-                records.push(Rc::new(RefCell::new(record)));
+                records.push(Arc::new(RwLock::new(record)));
             }
             let end = f.seek(SeekFrom::Current(0))?;
             let bytes_read = (end - start) as usize;
@@ -209,11 +208,11 @@ impl Group {
 
     /// Returns an iterator over Rc smart pointers to this group's records
     // need Box because the iterator is recursive
-    pub fn iter_rc(&self) -> Box<dyn Iterator<Item = Rc<RefCell<Tes4Record>>> + '_> {
+    pub fn iter_rc(&self) -> Box<dyn Iterator<Item = Arc<RwLock<Tes4Record>>> + '_> {
         Box::new(
             self.records
                 .iter()
-                .map(Rc::clone)
+                .map(Arc::clone)
                 .chain(self.groups.iter().flat_map(|g| g.iter_rc())),
         )
     }
@@ -244,7 +243,7 @@ impl Group {
         serialize!(self.stamp => f)?;
 
         for record in &self.records {
-            record.borrow().write(&mut *f)?;
+            record.read().unwrap().write(&mut *f)?;
         }
 
         for group in &self.groups {

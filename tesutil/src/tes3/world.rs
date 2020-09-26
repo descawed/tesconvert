@@ -1,4 +1,4 @@
-use std::cell::Ref;
+use std::ops::Deref;
 use std::path::Path;
 
 use ini::Ini;
@@ -93,7 +93,10 @@ impl Tes3World {
     /// # Errors
     ///
     /// Fails if there is more than one record with the given ID.
-    pub fn get_record(&self, id: &str) -> Result<Option<Ref<Tes3Record>>, TesError> {
+    pub fn get_record(
+        &self,
+        id: &str,
+    ) -> Result<Option<impl Deref<Target = Tes3Record> + '_>, TesError> {
         for plugin in self.plugins.iter().rev() {
             if let Some(record) = plugin.get_record(id)? {
                 return Ok(Some(record));
@@ -110,7 +113,11 @@ impl Tes3World {
     /// # Errors
     ///
     /// Fails if there is more than one record with the given ID and type.
-    pub fn get_record_with_type(&self, id: &str, name: &[u8; 4]) -> Option<Ref<Tes3Record>> {
+    pub fn get_record_with_type(
+        &self,
+        id: &str,
+        name: &[u8; 4],
+    ) -> Option<impl Deref<Target = Tes3Record> + '_> {
         self.plugins
             .iter()
             .rev()
