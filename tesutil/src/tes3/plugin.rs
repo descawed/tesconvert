@@ -29,6 +29,9 @@ pub use class::*;
 mod gmst;
 pub use gmst::*;
 
+mod spell;
+pub use spell::*;
+
 /// Save game information
 ///
 /// For saves (.ess files), this information is included in the TES3 record.

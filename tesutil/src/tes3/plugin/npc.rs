@@ -1,5 +1,3 @@
-#![allow(clippy::single_component_path_imports)]
-
 use std::collections::HashMap;
 
 use super::field::Tes3Field;
@@ -8,8 +6,7 @@ use crate::plugin::Field;
 use crate::tes3::Skills;
 use crate::*;
 
-// this line is only to help the IDE
-use bitflags;
+use bitflags::bitflags;
 
 bitflags! {
     struct NpcFlags: u32 {

@@ -1,5 +1,3 @@
-#![allow(clippy::single_component_path_imports)]
-
 use std::convert::{TryFrom, TryInto};
 use std::io::Read;
 
@@ -7,8 +5,7 @@ use crate::tes4::plugin::*;
 use crate::tes4::{ActorValue, Skill};
 use crate::Form;
 
-// this line is only to help the IDE
-use bitflags;
+use bitflags::bitflags;
 
 bitflags! {
     struct ClassFlags: u32 {

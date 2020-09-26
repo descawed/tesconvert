@@ -1,5 +1,3 @@
-#![allow(clippy::single_component_path_imports)]
-
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::io::{Cursor, Seek, SeekFrom};
@@ -9,7 +7,7 @@ use crate::tes4::save::{ChangeRecord, ChangeType, FormChange, FORM_PLAYER_REF};
 use crate::tes4::{ActorValues, Skills};
 use crate::*;
 
-use bitflags;
+use bitflags::bitflags;
 
 bitflags! {
     struct ActorReferenceChangeFlags: u32 {

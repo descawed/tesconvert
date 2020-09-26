@@ -1,5 +1,3 @@
-#![allow(clippy::single_component_path_imports)]
-
 use std::io::{Read, Seek, Write};
 
 use super::field::Tes4Field;
@@ -8,8 +6,7 @@ use super::FormId;
 use crate::plugin::*;
 use crate::*;
 
-// this line is only to help the IDE
-use bitflags;
+use bitflags::bitflags;
 
 use flate2::bufread::{ZlibDecoder, ZlibEncoder};
 use flate2::Compression;

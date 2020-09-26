@@ -1,12 +1,10 @@
-#![allow(clippy::single_component_path_imports)]
-
 use std::io::Read;
 
 use crate::tes4::save::{Attributes, ChangeRecord, ChangeType, FormChange};
 use crate::tes4::Skills;
 use crate::*;
 
-use bitflags;
+use bitflags::bitflags;
 
 bitflags! {
     struct ActorChangeFlags: u32 {

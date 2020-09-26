@@ -1,13 +1,10 @@
-#![allow(clippy::single_component_path_imports)]
-
 use std::convert::TryFrom;
 use std::io::Read;
 
 use crate::tes3::plugin::*;
 use crate::tes3::{Skill, SkillType};
 
-// this line is only to help the IDE
-use bitflags;
+use bitflags::bitflags;
 
 bitflags! {
     struct AutoCalcFlags: u32 {

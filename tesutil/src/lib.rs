@@ -28,9 +28,6 @@ use len_trait::len::Len;
 use num_enum::TryFromPrimitive;
 use thiserror::*;
 
-#[macro_use]
-extern crate bitflags;
-
 // have to use a macro instead of a generic because from_le_bytes isn't a trait method
 #[macro_export]
 macro_rules! extract {
