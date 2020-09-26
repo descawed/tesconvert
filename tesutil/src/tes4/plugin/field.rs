@@ -1,4 +1,3 @@
-use std::io;
 use std::mem::size_of;
 
 use crate::plugin::Field;
@@ -34,8 +33,7 @@ impl Field for Tes4Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::*;
+    /// use tesutil::tes4::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes4Field::new(b"DATA", vec![/* binary gobbledygook */])?;
@@ -62,8 +60,8 @@ impl Field for Tes4Field {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::*;
+    /// use tesutil::*;
+    /// use tesutil::tes4::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -76,7 +74,7 @@ impl Field for Tes4Field {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn read(f: &mut dyn Read) -> io::Result<Tes4Field> {
+    fn read<T: Read>(mut f: T) -> Result<Tes4Field, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -106,8 +104,7 @@ impl Field for Tes4Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::Tes4Field;
+    /// use tesutil::tes4::Tes4Field;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes4Field::new(b"NAME", vec![])?;
@@ -125,8 +122,7 @@ impl Field for Tes4Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::*;
+    /// use tesutil::tes4::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes4Field::new(b"DATA", vec![1, 2, 3])?;
@@ -144,8 +140,7 @@ impl Field for Tes4Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::Tes4Field;
+    /// use tesutil::tes4::Tes4Field;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes4Field::new(b"DATA", vec![1, 2, 3])?;
@@ -170,8 +165,7 @@ impl Field for Tes4Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::*;
+    /// use tesutil::tes4::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes4Field::new(b"NAME", vec![1, 2, 3])?;
@@ -197,8 +191,8 @@ impl Field for Tes4Field {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes4::plugin::*;
+    /// use tesutil::*;
+    /// use tesutil::tes4::*;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf: Vec<u8> = vec![];
@@ -211,7 +205,7 @@ impl Field for Tes4Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn write(&self, mut f: &mut dyn Write) -> io::Result<()> {
+    fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         let mut len = self.data.len();
 
         if len > u16::MAX as usize {

@@ -35,8 +35,7 @@ impl Field for Tes3Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes3Field::new(b"DATA", vec![/* binary gobbledygook */])?;
@@ -63,8 +62,8 @@ impl Field for Tes3Field {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::*;
+    /// use tesutil::tes3::*;
     /// # use std::io;
     ///
     /// # fn main() -> io::Result<()> {
@@ -77,7 +76,7 @@ impl Field for Tes3Field {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn read(f: &mut dyn Read) -> io::Result<Tes3Field> {
+    fn read<T: Read>(mut f: T) -> Result<Tes3Field, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -97,8 +96,7 @@ impl Field for Tes3Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes3Field::new(b"NAME", vec![])?;
@@ -116,8 +114,7 @@ impl Field for Tes3Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes3Field::new(b"DATA", vec![1, 2, 3])?;
@@ -135,8 +132,7 @@ impl Field for Tes3Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes3Field::new(b"DATA", vec![1, 2, 3])?;
@@ -159,8 +155,7 @@ impl Field for Tes3Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let mut field = Tes3Field::new(b"DATA", vec![])?;
@@ -183,8 +178,7 @@ impl Field for Tes3Field {
     ///
     /// ```rust
     /// use tesutil::*;
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), TesError> {
     /// let field = Tes3Field::new(b"NAME", vec![1, 2, 3])?;
@@ -208,8 +202,8 @@ impl Field for Tes3Field {
     /// # Examples
     ///
     /// ```rust
-    /// use tesutil::plugin::*;
-    /// use tesutil::tes3::plugin::*;
+    /// use tesutil::*;
+    /// use tesutil::tes3::*;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf: Vec<u8> = vec![];
@@ -222,7 +216,7 @@ impl Field for Tes3Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn write(&self, mut f: &mut dyn Write) -> io::Result<()> {
+    fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         let len = self.data.len();
 
         f.write_exact(&self.name)?;
