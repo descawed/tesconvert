@@ -200,7 +200,6 @@ pub const VERSION_1_2: f32 = 1.2;
 /// Morrowind version 1.3
 pub const VERSION_1_3: f32 = 1.3;
 
-// FIXME: figure out how to handle the ID of a record changing after being put in the map
 impl Tes3Plugin {
     /// Create a new, empty plugin
     ///
