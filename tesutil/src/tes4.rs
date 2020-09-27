@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 
 use crate::{Attribute, Specialization, TesError};
 use enum_map::{Enum, EnumMap};
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 mod plugin;
 pub use plugin::*;
@@ -71,7 +71,7 @@ impl<'a> FindForm<'a> {
 }
 
 /// All possible actor values
-#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]
+#[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum ActorValue {
     Strength,

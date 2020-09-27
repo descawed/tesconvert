@@ -396,7 +396,7 @@ impl Form for Npc {
                 }
                 _ => {
                     return Err(TesError::DecodeFailed {
-                        description: format!("Unexpected field {}", field.display_name()),
+                        description: format!("Unexpected field {}", field.name_as_str()),
                         source: None,
                     })
                 }

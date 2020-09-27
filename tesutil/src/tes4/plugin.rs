@@ -19,6 +19,9 @@ pub use record::*;
 mod class;
 pub use class::*;
 
+mod spell;
+pub use spell::*;
+
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
 pub const MAX_MASTERS: usize = u8::MAX as usize - 2;
@@ -121,7 +124,7 @@ impl Tes4Plugin {
                 _ => {
                     return Err(decode_failed(format!(
                         "Unexpected field {}",
-                        field.display_name()
+                        field.name_as_str()
                     )))
                 }
             }
@@ -311,7 +314,7 @@ mod tests {
             match field.name() {
                 b"EDID" => assert_eq!(field.get_zstring().unwrap(), "fPotionT1AleDurMult"),
                 b"DATA" => assert_eq!(field.get_f32().unwrap(), -0.01),
-                _ => panic!("Unexpected field {}", field.display_name()),
+                _ => panic!("Unexpected field {}", field.name_as_str()),
             }
         }
         drop(record);

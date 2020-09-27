@@ -252,7 +252,7 @@ impl Form for PlayerData {
                 b"WERE" => player_data.werewolf_data = field.get().to_vec(),
                 _ => {
                     return Err(TesError::DecodeFailed {
-                        description: format!("Unexpected field {}", field.display_name()),
+                        description: format!("Unexpected field {}", field.name_as_str()),
                         source: None,
                     })
                 }

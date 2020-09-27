@@ -381,7 +381,7 @@ impl MorrowindToOblivion {
         // IDE falsely claims the error "Cannot move" here on self, but attribute_progress is Copy, so
         // there is no move.
         let mut attributes = self.player_data.attribute_progress;
-        while attributes.values().sum::<u8>() > 0 {
+        while attributes.values().any(|v| *v > 0) {
             let mut advancement = Attributes::new();
             for (attribute, value) in advancement.iter_mut() {
                 *value = attributes[attribute] % 10;

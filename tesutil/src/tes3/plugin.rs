@@ -364,7 +364,7 @@ impl Tes3Plugin {
                 _ => {
                     return Err(decode_failed(format!(
                         "Unexpected field in header: {}",
-                        field.display_name()
+                        field.name_as_str()
                     )))
                 }
             }

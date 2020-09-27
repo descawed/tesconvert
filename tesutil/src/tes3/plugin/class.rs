@@ -113,7 +113,7 @@ impl Form for Class {
                 _ => {
                     return Err(decode_failed(format!(
                         "Unexpected field {}",
-                        field.display_name()
+                        field.name_as_str()
                     )))
                 }
             }

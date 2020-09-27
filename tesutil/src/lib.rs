@@ -25,7 +25,7 @@ use std::str;
 use enum_map::{Enum, EnumMap};
 use ini::ini;
 use len_trait::len::Len;
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::*;
 
 // have to use a macro instead of a generic because from_le_bytes isn't a trait method
@@ -83,6 +83,27 @@ impl TryFrom<tes4::ActorValue> for Attribute {
 
 /// Character skills
 pub type Attributes<T> = EnumMap<Attribute, T>;
+
+/// Range of a magic effect
+#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum EffectRange {
+    Self_, // Self is a reserved word
+    Touch,
+    Target,
+}
+
+/// A school of magic
+#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum MagicSchool {
+    Alteration,
+    Conjuration,
+    Destruction,
+    Illusion,
+    Mysticism,
+    Restoration,
+}
 
 /// All possible specializations
 #[derive(Copy, Clone, Debug, Enum, PartialEq, Eq, TryFromPrimitive)]

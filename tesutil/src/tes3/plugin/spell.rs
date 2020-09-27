@@ -3,7 +3,8 @@ use std::io::Read;
 
 use crate::tes3::{Skill, Tes3Field, Tes3Record};
 use crate::{
-    decode_failed, decode_failed_because, extract, Attribute, Field, Form, Record, TesError,
+    decode_failed, decode_failed_because, extract, Attribute, EffectRange, Field, Form, Record,
+    TesError,
 };
 
 use bitflags::bitflags;
@@ -167,14 +168,6 @@ pub enum SpellType {
     Power,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-pub enum EffectRange {
-    Self_, // Self is a reserved word
-    Touch,
-    Target,
-}
-
 bitflags! {
     pub struct SpellFlags: u32 {
         const AUTO_CALC = 0x01;
@@ -277,7 +270,7 @@ impl Form for Spell {
                 _ => {
                     return Err(decode_failed(format!(
                         "Unexpected field {}",
-                        field.display_name()
+                        field.name_as_str()
                     )))
                 }
             }

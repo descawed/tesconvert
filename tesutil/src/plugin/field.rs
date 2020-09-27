@@ -1,5 +1,5 @@
 use std::ffi::{CStr, CString};
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::mem::size_of;
 use std::str;
 
@@ -88,7 +88,7 @@ pub trait Field: Sized {
     ///
     /// If the field name cannot be decoded as UTF-8 (which will never happen in a valid plugin
     /// file), the string `"<invalid>"` will be returned.
-    fn display_name(&self) -> &str {
+    fn name_as_str(&self) -> &str {
         str::from_utf8(self.name()).unwrap_or("<invalid>")
     }
 
@@ -118,6 +118,11 @@ pub trait Field: Sized {
     /// [`TesError::LimitExceeded`]: enum.TesError.html#variant.LimitExceeded
     /// [`MAX_DATA`]: constant.MAX_DATA.html
     fn set(&mut self, data: Vec<u8>) -> Result<(), TesError>;
+
+    /// Gets a reader over the contents of this field
+    fn reader(&self) -> Cursor<&[u8]> {
+        Cursor::new(self.get())
+    }
 
     fn size(&self) -> usize;
 

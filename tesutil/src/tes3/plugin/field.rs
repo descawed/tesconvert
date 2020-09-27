@@ -1,5 +1,4 @@
-use std::io;
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Write};
 use std::mem::size_of;
 
 use crate::plugin::Field;
@@ -224,13 +223,6 @@ impl Field for Tes3Field {
         f.write_exact(&self.data)?;
 
         Ok(())
-    }
-}
-
-impl Tes3Field {
-    /// Gets a reader over the contents of this field
-    pub fn reader(&self) -> impl Read + Seek + '_ {
-        io::Cursor::new(self.get())
     }
 }
 
