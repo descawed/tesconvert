@@ -52,6 +52,7 @@ pub enum MagicEffect {
     DamageHealth,
     DamageMagicka,
     DisintegrateArmor,
+    DiseaseInfo,
     DisintegrateWeapon,
     DrainAttribute,
     DrainFatigue,
@@ -60,6 +61,7 @@ pub enum MagicEffect {
     DrainMagicka,
     Dispel,
     DetectLife,
+    MehrunesDagonCustomEffect,
     FireDamage,
     FireShield,
     FortifyAttribute,
@@ -98,6 +100,7 @@ pub enum MagicEffect {
     ResistParalysis,
     ResistPoison,
     ResistShock,
+    ResistWaterDamage,
     SpellAbsorption,
     ScriptEffect,
     ShockDamage,
@@ -137,6 +140,7 @@ pub enum MagicEffect {
     SummonTornFleshAtronach,
     SummonStitchedFleshAtronach,
     SummonSewnFleshAtronach,
+    ExtraSummon20,
     SummonClannfear,
     SummonDaedroth,
     SummonDremora,
@@ -205,6 +209,7 @@ impl MagicEffect {
             DamageHealth => b"DGHE",
             DamageMagicka => b"DGSP",
             DisintegrateArmor => b"DIAR",
+            DiseaseInfo => b"DISE",
             DisintegrateWeapon => b"DIWE",
             DrainAttribute => b"DRAT",
             DrainFatigue => b"DRFA",
@@ -213,6 +218,7 @@ impl MagicEffect {
             DrainMagicka => b"DRSP",
             Dispel => b"DSPL",
             DetectLife => b"DTCT",
+            MehrunesDagonCustomEffect => b"DUMY",
             FireDamage => b"FIDG",
             FireShield => b"FISH",
             FortifyAttribute => b"FOAT",
@@ -251,6 +257,7 @@ impl MagicEffect {
             ResistParalysis => b"RSPA",
             ResistPoison => b"RSPO",
             ResistShock => b"RSSH",
+            ResistWaterDamage => b"RSWD",
             SpellAbsorption => b"SABS",
             ScriptEffect => b"SEFF",
             ShockDamage => b"SHDG",
@@ -290,6 +297,7 @@ impl MagicEffect {
             SummonTornFleshAtronach => b"Z017",
             SummonStitchedFleshAtronach => b"Z018",
             SummonSewnFleshAtronach => b"Z019",
+            ExtraSummon20 => b"Z020",
             SummonClannfear => b"ZCLA",
             SummonDaedroth => b"ZDAE",
             SummonDremora => b"ZDRE",
@@ -358,6 +366,7 @@ impl MagicEffect {
             b"DGHE" => Some(DamageHealth),
             b"DGSP" => Some(DamageMagicka),
             b"DIAR" => Some(DisintegrateArmor),
+            b"DISE" => Some(DiseaseInfo),
             b"DIWE" => Some(DisintegrateWeapon),
             b"DRAT" => Some(DrainAttribute),
             b"DRFA" => Some(DrainFatigue),
@@ -366,6 +375,7 @@ impl MagicEffect {
             b"DRSP" => Some(DrainMagicka),
             b"DSPL" => Some(Dispel),
             b"DTCT" => Some(DetectLife),
+            b"DUMY" => Some(MehrunesDagonCustomEffect),
             b"FIDG" => Some(FireDamage),
             b"FISH" => Some(FireShield),
             b"FOAT" => Some(FortifyAttribute),
@@ -404,6 +414,7 @@ impl MagicEffect {
             b"RSPA" => Some(ResistParalysis),
             b"RSPO" => Some(ResistPoison),
             b"RSSH" => Some(ResistShock),
+            b"RSWD" => Some(ResistWaterDamage),
             b"SABS" => Some(SpellAbsorption),
             b"SEFF" => Some(ScriptEffect),
             b"SHDG" => Some(ShockDamage),
@@ -443,6 +454,7 @@ impl MagicEffect {
             b"Z017" => Some(SummonTornFleshAtronach),
             b"Z018" => Some(SummonStitchedFleshAtronach),
             b"Z019" => Some(SummonSewnFleshAtronach),
+            b"Z020" => Some(ExtraSummon20),
             b"ZCLA" => Some(SummonClannfear),
             b"ZDAE" => Some(SummonDaedroth),
             b"ZDRE" => Some(SummonDremora),
@@ -523,30 +535,189 @@ pub struct SpellEffect {
     script_effect: Option<ScriptEffect>,
 }
 
+impl SpellEffect {
+    /// Creates a new spell effect
+    pub fn new(effect: MagicEffect) -> SpellEffect {
+        SpellEffect {
+            effect,
+            magnitude: 0,
+            area: 0,
+            duration: 0,
+            range: EffectRange::Self_,
+            actor_value: ActorValue::Vampirism, // spells that don't affect an actor value seem to use either this or Health
+            script_effect: None,
+        }
+    }
+
+    // TODO: add some checks to make sure the magnitude, area, duration, and range make sense with
+    //  the effect
+    /// Gets the effect's magnitude
+    pub fn magnitude(&self) -> u32 {
+        self.magnitude
+    }
+
+    /// Sets the effect's magnitude
+    pub fn set_magnitude(&mut self, value: u32) -> Result<(), TesError> {
+        self.magnitude = value;
+        Ok(())
+    }
+
+    /// Gets the effect's area
+    pub fn area(&self) -> u32 {
+        self.area
+    }
+
+    /// Sets the effect's area
+    pub fn set_area(&mut self, value: u32) -> Result<(), TesError> {
+        if self.range == EffectRange::Self_ && value > 0 {
+            Err(TesError::LimitExceeded {
+                description: String::from("Cast-on-self spells cannot have an area"),
+                max_size: 0,
+                actual_size: value as usize,
+            })
+        } else {
+            self.area = value;
+            Ok(())
+        }
+    }
+
+    /// Gets the effect's duration
+    pub fn duration(&self) -> u32 {
+        self.duration
+    }
+
+    /// Sets the effect's duration
+    pub fn set_duration(&mut self, value: u32) -> Result<(), TesError> {
+        self.duration = value;
+        Ok(())
+    }
+
+    /// Gets the effect's range
+    pub fn range(&self) -> EffectRange {
+        self.range
+    }
+
+    /// Sets the effect's range
+    pub fn set_range(&mut self, range: EffectRange) {
+        if range == EffectRange::Self_ {
+            self.area = 0;
+        }
+
+        self.range = range;
+    }
+
+    /// Gets the effect's actor value
+    pub fn actor_value(&self) -> ActorValue {
+        self.actor_value
+    }
+
+    /// Sets the effect's actor value
+    pub fn set_actor_value(&mut self, value: ActorValue) -> Result<(), TesError> {
+        self.actor_value = value;
+        Ok(())
+    }
+}
+
 /// A magic spell
 #[derive(Debug)]
 pub struct Spell {
     editor_id: Option<String>,
     name: Option<String>,
-    spell_type: SpellType,
-    cost: u32,
-    level: SpellLevel,
+    pub spell_type: SpellType,
+    pub cost: u32,
+    pub level: SpellLevel,
     flags: SpellFlags,
     effects: Vec<SpellEffect>,
 }
 
 impl Spell {
     /// Creates a new spell
-    pub fn new() -> Spell {
+    pub fn new(editor_id: Option<String>, name: Option<String>) -> Spell {
         Spell {
-            editor_id: None,
-            name: None,
+            editor_id,
+            name,
             spell_type: SpellType::Spell,
             cost: 0,
             level: SpellLevel::Novice,
             flags: SpellFlags::empty(),
             effects: vec![],
         }
+    }
+
+    /// Is this spell's cost auto-calculated?
+    pub fn is_auto_calc(&self) -> bool {
+        !self.flags.contains(SpellFlags::MANUAL_SPELL_COST)
+    }
+
+    /// Sets whether this spell's cost is auto-calculated
+    pub fn set_auto_calc(&mut self, value: bool) {
+        self.flags.set(SpellFlags::MANUAL_SPELL_COST, !value);
+    }
+
+    /// Is this spell immune to silence?
+    pub fn is_immune_to_silence(&self) -> bool {
+        self.flags
+            .contains(SpellFlags::IMMUNE_TO_SILENCE_1 | SpellFlags::IMMUNE_TO_SILENCE_2)
+    }
+
+    /// Sets whether this spell is immune to silence
+    pub fn set_immune_to_silence(&mut self, value: bool) {
+        self.flags.set(
+            SpellFlags::IMMUNE_TO_SILENCE_1 | SpellFlags::IMMUNE_TO_SILENCE_2,
+            value,
+        );
+    }
+
+    /// Does the player start with this spell?
+    pub fn is_player_start_spell(&self) -> bool {
+        self.flags.contains(SpellFlags::PLAYER_START_SPELL)
+    }
+
+    /// Sets whether the player starts with this spell
+    pub fn set_player_start_spell(&mut self, value: bool) {
+        self.flags.set(SpellFlags::PLAYER_START_SPELL, value);
+    }
+
+    /// Does this spell's area effect ignore LOS?
+    pub fn area_ignores_los(&self) -> bool {
+        self.flags.contains(SpellFlags::AREA_IGNORES_LOS)
+    }
+
+    /// Sets whether this spell's area effect ignores LOS
+    pub fn set_area_ignores_los(&mut self, value: bool) {
+        self.flags.set(SpellFlags::AREA_IGNORES_LOS, value);
+    }
+
+    /// Are script effects on this spell affected by resistances?
+    pub fn script_effect_always_applies(&self) -> bool {
+        self.flags
+            .contains(SpellFlags::SCRIPT_EFFECT_ALWAYS_APPLIES)
+    }
+
+    /// Sets whether script effects on this spell are affected by resistances
+    pub fn set_script_effect_always_applies(&mut self, value: bool) {
+        self.flags
+            .set(SpellFlags::SCRIPT_EFFECT_ALWAYS_APPLIES, value);
+    }
+
+    /// Can this spell be absorbed/reflected?
+    pub fn can_be_absorbed_or_reflected(&self) -> bool {
+        !self.flags.contains(SpellFlags::DISALLOW_ABSORB_REFLECT)
+    }
+
+    /// Sets whether this spell can be absorbed/reflected
+    pub fn set_can_be_absorbed_or_reflected(&mut self, value: bool) {
+        self.flags.set(SpellFlags::DISALLOW_ABSORB_REFLECT, !value);
+    }
+
+    /// Adds an effect to this spell
+    pub fn add_effect(&mut self, effect: SpellEffect) {
+        self.effects.push(effect);
+    }
+
+    /// Iterates over this spell's effects
+    pub fn effects(&self) -> impl Iterator<Item = &SpellEffect> {
+        self.effects.iter()
     }
 }
 
@@ -561,7 +732,7 @@ impl Form for Spell {
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         Spell::assert(record)?;
 
-        let mut spell = Spell::new();
+        let mut spell = Spell::new(None, None);
 
         for field in record.iter() {
             match field.name() {
