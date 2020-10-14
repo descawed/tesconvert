@@ -11,7 +11,7 @@ use morrowind::*;
 pub fn convert(config: Config) -> Result<()> {
     match config.command {
         Command::MorrowindToOblivion => {
-            let mut mw2ob = MorrowindToOblivion::load(config)?;
+            let mw2ob = MorrowindToOblivion::load(config)?;
             mw2ob.convert()
         }
         _ => unimplemented!(),

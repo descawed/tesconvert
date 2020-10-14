@@ -22,6 +22,9 @@ pub use class::*;
 mod spell;
 pub use spell::*;
 
+mod magic_effect;
+pub use magic_effect::*;
+
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
 pub const MAX_MASTERS: usize = u8::MAX as usize - 2;
@@ -64,6 +67,7 @@ pub struct Tes4Plugin {
     groups: HashMap<[u8; 4], Group>,
     id_map: HashMap<FormId, Arc<RwLock<Tes4Record>>>,
     settings: HashMap<String, Arc<RwLock<Tes4Record>>>,
+    magic_effects: HashMap<MagicEffectType, Arc<RwLock<Tes4Record>>>,
 }
 
 /// Version value for Oblivion plugins
@@ -83,6 +87,7 @@ impl Tes4Plugin {
             groups: HashMap::new(),
             id_map: HashMap::new(),
             settings: HashMap::new(),
+            magic_effects: HashMap::new(),
         }
     }
 
@@ -160,7 +165,7 @@ impl Tes4Plugin {
 
                 drop(rb);
 
-                // GMSTs don't have fixed form IDs, so we have to track them by name
+                // GMSTs and MGEFs don't have fixed form IDs, so we have to track them separately
                 if record_type == *b"GMST" {
                     let mut rbm = record.write().unwrap();
                     rbm.finalize()?;
@@ -168,6 +173,23 @@ impl Tes4Plugin {
                         if field.name() == b"EDID" {
                             let key = String::from(field.get_zstring()?);
                             plugin.settings.insert(key, Arc::clone(&record));
+                            break;
+                        }
+                    }
+                } else if record_type == *b"MGEF" {
+                    let mut rbm = record.write().unwrap();
+                    rbm.finalize()?;
+                    for field in rbm.iter() {
+                        if field.name() == b"EDID" {
+                            // strip the trailing \0
+                            let mgef_id = field.get_zstring()?.as_bytes();
+                            let key = MagicEffectType::from_id(mgef_id).ok_or_else(|| {
+                                TesError::RequirementFailed(format!(
+                                    "Invalid magic effect type with form ID {:08X}",
+                                    id.0
+                                ))
+                            })?;
+                            plugin.magic_effects.insert(key, Arc::clone(&record));
                             break;
                         }
                     }
@@ -226,6 +248,19 @@ impl Tes4Plugin {
                     _ => Some(rbm),
                 }
             })
+    }
+
+    /// Gets a magic effect by magic effect type
+    pub fn get_magic_effect(
+        &self,
+        effect_type: MagicEffectType,
+    ) -> Result<Option<MagicEffect>, TesError> {
+        if let Some(record) = self.magic_effects.get(&effect_type) {
+            let rb = record.read().unwrap();
+            Ok(Some(MagicEffect::read(&*rb)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets a form by form ID

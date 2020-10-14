@@ -4,8 +4,8 @@ use std::path::Path;
 
 use super::plugin::*;
 use super::save::*;
-use super::{FindForm, FormId};
-use crate::{Form, TesError, World};
+use super::{FindForm, FormId, MagicEffect, MagicEffectType, MAGIC_EFFECTS};
+use crate::{Form, OwnedOrRef, TesError, World};
 
 static BASE_GAME: &str = "Oblivion.esm";
 static PLUGIN_DIR: &str = "Data";
@@ -170,6 +170,20 @@ impl Tes4World {
         }
 
         Ok(default)
+    }
+
+    /// Gets a magic effect by effect type
+    pub fn get_magic_effect(
+        &self,
+        effect_type: MagicEffectType,
+    ) -> Result<impl Deref<Target = MagicEffect>, TesError> {
+        for (_, plugin) in self.plugins.iter().rev() {
+            if let Some(value) = plugin.get_magic_effect(effect_type)? {
+                return Ok(OwnedOrRef::Owned(value));
+            }
+        }
+
+        Ok(OwnedOrRef::Ref(&MAGIC_EFFECTS[effect_type]))
     }
 
     /// Gets a form by form ID

@@ -20,6 +20,7 @@ use std::ffi::CStr;
 use std::io;
 use std::io::{Error, ErrorKind, Read, SeekFrom, Write};
 use std::iter;
+use std::ops::Deref;
 use std::str;
 
 use enum_map::{Enum, EnumMap};
@@ -44,6 +45,26 @@ macro_rules! serialize {
         let value = $v;
         $f.write(&value.to_le_bytes())
     }};
+}
+
+/// Wrapper around either an owned value or a reference to such a value
+#[derive(Debug)]
+pub enum OwnedOrRef<'a, T> {
+    Owned(T),
+    Ref(&'a T),
+}
+
+impl<'a, T> Deref for OwnedOrRef<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        use OwnedOrRef::*;
+
+        match self {
+            Owned(value) => value,
+            Ref(value) => *value,
+        }
+    }
 }
 
 /// All possible attributes

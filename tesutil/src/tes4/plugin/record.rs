@@ -387,6 +387,11 @@ impl Tes4Record {
         self.form_id
     }
 
+    /// Sets the form ID
+    pub fn set_id(&mut self, form_id: FormId) {
+        self.form_id = form_id;
+    }
+
     /// Adds a field to this record
     ///
     /// # Panics

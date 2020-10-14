@@ -232,11 +232,19 @@ impl Tes3Record {
     /// That can still happen if the `b"NAME"` field is missing. This only indicates whether this
     /// is a record type that is expected to have an ID.
     pub fn has_id(&self) -> bool {
-        match &self.name {
-            b"CELL" | b"DIAL" | b"MGEF" | b"INFO" | b"LAND" | b"PGRD" | b"SCPT" | b"SKIL"
-            | b"SSCR" | b"TES3" => false,
-            _ => true,
-        }
+        !matches!(
+            &self.name,
+            b"CELL"
+                | b"DIAL"
+                | b"MGEF"
+                | b"INFO"
+                | b"LAND"
+                | b"PGRD"
+                | b"SCPT"
+                | b"SKIL"
+                | b"SSCR"
+                | b"TES3"
+        )
     }
 
     /// Returns the record ID

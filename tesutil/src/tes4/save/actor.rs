@@ -355,6 +355,16 @@ impl ActorChange {
         self.full_name = name;
         Ok(())
     }
+
+    /// Gets the actor's spells
+    pub fn spells(&self) -> impl Iterator<Item = u32> + '_ {
+        self.spells.iter().copied()
+    }
+
+    /// Sets the actor's spells
+    pub fn set_spells(&mut self, spells: Vec<u32>) {
+        self.spells = spells;
+    }
 }
 
 #[cfg(test)]

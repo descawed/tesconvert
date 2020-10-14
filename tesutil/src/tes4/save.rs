@@ -362,6 +362,23 @@ impl Save {
             .map(|r| r.write().unwrap())
     }
 
+    /// Adds a created record
+    ///
+    /// The form ID present on the record will be ignored and a new one will be generated. Returns
+    /// the iref of the new form ID.
+    pub fn add_record(&mut self, mut record: Tes4Record) -> u32 {
+        let form_id = FormId(self.next_form_id);
+        self.next_form_id += 1;
+        record.set_id(form_id);
+
+        self.created_records.insert(form_id, RwLock::new(record));
+        self.created_ids.push(form_id);
+
+        let new_iref = self.form_ids.len() as u32;
+        self.form_ids.push(form_id);
+        new_iref
+    }
+
     /// Gets a created form by form ID, mutably
     pub fn get_form<T>(&self, form_id: FormId) -> Result<Option<T>, TesError>
     where
@@ -383,6 +400,18 @@ impl Save {
                 .get_record_mut(form_id)
                 .ok_or(TesError::InvalidFormId { form_id })?,
         )
+    }
+
+    /// Adds a form to the save
+    ///
+    /// Returns the iref of the new record.
+    pub fn add_form<T>(&mut self, form: &T) -> Result<u32, TesError>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        let mut record = Tes4Record::new(T::record_type());
+        form.write(&mut record)?;
+        Ok(self.add_record(record))
     }
 
     /// Gets the form ID for an iref, if one exists

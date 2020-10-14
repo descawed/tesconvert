@@ -475,6 +475,11 @@ impl Npc {
         self.race = race;
         Ok(())
     }
+
+    /// Gets the character's spells
+    pub fn spells(&self) -> impl Iterator<Item = &str> {
+        self.spells.iter().map(|s| s.as_str())
+    }
 }
 
 #[cfg(test)]

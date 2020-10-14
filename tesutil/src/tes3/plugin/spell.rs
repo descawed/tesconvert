@@ -12,7 +12,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
-pub enum MagicEffect {
+pub enum MagicEffectType {
     WaterBreathing,
     SwiftSwim,
     WaterWalking,
@@ -99,6 +99,7 @@ pub enum MagicEffect {
     FortifySkill,
     FortifyMaximumMagicka,
     AbsorbAttribute,
+    AbsorbHealth,
     AbsorbMagicka,
     AbsorbFatigue,
     AbsorbSkill,
@@ -169,7 +170,7 @@ pub enum SpellType {
 }
 
 bitflags! {
-    pub struct SpellFlags: u32 {
+    struct SpellFlags: u32 {
         const AUTO_CALC = 0x01;
         const PC_START_SPELL = 0x02;
         const ALWAYS_SUCCEEDS = 0x04;
@@ -179,7 +180,7 @@ bitflags! {
 /// An individual effect of a spell
 #[derive(Debug)]
 pub struct SpellEffect {
-    effect: MagicEffect,
+    effect: MagicEffectType,
     skill: Option<Skill>,
     attribute: Option<Attribute>,
     range: EffectRange,
@@ -187,6 +188,40 @@ pub struct SpellEffect {
     duration: u32,
     min_magnitude: u32,
     max_magnitude: u32,
+}
+
+impl SpellEffect {
+    pub fn effect(&self) -> MagicEffectType {
+        self.effect
+    }
+
+    pub fn skill(&self) -> Option<Skill> {
+        self.skill
+    }
+
+    pub fn attribute(&self) -> Option<Attribute> {
+        self.attribute
+    }
+
+    /// Gets the spell's range
+    pub fn range(&self) -> EffectRange {
+        self.range
+    }
+
+    /// Gets the spell's area
+    pub fn area(&self) -> u32 {
+        self.area
+    }
+
+    /// Gets the spell's duration
+    pub fn duration(&self) -> u32 {
+        self.duration
+    }
+
+    /// Get the spell's range of magnitude
+    pub fn magnitude(&self) -> (u32, u32) {
+        (self.min_magnitude, self.max_magnitude)
+    }
 }
 
 /// A spell, ability, or disease
@@ -198,6 +233,44 @@ pub struct Spell {
     cost: u32,
     flags: SpellFlags,
     effects: Vec<SpellEffect>,
+}
+
+impl Spell {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn spell_type(&self) -> SpellType {
+        self.spell_type
+    }
+
+    pub fn cost(&self) -> u32 {
+        self.cost
+    }
+
+    /// Is this spell's cost auto-calculated?
+    pub fn is_auto_calc(&self) -> bool {
+        self.flags.contains(SpellFlags::AUTO_CALC)
+    }
+
+    /// Is this a player start spell?
+    pub fn is_player_start_spell(&self) -> bool {
+        self.flags.contains(SpellFlags::PC_START_SPELL)
+    }
+
+    /// Does casting this spell always succeed?
+    pub fn always_succeeds(&self) -> bool {
+        self.flags.contains(SpellFlags::ALWAYS_SUCCEEDS)
+    }
+
+    /// Iterates over this spell's effects
+    pub fn effects(&self) -> impl Iterator<Item = &SpellEffect> {
+        self.effects.iter()
+    }
 }
 
 impl Form for Spell {
@@ -235,7 +308,7 @@ impl Form for Spell {
                 b"ENAM" => {
                     let mut reader = field.reader();
                     spell.effects.push(SpellEffect {
-                        effect: MagicEffect::try_from(extract!(reader as u16)? as u8)
+                        effect: MagicEffectType::try_from(extract!(reader as u16)? as u8)
                             .map_err(|e| decode_failed_because("Invalid magic effect", e))?,
                         skill: {
                             let skill = extract!(reader as u8)?;

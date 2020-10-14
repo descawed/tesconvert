@@ -18,14 +18,14 @@ pub enum Command {
     OblivionToMorrowind,
 }
 
-/// Strategy to use when combining skills
+/// Strategy to use when combining values
 ///
 /// The same set of skills is not present in all games. Sometimes, what were multiple skills in one
 /// game are consolidated into a single skill in the next game. In this case, we have to decide how
 /// to calculate the value of the new skill from the value of old skill. This enum holds the different
 /// strategies by which this may be accomplished.
 #[derive(Debug, PartialEq)]
-pub enum SkillCombineStrategy {
+pub enum CombineStrategy {
     /// Use the value of the highest skill
     Highest,
     /// Average the value of all skills
@@ -34,26 +34,26 @@ pub enum SkillCombineStrategy {
     Lowest,
 }
 
-impl SkillCombineStrategy {
-    /// Combines two skills using the appropriate strategy
+impl CombineStrategy {
+    /// Combines two values using the appropriate strategy
     pub fn combine<T: Ord + Add<Output = T> + Div<Output = T> + One>(&self, x: T, y: T) -> T {
         match self {
-            SkillCombineStrategy::Highest => cmp::max(x, y),
+            CombineStrategy::Highest => cmp::max(x, y),
             // I wasn't able to find a better way to do this. Using a literal 2 fails because
             // there's no way to constrain T to a type that we can convert a literal 2 to. The
             // Google results I found indicated that you generally can't do math involving a literal
             // and a generic type and all recommended to use the num crate.
-            SkillCombineStrategy::Average => (x + y) / (T::one() + T::one()),
-            SkillCombineStrategy::Lowest => cmp::min(x, y),
+            CombineStrategy::Average => (x + y) / (T::one() + T::one()),
+            CombineStrategy::Lowest => cmp::min(x, y),
         }
     }
 
-    /// Combines two skills with float values using the appropriate strategy
+    /// Combines two values with float values using the appropriate strategy
     pub fn combine_float<T: Float>(&self, x: T, y: T) -> T {
         match self {
-            SkillCombineStrategy::Highest => x.max(y),
-            SkillCombineStrategy::Average => (x + y) / (T::one() + T::one()),
-            SkillCombineStrategy::Lowest => x.min(y),
+            CombineStrategy::Highest => x.max(y),
+            CombineStrategy::Average => (x + y) / (T::one() + T::one()),
+            CombineStrategy::Lowest => x.min(y),
         }
     }
 }
@@ -86,7 +86,7 @@ pub struct Config {
     /// Path to the Oblivion directory
     pub ob_path: Option<String>,
     /// Strategy to use when combining skills
-    pub skill_combine_strategy: SkillCombineStrategy,
+    pub combine_strategy: CombineStrategy,
 }
 
 impl Config {
@@ -171,10 +171,10 @@ impl Config {
             config_path: String::from("."),
             mw_path: matches.value_of("mw_path").map(String::from),
             ob_path: matches.value_of("ob_path").map(String::from),
-            skill_combine_strategy: match matches.value_of("combine").unwrap_or("highest") {
-                "highest" => SkillCombineStrategy::Highest,
-                "average" => SkillCombineStrategy::Average,
-                "lowest" => SkillCombineStrategy::Lowest,
+            combine_strategy: match matches.value_of("combine").unwrap_or("highest") {
+                "highest" => CombineStrategy::Highest,
+                "average" => CombineStrategy::Average,
+                "lowest" => CombineStrategy::Lowest,
                 _ => unreachable!(),
             },
         })
@@ -219,7 +219,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.command, Command::MorrowindToOblivion);
-        assert_eq!(config.skill_combine_strategy, SkillCombineStrategy::Lowest);
+        assert_eq!(config.combine_strategy, CombineStrategy::Lowest);
         assert_eq!(config.source_path, "source");
         assert_eq!(config.target_path, "target");
         assert_eq!(config.output_path, "output");
@@ -254,19 +254,19 @@ mod tests {
 
     #[test]
     fn combine_highest() {
-        let strat = SkillCombineStrategy::Highest;
+        let strat = CombineStrategy::Highest;
         assert_eq!(strat.combine(32, 47), 47);
     }
 
     #[test]
     fn combine_lowest() {
-        let strat = SkillCombineStrategy::Lowest;
+        let strat = CombineStrategy::Lowest;
         assert_eq!(strat.combine(32, 47), 32);
     }
 
     #[test]
     fn combine_average() {
-        let strat = SkillCombineStrategy::Average;
+        let strat = CombineStrategy::Average;
         assert_eq!(strat.combine(32, 47), 39);
     }
 }
