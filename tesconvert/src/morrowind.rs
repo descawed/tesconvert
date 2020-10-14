@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::thread;
 
@@ -453,9 +453,14 @@ impl MorrowindToOblivion {
         })
     }
 
-    fn convert_spells(&self, ob_player_base: &mut ActorChange) -> Result<()> {
+    fn convert_spells(
+        &self,
+        ob_player_base: &mut ActorChange,
+        ob_player_ref: &mut PlayerReferenceChange,
+    ) -> Result<()> {
         // TODO: make spell conversion errors warnings instead of fatal errors
         let mut ob_spells = vec![];
+        let mut known_effects = HashSet::new();
         for spell_id in self.player_base.spells() {
             let mw_spell: tes3::Spell = self
                 .mw
@@ -495,7 +500,7 @@ impl MorrowindToOblivion {
                     ob_effect.set_duration(effect.duration())?;
                     ob_effect.set_area(effect.area())?;
 
-                    let av = if let Some(mw_skill) = effect.skill() {
+                    ob_effect.set_actor_value(if let Some(mw_skill) = effect.skill() {
                         tes4::ActorValue::from(match Morrowind::oblivion_skill(mw_skill) {
                             Some(skill) => skill,
                             None => continue, // skip this effect if it can't be converted properly
@@ -504,12 +509,12 @@ impl MorrowindToOblivion {
                         tes4::ActorValue::from(attribute)
                     } else {
                         effect_type.default_actor_value()
-                    };
-                    ob_effect.set_actor_value(av)?;
+                    })?;
 
                     ob_spell.add_effect(ob_effect);
 
                     converted_any = true;
+                    known_effects.insert(effect_type);
                 }
             }
 
@@ -519,6 +524,9 @@ impl MorrowindToOblivion {
                 ob_spells.push(ob_spell);
             }
         }
+
+        // set known magic effects
+        ob_player_ref.set_known_magic_effects(known_effects.iter().map(|e| e.id()).collect());
 
         self.with_save_mut(|save| {
             let mut spell_irefs = Vec::with_capacity(ob_spells.len());
@@ -657,7 +665,7 @@ impl MorrowindToOblivion {
         // convert data
         self.convert_race(&mut ob_player_ref)?;
         let (ob_class, ob_class_form_id) = self.convert_class()?;
-        self.convert_spells(&mut ob_player_base)?;
+        self.convert_spells(&mut ob_player_base, &mut ob_player_ref)?;
         self.convert_stats(&mut ob_player_base, &mut ob_player_ref, &ob_class)?;
 
         // apply changes to save

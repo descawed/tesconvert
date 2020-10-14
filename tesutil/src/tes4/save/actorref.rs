@@ -975,6 +975,16 @@ impl PlayerReferenceChange {
     pub fn set_race(&mut self, race: u32) {
         self.race = race;
     }
+
+    /// Iterates through the player's known magic effects
+    pub fn known_magic_effects(&self) -> impl Iterator<Item = [u8; 4]> + '_ {
+        self.known_magic_effects.iter().copied()
+    }
+
+    /// Sets the player's known magic effects
+    pub fn set_known_magic_effects(&mut self, effects: Vec<[u8; 4]>) {
+        self.known_magic_effects = effects;
+    }
 }
 
 #[cfg(test)]
