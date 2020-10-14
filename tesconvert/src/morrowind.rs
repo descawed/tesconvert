@@ -477,6 +477,14 @@ impl MorrowindToOblivion {
             }
             // choosing not to set this flag right now because I don't think it's desirable to add new player start spells in the save
             // ob_spell.set_player_start_spell(spell.is_player_start_spell());
+            ob_spell.spell_type = match mw_spell.spell_type() {
+                tes3::SpellType::Spell => tes4::SpellType::Spell,
+                tes3::SpellType::Ability => tes4::SpellType::Ability,
+                tes3::SpellType::Power => tes4::SpellType::Power,
+                // TODO: I'm assuming that diseases, blights, and curses don't appear in the spell list,
+                //  but I should get a disease to confirm
+                _ => continue,
+            };
 
             let mut converted_any = false;
             for effect in mw_spell.effects() {
