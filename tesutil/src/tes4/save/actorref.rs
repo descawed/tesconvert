@@ -602,10 +602,8 @@ impl FormChange for PlayerReferenceChange {
 
         // player statistics
         let mut statistics = [0u32; 34];
-        // can't use an iterator because these arrays are longer than 32 elements
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..statistics.len() {
-            statistics[i] = extract!(reader as u32)?;
+        for statistic in &mut statistics {
+            *statistic = extract!(reader as u32)?;
         }
 
         let mut stat_unknown1 = [0u8; 118];
