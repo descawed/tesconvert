@@ -290,12 +290,16 @@ impl MorrowindToOblivion {
         world: &Tes4World,
     ) -> Result<HashMap<String, FormId>> {
         let mut map = HashMap::new();
-        for ini in iter_form_map(config_dir.as_ref().join("mwob"))? {
+        let inis = iter_form_map(config_dir.as_ref().join("mwob"))
+            .with_context(|| "Failed to load Morrowind-to-Oblivion mapping")?;
+        for ini in inis {
             for (plugin, values) in &ini {
                 let plugin = plugin.unwrap_or("").to_lowercase();
                 for (mw, ob) in values.iter() {
-                    let search =
-                        FindForm::ByMaster(Some(plugin.as_str()), u32::from_str_radix(ob, 16)?);
+                    let form_id = u32::from_str_radix(ob, 16).with_context(|| {
+                        format!("Invalid form ID {} in Morrowind-to-Oblivion mapping", ob)
+                    })?;
+                    let search = FindForm::ByMaster(Some(plugin.as_str()), form_id);
                     if let Some(form_id) = world.get_form_id(&search) {
                         map.insert(String::from(mw), form_id);
                     }
@@ -320,10 +324,12 @@ impl MorrowindToOblivion {
 
         let mw = mw_thread
             .join()
-            .map_err(|_| anyhow!("Morrowind load failed"))??;
+            .map_err(|_| anyhow!("Morrowind load failed"))?
+            .with_context(|| "Morrowind load failed")?;
         let ob = ob_thread
             .join()
-            .map_err(|_| anyhow!("Oblivion load failed"))??;
+            .map_err(|_| anyhow!("Oblivion load failed"))?
+            .with_context(|| "Oblivion load failed")?;
         let form_map = MorrowindToOblivion::load_map(&config.config_path, &ob.world())?;
 
         // the compiler actually requires a type here but not on player_ref or class

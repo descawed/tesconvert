@@ -61,7 +61,10 @@ impl CombineStrategy {
 /// Iterate through INI files in a given directory
 pub fn iter_form_map<P: AsRef<Path>>(ini_dir: P) -> Result<impl Iterator<Item = Ini>> {
     let mut files = vec![];
-    for entry in fs::read_dir(ini_dir)? {
+    let ini_dir = ini_dir.as_ref();
+    for entry in
+        fs::read_dir(ini_dir).with_context(|| format!("Error reading directory {:?}", ini_dir))?
+    {
         files.push(Ini::load_from_file(entry?.path())?);
     }
 

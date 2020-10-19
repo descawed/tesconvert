@@ -367,6 +367,7 @@ impl Save {
     /// The form ID present on the record will be ignored and a new one will be generated. Returns
     /// the iref of the new form ID.
     pub fn add_record(&mut self, mut record: Tes4Record) -> u32 {
+        // FIXME: handle next form ID wrapping around or being in use
         let form_id = FormId(self.next_form_id);
         self.next_form_id += 1;
         record.set_id(form_id);
