@@ -25,6 +25,12 @@ pub use spell::*;
 mod magic_effect;
 pub use magic_effect::*;
 
+mod birthsign;
+pub use birthsign::*;
+
+mod race;
+pub use race::*;
+
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
 pub const MAX_MASTERS: usize = u8::MAX as usize - 2;

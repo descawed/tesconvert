@@ -32,6 +32,15 @@ pub use gmst::*;
 mod spell;
 pub use spell::*;
 
+mod active_effects;
+pub use active_effects::*;
+
+mod race;
+pub use race::*;
+
+mod birthsign;
+pub use birthsign::*;
+
 /// Save game information
 ///
 /// For saves (.ess files), this information is included in the TES3 record.

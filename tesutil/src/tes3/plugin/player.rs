@@ -115,6 +115,12 @@ pub struct PlayerData {
     werewolf_data: Vec<u8>,
 }
 
+impl PlayerData {
+    pub fn birthsign(&self) -> Option<&str> {
+        self.birthsign.as_ref().map(String::as_str)
+    }
+}
+
 impl Form for PlayerData {
     type Field = Tes3Field;
     type Record = Tes3Record;

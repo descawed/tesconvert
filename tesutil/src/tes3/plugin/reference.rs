@@ -47,7 +47,7 @@ pub struct PlayerReference {
     gold: u32,
     count_down: u8,
     unknown5: [u8; 3],
-    pub skills: Skills<Stat<u32>>,
+    pub skills: Skills<Stat<i32>>,
 }
 
 impl Form for PlayerReference {
@@ -116,8 +116,8 @@ impl Form for PlayerReference {
                     let reader = &mut buf_ref;
 
                     for skill in player.skills.values_mut() {
-                        (*skill).current = extract!(reader as u32)?;
-                        (*skill).base = extract!(reader as u32)?;
+                        (*skill).current = extract!(reader as i32)?;
+                        (*skill).base = extract!(reader as i32)?;
                     }
                 }
                 _ => (),

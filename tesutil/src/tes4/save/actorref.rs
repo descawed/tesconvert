@@ -974,6 +974,16 @@ impl PlayerReferenceChange {
         self.race = race;
     }
 
+    /// Gets the player's birthsign as an iref
+    pub fn birthsign(&self) -> u32 {
+        self.birthsign
+    }
+
+    /// Sets the player's birthsign as an iref
+    pub fn set_birthsign(&mut self, birthsign: u32) {
+        self.birthsign = birthsign;
+    }
+
     /// Iterates through the player's known magic effects
     pub fn known_magic_effects(&self) -> impl Iterator<Item = [u8; 4]> + '_ {
         self.known_magic_effects.iter().copied()
@@ -982,6 +992,66 @@ impl PlayerReferenceChange {
     /// Sets the player's known magic effects
     pub fn set_known_magic_effects(&mut self, effects: Vec<[u8; 4]>) {
         self.known_magic_effects = effects;
+    }
+
+    /// Iterates through the player's active magic effects
+    pub fn active_magic_effects(&self) -> impl Iterator<Item = &ActiveEffect> + '_ {
+        self.stat_active_effects.iter()
+    }
+
+    /// Clears the player's active magic effects
+    pub fn clear_active_magic_effects(&mut self) {
+        self.stat_active_effects.clear();
+    }
+
+    /// Gets changes to player actor values from active effects
+    pub fn active_effect_modifiers(&self) -> &ActorValues<f32> {
+        &self.temp_active_effects
+    }
+
+    /// Gets changes to player actor values from active effects, mutably
+    pub fn active_effect_modifiers_mut(&mut self) -> &mut ActorValues<f32> {
+        &mut self.temp_active_effects
+    }
+
+    /// Gets damage to player actor values
+    pub fn damage_modifiers(&self) -> &ActorValues<f32> {
+        &self.damage
+    }
+
+    /// Gets damage to player actor values
+    pub fn damage_modifiers_mut(&mut self) -> &mut ActorValues<f32> {
+        &mut self.damage
+    }
+
+    /// Gets the change in the player's health
+    pub fn health_delta(&self) -> f32 {
+        self.health_delta
+    }
+
+    /// Sets the change in the player's health
+    pub fn set_health_delta(&mut self, value: f32) {
+        self.health_delta = value;
+    }
+
+    /// Gets the change in the player's magicka
+    pub fn magicka_delta(&self) -> f32 {
+        self.magicka_delta
+    }
+
+    /// Sets the change in the player's magicka
+    pub fn set_magicka_delta(&mut self, value: f32) {
+        self.magicka_delta = value;
+    }
+
+    /// Gets the change in the player's fatigue
+    pub fn fatigue_delta(&self) -> f32 {
+        self.fatigue_delta
+    }
+
+    /// Sets the change in the player's fatigue
+    pub fn set_fatigue_delta(&mut self, value: f32) {
+        self.fatigue_delta = value;
     }
 }
 
