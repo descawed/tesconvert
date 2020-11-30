@@ -42,8 +42,8 @@ bitflags! {
 #[derive(Debug)]
 pub struct ActorBase {
     flags: ActorFlags,
-    magicka: u16,
-    fatigue: u16,
+    pub magicka: u16,
+    pub fatigue: u16,
     gold: u16,
     pub level: i16,
     calc_min: u16,
@@ -364,6 +364,16 @@ impl ActorChange {
     /// Sets the actor's spells
     pub fn set_spells(&mut self, spells: Vec<u32>) {
         self.spells = spells;
+    }
+
+    /// Gets the actor's base health
+    pub fn base_health(&self) -> Option<u32> {
+        self.base_health
+    }
+
+    /// Sets the actor's base health
+    pub fn set_base_health(&mut self, value: Option<u32>) {
+        self.base_health = value;
     }
 }
 

@@ -2,6 +2,7 @@ use std::fs;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
+use super::cosave::*;
 use super::plugin::*;
 use super::save::*;
 use super::{FindForm, FormId, MagicEffect, MagicEffectType, MAGIC_EFFECTS};
@@ -17,7 +18,7 @@ static PLUGIN_DIR: &str = "Data";
 #[derive(Debug)]
 pub struct Tes4World {
     plugins: Vec<(String, Tes4Plugin)>,
-    save: Option<Save>,
+    save: Option<(Save, CoSave)>,
 }
 
 impl Tes4World {
@@ -65,24 +66,36 @@ impl Tes4World {
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
+        let cosave_path = save_path.as_ref().with_extension("obse");
         let save = Save::load_file(save_path)?;
+        let cosave = CoSave::load_file(cosave_path)?;
         let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, save.iter_plugins())?;
 
         Ok(Tes4World {
             plugins,
-            save: Some(save),
+            save: Some((save, cosave)),
         })
     }
 
     /// Gets the currently loaded save, if there is one
     pub fn get_save(&self) -> Option<&Save> {
-        self.save.as_ref()
+        self.save.as_ref().map(|(s, _)| s)
     }
 
     /// Gets the currently load save mutably, if there is one
     pub fn get_save_mut(&mut self) -> Option<&mut Save> {
-        self.save.as_mut()
+        self.save.as_mut().map(|(s, _)| s)
+    }
+
+    /// Gets the currently loaded co-save, if there is one
+    pub fn get_cosave(&self) -> Option<&CoSave> {
+        self.save.as_ref().map(|(_, c)| c)
+    }
+
+    /// Gets the currently load co-save mutably, if there is one
+    pub fn get_cosave_mut(&mut self) -> Option<&mut CoSave> {
+        self.save.as_mut().map(|(_, c)| c)
     }
 
     /// Gets the form ID matching a search
@@ -95,7 +108,7 @@ impl Tes4World {
         let form_id = self.get_form_id(search)?;
         let index = form_id.index() as usize;
         if index == 0xff {
-            if let Some(ref save) = self.save {
+            if let Some((ref save, _)) = self.save {
                 return save.get_record(form_id);
             }
         }
@@ -132,7 +145,7 @@ impl Tes4World {
         let form_id = self.get_form_id(search)?;
         let index = form_id.index() as usize;
         if index == 0xff {
-            if let Some(ref save) = self.save {
+            if let Some((ref save, _)) = self.save {
                 return save.get_record_mut(form_id);
             }
         }

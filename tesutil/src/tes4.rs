@@ -12,6 +12,8 @@ pub mod save;
 mod world;
 pub use world::*;
 
+pub mod cosave;
+
 /// A unique identifier for a record
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FormId(pub u32);

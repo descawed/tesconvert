@@ -1,13 +1,15 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::thread;
 
 use tesutil::tes3::{SkillType, Tes3World};
 use tesutil::tes4;
+use tesutil::tes4::cosave::{CoSave, ObConvert, OPCODE_BASE};
 use tesutil::tes4::save::*;
-use tesutil::tes4::{FindForm, FormId, Tes4World};
+use tesutil::tes4::{ActorValue, FindForm, FormId, Tes4World};
 use tesutil::{tes3, EffectRange};
-use tesutil::{Attributes, Form};
+use tesutil::{Attribute, Attributes, Form, TesError};
 
 use crate::config::*;
 use crate::oblivion::Oblivion;
@@ -277,11 +279,12 @@ pub struct MorrowindToOblivion {
     config: Config,
     mw: Morrowind,
     ob: Oblivion,
-    form_map: HashMap<String, FormId>,
+    form_map: RefCell<HashMap<String, FormId>>,
     player_base: tes3::Npc,
     player_ref: tes3::PlayerReference,
     player_data: tes3::PlayerData,
     class: tes3::Class,
+    active_spells: tes3::ActiveSpellList,
 }
 
 impl MorrowindToOblivion {
@@ -322,6 +325,8 @@ impl MorrowindToOblivion {
         let mw_thread = thread::spawn(|| Morrowind::load(mw_path, source_path));
         let ob_thread = thread::spawn(|| Oblivion::load(ob_path, target_path));
 
+        // the map_err handles the case where join() failed and the with_context adds context to the
+        // case where the load failed
         let mw = mw_thread
             .join()
             .map_err(|_| anyhow!("Morrowind load failed"))?
@@ -330,7 +335,10 @@ impl MorrowindToOblivion {
             .join()
             .map_err(|_| anyhow!("Oblivion load failed"))?
             .with_context(|| "Oblivion load failed")?;
-        let form_map = MorrowindToOblivion::load_map(&config.config_path, &ob.world())?;
+        let form_map = RefCell::new(MorrowindToOblivion::load_map(
+            &config.config_path,
+            &ob.world(),
+        )?);
 
         // the compiler actually requires a type here but not on player_ref or class
         let player_base: tes3::Npc = mw
@@ -352,6 +360,16 @@ impl MorrowindToOblivion {
             tes3::PlayerData::read(&record)?
         };
 
+        let active_spells = {
+            let save = mw.world.get_save().unwrap();
+            let record = save
+                .get_records_by_type(b"SPLM")
+                .ok_or_else(|| anyhow!("Missing active spells record (SPLM) in Morrowind save"))?
+                .next()
+                .ok_or_else(|| anyhow!("Missing active spells record (SPLM) in Morrowind save"))?;
+            tes3::ActiveSpellList::read(&record)?
+        };
+
         let class = mw
             .world
             .get(player_base.class())?
@@ -366,7 +384,16 @@ impl MorrowindToOblivion {
             player_ref,
             player_data,
             class,
+            active_spells,
         })
+    }
+
+    fn with_save<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&Save) -> T,
+    {
+        let ob_world = self.ob.world();
+        f(ob_world.get_save().unwrap())
     }
 
     fn with_save_mut<T, F>(&self, f: F) -> T
@@ -377,25 +404,50 @@ impl MorrowindToOblivion {
         f(ob_world.get_save_mut().unwrap())
     }
 
+    fn with_cosave_mut<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&mut CoSave) -> T,
+    {
+        let mut ob_world = self.ob.world_mut();
+        f(ob_world.get_cosave_mut().unwrap())
+    }
+
     fn convert_race(&self, ob_player_ref: &mut PlayerReferenceChange) -> Result<()> {
         let mw_race = self.player_base.race();
-        let form_id = self.form_map.get(mw_race).copied().ok_or_else(|| {
-            anyhow!(format!(
-                "Could not find Oblivion equivalent for race {}",
-                mw_race
-            ))
-        })?;
+        let form_id = self
+            .form_map
+            .borrow()
+            .get(mw_race)
+            .copied()
+            .ok_or_else(|| {
+                anyhow!(format!(
+                    "Could not find Oblivion equivalent for race {}",
+                    mw_race
+                ))
+            })?;
+
+        // TODO: UESP says this is optional, but can the player not have a birthsign? probably not.
+        //  at a minimum we should warn if there is no birthsign
+        let bs_form_id = self
+            .player_data
+            .birthsign()
+            .and_then(|id| self.form_map.borrow().get(id).copied());
 
         self.with_save_mut(|ob_save| {
             let iref = ob_save.insert_form_id(form_id);
             ob_player_ref.set_race(iref);
+
+            if let Some(form_id) = bs_form_id {
+                let iref = ob_save.insert_form_id(form_id);
+                ob_player_ref.set_birthsign(iref);
+            }
         });
 
         Ok(())
     }
 
     fn convert_class(&self) -> Result<(tes4::Class, FormId)> {
-        Ok(match self.form_map.get(self.class.id()) {
+        Ok(match self.form_map.borrow().get(self.class.id()) {
             Some(class_form_id) => {
                 let search = FindForm::ByIndex(*class_form_id);
                 // we know this form ID is good because it wouldn't be in the map otherwise
@@ -404,7 +456,7 @@ impl MorrowindToOblivion {
             None => {
                 // the Morrowind class needs to be converted as a custom class
                 let mut new_class = tes4::Class::new(String::from(self.class.name()))?;
-                new_class.set_primary_attributes(self.class.primary_attribute())?;
+                new_class.set_primary_attributes(self.class.primary_attributes())?;
                 new_class.specialization = self.class.specialization;
 
                 // we need to map the Morrowind major and minor skills to Oblivion major skills. because
@@ -459,93 +511,170 @@ impl MorrowindToOblivion {
         })
     }
 
+    fn convert_spell(&self, mw_spell: &tes3::Spell) -> Result<Option<tes4::Spell>> {
+        let mut ob_spell = tes4::Spell::new(None, Some(String::from(mw_spell.name())));
+        if mw_spell.is_auto_calc() {
+            ob_spell.set_auto_calc(true);
+        } else {
+            ob_spell.set_auto_calc(false);
+            ob_spell.cost = mw_spell.cost();
+        }
+        // choosing not to set this flag right now because I don't think it's desirable to add new player start spells in the save
+        // ob_spell.set_player_start_spell(spell.is_player_start_spell());
+        ob_spell.spell_type = match mw_spell.spell_type() {
+            tes3::SpellType::Spell => tes4::SpellType::Spell,
+            tes3::SpellType::Ability => tes4::SpellType::Ability,
+            tes3::SpellType::Power => tes4::SpellType::Power,
+            tes3::SpellType::Disease => tes4::SpellType::Disease,
+            _ => return Ok(None),
+        };
+
+        let mut converted_any = false;
+        for effect in mw_spell.effects() {
+            if let Some(effect_type) = Morrowind::oblivion_effect(effect.effect()) {
+                // TODO: what should we do if a spell includes both e.g. a Calm Creature and Calm Humanoid effect?
+                let mut ob_effect = tes4::SpellEffect::new(effect_type);
+
+                // Night-Eye has a magnitude in Morrowind, but not Oblivion, so we'll just leave it at the default of 0
+                if effect_type != tes4::MagicEffectType::NightEye {
+                    let (min, max) = effect.magnitude();
+                    ob_effect.set_magnitude(self.config.combine_strategy.combine(min, max))?;
+                }
+
+                ob_effect.set_range(match effect_type {
+                    // in Morrowind, Telekinesis always has Self range, but in Oblivion, it's always Target
+                    tes4::MagicEffectType::Telekinesis => EffectRange::Target,
+                    // for some reason, Oblivion doesn't allow Absorb Skill to be cast on Target
+                    tes4::MagicEffectType::AbsorbSkill => EffectRange::Touch,
+                    _ => effect.range(),
+                })?;
+                ob_effect.set_duration(effect.duration())?;
+                ob_effect.set_area(effect.area())?;
+
+                ob_effect.set_actor_value(if let Some(mw_skill) = effect.skill() {
+                    tes4::ActorValue::from(match Morrowind::oblivion_skill(mw_skill) {
+                        Some(skill) => skill,
+                        None => continue, // skip this effect if it can't be converted properly
+                    })
+                } else if let Some(attribute) = effect.attribute() {
+                    tes4::ActorValue::from(attribute)
+                } else {
+                    effect_type.default_actor_value()
+                })?;
+
+                ob_spell.add_effect(ob_effect);
+
+                converted_any = true;
+            }
+        }
+
+        // only add the spell if we successfully converted at least one effect
+        if converted_any {
+            self.ob.calculate_spell_cost(&mut ob_spell)?;
+            Ok(Some(ob_spell))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn convert_spells(
         &self,
         ob_player_base: &mut ActorChange,
         ob_player_ref: &mut PlayerReferenceChange,
     ) -> Result<()> {
-        // TODO: make spell conversion errors warnings instead of fatal errors
-        let mut ob_spells = vec![];
-        let mut known_effects = HashSet::new();
-        for spell_id in self.player_base.spells() {
-            let mw_spell: tes3::Spell = self
-                .mw
-                .world
-                .get(spell_id)?
-                .ok_or_else(|| anyhow!(format!("Spell ID {} not found", spell_id)))?;
+        let mw_race: tes3::Race = self
+            .mw
+            .world
+            .get(self.player_base.race())?
+            .ok_or_else(|| anyhow!("Could not find Morrowind player race"))?;
+        let mw_sign: Option<tes3::Birthsign> = match self.player_data.birthsign() {
+            Some(birthsign) => self.mw.world.get(birthsign)?,
+            None => None,
+        };
+        let spells_to_suppress: HashSet<_> = if let Some(ref sign) = mw_sign {
+            mw_race.specials().chain(sign.spells()).collect()
+        } else {
+            mw_race.specials().collect()
+        };
 
-            let mut ob_spell = tes4::Spell::new(None, Some(String::from(mw_spell.name())));
-            if mw_spell.is_auto_calc() {
-                ob_spell.set_auto_calc(true);
-            } else {
-                ob_spell.set_auto_calc(false);
-                ob_spell.cost = mw_spell.cost();
-            }
-            // choosing not to set this flag right now because I don't think it's desirable to add new player start spells in the save
-            // ob_spell.set_player_start_spell(spell.is_player_start_spell());
-            ob_spell.spell_type = match mw_spell.spell_type() {
-                tes3::SpellType::Spell => tes4::SpellType::Spell,
-                tes3::SpellType::Ability => tes4::SpellType::Ability,
-                tes3::SpellType::Power => tes4::SpellType::Power,
-                // TODO: I'm assuming that diseases, blights, and curses don't appear in the spell list,
-                //  but I should get a disease to confirm
-                _ => continue,
-            };
-
-            let mut converted_any = false;
-            for effect in mw_spell.effects() {
-                if let Some(effect_type) = Morrowind::oblivion_effect(effect.effect()) {
-                    // TODO: what should we do if a spell includes both e.g. a Calm Creature and Calm Humanoid effect?
-                    let mut ob_effect = tes4::SpellEffect::new(effect_type);
-
-                    // Night-Eye has a magnitude in Morrowind, but not Oblivion, so we'll just leave it at the default of 0
-                    if effect_type != tes4::MagicEffectType::NightEye {
-                        let (min, max) = effect.magnitude();
-                        ob_effect.set_magnitude(self.config.combine_strategy.combine(min, max))?;
-                    }
-
-                    ob_effect.set_range(match effect_type {
-                        // in Morrowind, Telekinesis always has Self range, but in Oblivion, it's always Target
-                        tes4::MagicEffectType::Telekinesis => EffectRange::Target,
-                        // for some reason, Oblivion doesn't allow Absorb Skill to be cast on Target
-                        tes4::MagicEffectType::AbsorbSkill => EffectRange::Touch,
-                        _ => effect.range(),
-                    })?;
-                    ob_effect.set_duration(effect.duration())?;
-                    ob_effect.set_area(effect.area())?;
-
-                    ob_effect.set_actor_value(if let Some(mw_skill) = effect.skill() {
-                        tes4::ActorValue::from(match Morrowind::oblivion_skill(mw_skill) {
-                            Some(skill) => skill,
-                            None => continue, // skip this effect if it can't be converted properly
-                        })
-                    } else if let Some(attribute) = effect.attribute() {
-                        tes4::ActorValue::from(attribute)
-                    } else {
-                        effect_type.default_actor_value()
-                    })?;
-
-                    ob_spell.add_effect(ob_effect);
-
-                    converted_any = true;
-                    known_effects.insert(effect_type);
+        // TODO: make spell conversion errors warnings
+        let ob_spells: HashMap<_, _> = self
+            .player_base
+            .spells()
+            .filter_map(|id| {
+                if spells_to_suppress.contains(id) {
+                    None
+                } else {
+                    Some((
+                        id,
+                        self.convert_spell(&self.mw.world.get(id).ok()??).unwrap()?,
+                    ))
                 }
-            }
-
-            // only add the spell if we successfully converted at least one effect
-            if converted_any {
-                self.ob.calculate_spell_cost(&mut ob_spell)?;
-                ob_spells.push(ob_spell);
-            }
-        }
+            })
+            .collect();
+        let known_effects: HashSet<_> = ob_spells
+            .iter()
+            .filter(|(_, s)| s.spell_type == tes4::SpellType::Spell)
+            .flat_map(|(_, s)| s.effects().map(|e| e.effect_type()))
+            .collect();
 
         // set known magic effects
+        // TODO: do powers contribute to known effects?
         ob_player_ref.set_known_magic_effects(known_effects.iter().map(|e| e.id()).collect());
+
+        let ob_race: tes4::Race = self
+            .with_save(|save| {
+                let form_id = save.iref_to_form_id(ob_player_ref.race()).unwrap();
+                self.ob.world().get(&FindForm::ByIndex(form_id))
+            })?
+            .unwrap();
+
+        // FIXME: these unwraps are not safe
+        let ob_birthsign: tes4::Birthsign = self
+            .with_save(|save| {
+                let form_id = save.iref_to_form_id(ob_player_ref.birthsign()).unwrap();
+                self.ob.world().get(&FindForm::ByIndex(form_id))
+            })?
+            .unwrap();
+
+        // we have to collect the specials here because if we leave them as an iterator we'll end up
+        // trying to borrow the world while it's already mutably borrowed below
+        let specials: Vec<_> = ob_race
+            .spells()
+            .chain(ob_birthsign.spells())
+            .filter(|id| {
+                let spell: tes4::Spell = self
+                    .ob
+                    .world()
+                    .get(&FindForm::ByIndex(*id))
+                    .ok()
+                    .unwrap()
+                    .unwrap();
+                matches!(
+                    spell.spell_type,
+                    tes4::SpellType::Power | tes4::SpellType::LesserPower | tes4::SpellType::Spell
+                )
+            })
+            .collect();
 
         self.with_save_mut(|save| {
             let mut spell_irefs = Vec::with_capacity(ob_spells.len());
-            for spell in ob_spells {
-                spell_irefs.push(save.add_form(&spell)?);
+            for (id, spell) in ob_spells {
+                // we don't put abilities and diseases in the spell list because those need to be added to the player by the OBSE plugin
+                if matches!(
+                    spell.spell_type,
+                    tes4::SpellType::Power | tes4::SpellType::LesserPower | tes4::SpellType::Spell
+                ) {
+                    let iref = save.add_form(&spell)?;
+                    let form_id = save.iref_to_form_id(iref).unwrap();
+                    spell_irefs.push(iref);
+                    self.form_map.borrow_mut().insert(String::from(id), form_id);
+                }
+            }
+
+            for special in specials {
+                let iref = save.insert_form_id(special);
+                spell_irefs.push(iref);
             }
 
             ob_player_base.set_spells(spell_irefs);
@@ -560,14 +689,238 @@ impl MorrowindToOblivion {
         ob_player_ref: &mut PlayerReferenceChange,
         ob_class: &tes4::Class,
     ) -> Result<()> {
+        let mw_race: tes3::Race = self
+            .mw
+            .world
+            .get(self.player_base.race())?
+            .ok_or_else(|| anyhow!("Could not find Morrowind player race"))?;
+        let mw_sign: Option<tes3::Birthsign> = match self.player_data.birthsign() {
+            Some(birthsign) => self.mw.world.get(birthsign)?,
+            None => None,
+        };
+        let spells_to_suppress: HashSet<_> = if let Some(ref sign) = mw_sign {
+            mw_race.specials().chain(sign.spells()).collect()
+        } else {
+            mw_race.specials().collect()
+        };
+
+        // we're going to start by pulling in the active spells. we need this here so we can subtract
+        // effects before we convert the stats.
+        let mut base_attribute_modifiers: Attributes<f32> = Attributes::new();
+        let mut base_skill_modifiers: tes3::Skills<i32> = tes3::Skills::new();
+        let mut base_health_modifier = 0f32;
+        let mut base_magicka_modifier = 0f32;
+        let mut base_fatigue_modifier = 0f32;
+
+        let mut current_attribute_modifiers = Attributes::new();
+        let mut current_skill_modifiers = tes3::Skills::new();
+        let mut current_health_modifier = 0.;
+        let mut current_magicka_modifier = 0.;
+        let mut current_fatigue_modifier = 0.;
+
+        let active_player_spells = self
+            .active_spells
+            .iter()
+            .filter(|s| s.effects().any(|e| e.affected_actor() == "PlayerSaveGame"));
+        let mut new_active_spells = HashMap::new();
+        for active_spell in active_player_spells {
+            let id = active_spell.id();
+
+            let mw_spell: tes3::Spell = match self.mw.world.get(id)? {
+                Some(spell) => spell,
+                None => continue,
+            };
+
+            if !spells_to_suppress.contains(id) {
+                let form_id = match self.form_map.borrow().get(active_spell.id()) {
+                    Some(form_id) => *form_id,
+                    None => {
+                        if let Some(ob_spell) = self.convert_spell(&mw_spell)? {
+                            self.with_save_mut::<Result<FormId, TesError>, _>(|save| {
+                                let iref = save.add_form(&ob_spell)?;
+                                Ok(save.iref_to_form_id(iref).unwrap())
+                            })?
+                        } else {
+                            continue;
+                        }
+                    }
+                };
+
+                let seconds_active = active_spell.effects().last().unwrap().seconds_active();
+                new_active_spells.insert(form_id, seconds_active);
+            }
+
+            let (attribute_modifiers, skill_modifiers) =
+                if mw_spell.spell_type() == tes3::SpellType::Ability {
+                    (&mut base_attribute_modifiers, &mut base_skill_modifiers)
+                } else {
+                    (
+                        &mut current_attribute_modifiers,
+                        &mut current_skill_modifiers,
+                    )
+                };
+
+            for effect in active_spell
+                .effects()
+                .filter(|e| e.affected_actor() == "PlayerSaveGame")
+            {
+                if let Some(base_effect) = mw_spell
+                    .effects()
+                    .enumerate()
+                    .filter(|(p, _)| *p as i32 == effect.index())
+                    .map(|(_, e)| e)
+                    .last()
+                {
+                    match base_effect.effect() {
+                        tes3::MagicEffectType::FortifyAttribute => {
+                            let magnitude = effect.magnitude() as f32;
+                            let attribute = base_effect.attribute().unwrap();
+                            attribute_modifiers[attribute] -= magnitude;
+                            match attribute {
+                                Attribute::Strength
+                                | Attribute::Willpower
+                                | Attribute::Agility
+                                | Attribute::Endurance => base_fatigue_modifier -= magnitude,
+                                Attribute::Intelligence => base_magicka_modifier -= magnitude,
+                                _ => (),
+                            }
+                        }
+                        tes3::MagicEffectType::FortifySkill => {
+                            skill_modifiers[base_effect.skill().unwrap()] -= effect.magnitude()
+                        }
+                        tes3::MagicEffectType::AbsorbAttribute
+                        | tes3::MagicEffectType::DrainAttribute => {
+                            let magnitude = effect.magnitude() as f32;
+                            let attribute = base_effect.attribute().unwrap();
+                            attribute_modifiers[attribute] += magnitude;
+                            match attribute {
+                                Attribute::Strength
+                                | Attribute::Willpower
+                                | Attribute::Agility
+                                | Attribute::Endurance => base_fatigue_modifier += magnitude,
+                                Attribute::Intelligence => base_magicka_modifier += magnitude,
+                                _ => (),
+                            }
+                        }
+                        tes3::MagicEffectType::AbsorbSkill | tes3::MagicEffectType::DrainSkill => {
+                            skill_modifiers[base_effect.skill().unwrap()] += effect.magnitude()
+                        }
+                        tes3::MagicEffectType::FortifyHealth => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_health_modifier
+                            } else {
+                                &mut current_health_modifier
+                            } -= effect.magnitude() as f32
+                        }
+                        tes3::MagicEffectType::DrainHealth => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_health_modifier
+                            } else {
+                                &mut current_health_modifier
+                            } += effect.magnitude() as f32
+                        }
+                        tes3::MagicEffectType::FortifyMaximumMagicka => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_magicka_modifier
+                            } else {
+                                &mut current_magicka_modifier
+                            } -= (effect.magnitude() as f32) / 10.
+                                * self.player_ref.attributes[Attribute::Intelligence].current
+                        }
+                        tes3::MagicEffectType::FortifyMagicka => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_magicka_modifier
+                            } else {
+                                &mut current_magicka_modifier
+                            } -= effect.magnitude() as f32
+                        }
+                        tes3::MagicEffectType::DrainMagicka => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_magicka_modifier
+                            } else {
+                                &mut current_magicka_modifier
+                            } += effect.magnitude() as f32
+                        }
+                        tes3::MagicEffectType::FortifyFatigue => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_fatigue_modifier
+                            } else {
+                                &mut current_fatigue_modifier
+                            } -= effect.magnitude() as f32
+                        }
+                        tes3::MagicEffectType::DrainFatigue => {
+                            *if mw_spell.spell_type() == tes3::SpellType::Ability {
+                                &mut base_fatigue_modifier
+                            } else {
+                                &mut current_fatigue_modifier
+                            } += effect.magnitude() as f32
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
+
+        let ob_race: tes4::Race = self
+            .with_save(|save| {
+                let form_id = save.iref_to_form_id(ob_player_ref.race()).unwrap();
+                self.ob.world().get(&FindForm::ByIndex(form_id))
+            })?
+            .unwrap();
+
+        // FIXME: these unwraps are not safe
+        let ob_birthsign: tes4::Birthsign = self
+            .with_save(|save| {
+                let form_id = save.iref_to_form_id(ob_player_ref.birthsign()).unwrap();
+                self.ob.world().get(&FindForm::ByIndex(form_id))
+            })?
+            .unwrap();
+
+        for special in ob_race.spells().chain(ob_birthsign.spells()).filter(|id| {
+            let spell: tes4::Spell = self
+                .ob
+                .world()
+                .get(&FindForm::ByIndex(*id))
+                .ok()
+                .unwrap()
+                .unwrap();
+            !matches!(
+                spell.spell_type,
+                tes4::SpellType::Power | tes4::SpellType::LesserPower | tes4::SpellType::Spell
+            )
+        }) {
+            // seconds active doesn't matter for abilities
+            new_active_spells.insert(special, 0.);
+        }
+
+        self.with_cosave_mut(|cosave| {
+            let plugin = cosave.get_plugin_by_opcode(OPCODE_BASE).unwrap();
+            let mut obconvert = ObConvert::read(plugin)?;
+            obconvert.set_active_spells(new_active_spells);
+            let plugin = cosave.get_plugin_by_opcode_mut(OPCODE_BASE).unwrap();
+            obconvert.write(plugin)
+        })?;
+
         ob_player_ref.is_female = self.player_base.is_female();
+
+        let damage = ob_player_ref.damage_modifiers_mut();
+        for (_, value) in damage.iter_mut() {
+            *value = 0.;
+        }
 
         // set attributes
         let attributes = ob_player_base
             .attributes_mut()
             .ok_or_else(|| anyhow!("Oblivion player base has no attributes"))?;
         for (attribute, value) in attributes.iter_mut() {
-            *value = self.player_ref.attributes[attribute].base as u8;
+            let base =
+                self.player_ref.attributes[attribute].base + base_attribute_modifiers[attribute];
+            let current = self.player_ref.attributes[attribute].current
+                + base_attribute_modifiers[attribute]
+                + current_attribute_modifiers[attribute];
+            *value = base as u8;
+            // FIXME: should these be negative?
+            damage[ActorValue::from(attribute)] = current - base;
         }
 
         // set skills
@@ -576,27 +929,138 @@ impl MorrowindToOblivion {
             .ok_or_else(|| anyhow!("Oblivion player base has no skills"))?;
         for (skill, value) in skills.iter_mut() {
             *value = match Oblivion::morrowind_skill(skill) {
-                tes3::Skill::LongBlade => self.config.combine_strategy.combine(
-                    self.player_ref.skills[tes3::Skill::LongBlade].base,
-                    self.player_ref.skills[tes3::Skill::ShortBlade].base,
-                ),
-                tes3::Skill::Blunt => self.config.combine_strategy.combine(
-                    self.player_ref.skills[tes3::Skill::Axe].base,
-                    self.player_ref.skills[tes3::Skill::Blunt].base,
-                ),
-                mw_skill => self.player_ref.skills[mw_skill].base,
+                tes3::Skill::LongBlade => {
+                    let base = self.config.combine_strategy.combine(
+                        self.player_ref.skills[tes3::Skill::LongBlade].base
+                            + base_skill_modifiers[tes3::Skill::LongBlade],
+                        self.player_ref.skills[tes3::Skill::ShortBlade].base
+                            + base_skill_modifiers[tes3::Skill::ShortBlade],
+                    );
+                    let current = self.config.combine_strategy.combine(
+                        self.player_ref.skills[tes3::Skill::LongBlade].current
+                            + base_skill_modifiers[tes3::Skill::LongBlade]
+                            + current_skill_modifiers[tes3::Skill::LongBlade],
+                        self.player_ref.skills[tes3::Skill::ShortBlade].current
+                            + base_skill_modifiers[tes3::Skill::ShortBlade]
+                            + current_skill_modifiers[tes3::Skill::ShortBlade],
+                    );
+                    // FIXME: should these be negative?
+                    damage[ActorValue::Blade] = (current - base) as f32;
+                    base
+                }
+                tes3::Skill::Blunt => {
+                    let base = self.config.combine_strategy.combine(
+                        self.player_ref.skills[tes3::Skill::Axe].base
+                            + base_skill_modifiers[tes3::Skill::Axe],
+                        self.player_ref.skills[tes3::Skill::Blunt].base
+                            + base_skill_modifiers[tes3::Skill::Blunt],
+                    );
+                    let current = self.config.combine_strategy.combine(
+                        self.player_ref.skills[tes3::Skill::Axe].current
+                            + base_skill_modifiers[tes3::Skill::Axe]
+                            + current_skill_modifiers[tes3::Skill::Axe],
+                        self.player_ref.skills[tes3::Skill::Blunt].current
+                            + base_skill_modifiers[tes3::Skill::Blunt]
+                            + current_skill_modifiers[tes3::Skill::Blunt],
+                    );
+                    // FIXME: should these be negative?
+                    damage[ActorValue::Blunt] = (current - base) as f32;
+                    base
+                }
+                mw_skill => {
+                    let base =
+                        self.player_ref.skills[mw_skill].base + base_skill_modifiers[mw_skill];
+                    let current = self.player_ref.skills[mw_skill].current
+                        + base_skill_modifiers[mw_skill]
+                        + current_skill_modifiers[mw_skill];
+                    // FIXME: should these be negative?
+                    damage[ActorValue::from(skill)] = (current - base) as f32;
+                    base
+                }
             } as u8;
         }
 
-        // set level
+        // remove any active effects
+        let active_effect_modifiers = ob_player_ref.active_effect_modifiers_mut();
+        for (_, value) in active_effect_modifiers.iter_mut() {
+            *value = 0.;
+        }
+        ob_player_ref.clear_active_magic_effects();
+
+        // set level, fatigue, and magicka
         if ob_player_base.actor_base().is_none() {
             // can happen if the player is level 1
             let base = ActorBase::default();
             ob_player_base.set_actor_base(Some(base));
         }
 
+        // calculate fatigue and magicka
+        let attributes = ob_player_base.attributes().unwrap();
+        let max_fatigue = attributes[Attribute::Endurance] as f32
+            + attributes[Attribute::Strength] as f32
+            + attributes[Attribute::Agility] as f32
+            + attributes[Attribute::Willpower] as f32;
+        let fatigue_ratio =
+            (self.player_ref.fatigue.current + base_fatigue_modifier + current_fatigue_modifier)
+                / (self.player_ref.fatigue.base + base_fatigue_modifier);
+        let fatigue_delta = max_fatigue * (1. - fatigue_ratio);
+        ob_player_ref.set_fatigue_delta(-fatigue_delta);
+
+        let max_magicka = attributes[Attribute::Intelligence] as f32
+            * (self
+                .ob
+                .world()
+                .get_float_setting("fPCBaseMagickaMult", 1.)?
+                + 1.);
+        let magicka_ratio =
+            (self.player_ref.magicka.current + base_magicka_modifier + current_magicka_modifier)
+                / (self.player_ref.magicka.base + base_magicka_modifier);
+        let magicka_delta = max_magicka * (1. - magicka_ratio);
+        ob_player_ref.set_magicka_delta(-magicka_delta);
+
+        // calculate health
+        let (mut starting_strength, mut starting_endurance) = if ob_player_ref.is_female {
+            (
+                mw_race.attribute_female(Attribute::Strength),
+                mw_race.attribute_female(Attribute::Endurance),
+            )
+        } else {
+            (
+                mw_race.attribute_male(Attribute::Strength),
+                mw_race.attribute_male(Attribute::Endurance),
+            )
+        };
+        for attribute in self.class.primary_attributes() {
+            match attribute {
+                Attribute::Strength => starting_strength += 10,
+                Attribute::Endurance => starting_endurance += 10,
+                _ => (),
+            }
+        }
+        let starting_health = (starting_strength + starting_endurance) / 2;
+        let mw_base_max_health = self.player_ref.health.base + base_health_modifier;
+        // amount of health gained from level-ups
+        let level_health = mw_base_max_health - starting_health as f32;
+
+        let ob_base_max_health = attributes[Attribute::Endurance] as f32
+            * self.ob.world().get_float_setting("fPCBaseHealthMult", 2.)?
+            * self
+                .ob
+                .world()
+                .get_float_setting("fStatsHealthStartMult", 1.)?;
+        let max_health = ob_base_max_health + level_health;
+        let health_ratio =
+            (self.player_ref.health.current + base_health_modifier + current_health_modifier)
+                / mw_base_max_health;
+        let health_delta = max_health * (1. - health_ratio);
+        ob_player_ref.set_health_delta(-health_delta);
+
+        ob_player_base.set_base_health(Some(level_health as u32));
         let mut base = ob_player_base.actor_base_mut().unwrap();
         base.level = self.player_base.level as i16;
+        // this will be recalculated once we add back racial and birthsign bonuses
+        base.magicka = 0;
+        base.fatigue = 0;
 
         ob_player_ref.set_name(String::from(self.player_base.name().unwrap_or("")))?;
 
@@ -683,7 +1147,7 @@ impl MorrowindToOblivion {
         self.convert_stats(&mut ob_player_base, &mut ob_player_ref, &ob_class)?;
 
         // apply changes to save
-        self.with_save_mut(|ob_save| {
+        self.with_save_mut::<Result<()>, _>(|ob_save| {
             // finalize converted class (we have to wait and do this here because this might take
             // ownership of the class)
             let ob_class_iref = ob_save.insert_form_id(ob_class_form_id);
@@ -709,6 +1173,13 @@ impl MorrowindToOblivion {
             ob_save.update_form_change(&ob_player_ref, FORM_PLAYER_REF)?;
 
             ob_save.save_file(&self.config.output_path)?;
+
+            Ok(())
+        })?;
+
+        self.with_cosave_mut(|cosave| {
+            let cosave_path = Path::new(&self.config.output_path).with_extension("obse");
+            cosave.save_file(cosave_path)?;
 
             Ok(())
         })

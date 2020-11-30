@@ -150,7 +150,7 @@ impl Class {
     }
 
     /// Gets this class's primary attributes
-    pub fn primary_attribute(&self) -> &[Attribute; 2] {
+    pub fn primary_attributes(&self) -> &[Attribute; 2] {
         &self.primary_attributes
     }
 

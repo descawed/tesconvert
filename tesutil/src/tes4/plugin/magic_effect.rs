@@ -350,6 +350,10 @@ impl MagicEffectType {
     pub fn from_id(id: &[u8]) -> Option<MagicEffectType> {
         use MagicEffectType::*;
 
+        // sometimes effect IDs having a trailing null in the data. for convenience, we'll just
+        // truncate anything past the 4th byte
+        let id = &id[..4];
+
         match id {
             b"ABAT" => Some(AbsorbAttribute),
             b"ABFA" => Some(AbsorbFatigue),
@@ -634,14 +638,24 @@ bitflags! {
         const SPELLMAKING = 0x00000800;
         const ENCHANTING = 0x00001000;
         const NO_INGREDIENT = 0x00002000;
+        const UNKNOWN_14 = 0x00004000;
+        const UNKNOWN_15 = 0x00008000;
         const USE_WEAPON = 0x00010000;
         const USE_ARMOR = 0x00020000;
         const USE_CREATURE = 0x00040000;
         const USE_SKILL = 0x00080000;
         const USE_ATTRIBUTE = 0x00100000;
+        const UNKNOWN_21 = 0x00200000;
+        const UNKNOWN_22 = 0x00400000;
+        const UNKNOWN_23 = 0x00800000;
+        const USE_ACTOR_VALUE = 0x01000000;
         const SPRAY_PROJECTILE_TYPE = 0x02000000;
         const BOLT_PROJECTILE_TYPE = 0x04000000;
         const NO_HIT_EFFECT = 0x08000000;
+        const UNKNOWN_28 = 0x10000000;
+        const UNKNOWN_29 = 0x20000000; // used by FIDG
+        const UNKNOWN_30 = 0x40000000;
+        const UNKNOWN_31 = 0x80000000;
     }
 }
 
@@ -820,9 +834,7 @@ impl Form for MagicEffect {
                         if resist == 0 {
                             None
                         } else {
-                            Some(ActorValue::try_from(resist as u8).map_err(|e| {
-                                decode_failed_because("Invalid resist value in magic effect", e)
-                            })?)
+                            ActorValue::try_from(resist as u8).ok()
                         }
                     };
                     effect
