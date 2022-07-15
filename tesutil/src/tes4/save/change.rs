@@ -52,7 +52,7 @@ impl ChangeRecord {
         let version = extract!(f as u8)?;
         let data_size = extract!(f as u16)? as usize;
         let mut data = vec![0u8; data_size];
-        f.read_exact(&mut &mut data)?;
+        f.read_exact(&mut data)?;
 
         Ok((
             ChangeRecord {

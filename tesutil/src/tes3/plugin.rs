@@ -647,7 +647,7 @@ impl Tes3Plugin {
     /// # }
     /// ```
     pub fn get_record(&self, id: &str) -> Result<Option<RwLockReadGuard<Tes3Record>>, TesError> {
-        if let Some(ref type_map) = self.id_map.get(id) {
+        if let Some(type_map) = self.id_map.get(id) {
             if type_map.is_empty() {
                 Ok(None)
             } else if type_map.len() > 1 {

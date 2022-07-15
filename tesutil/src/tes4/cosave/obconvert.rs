@@ -14,6 +14,12 @@ pub struct ObConvert {
     active_spells: HashMap<FormId, f32>,
 }
 
+impl Default for ObConvert {
+    fn default() -> Self {
+        ObConvert::new()
+    }
+}
+
 impl ObConvert {
     pub fn new() -> ObConvert {
         ObConvert {

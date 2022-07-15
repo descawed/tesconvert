@@ -75,13 +75,13 @@ impl Form for PlayerReference {
             fatigue: Stat::default(),
             magicka: Stat::default(),
             unknown3: [0; 16],
-            attributes: Attributes::new(),
+            attributes: Attributes::default(),
             magic_effects: [0.; 27],
             unknown4: [0; 4],
             gold: 0,
             count_down: 0,
             unknown5: [0; 3],
-            skills: Skills::new(),
+            skills: Skills::default(),
         };
 
         for field in record.iter() {

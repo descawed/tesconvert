@@ -90,17 +90,11 @@ impl FormChange for ActorChange {
     fn read(record: &ChangeRecord) -> Result<ActorChange, TesError> {
         let change_type = record.change_type();
         if change_type != ChangeType::Npc && change_type != ChangeType::Creature {
-            return Err(TesError::DecodeFailed {
-                description: String::from("ActorChange expects an NPC or creature change record"),
-                source: None,
-            });
+            return Err(decode_failed("ActorChange expects an NPC or creature change record"));
         }
 
         let change_flags =
-            ActorChangeFlags::from_bits(record.flags()).ok_or(TesError::DecodeFailed {
-                description: String::from("Invalid actor change flags"),
-                source: None,
-            })?;
+            ActorChangeFlags::from_bits(record.flags()).ok_or(decode_failed("Invalid actor change flags"))?;
 
         let mut actor_change = ActorChange {
             change_type,
@@ -125,7 +119,7 @@ impl FormChange for ActorChange {
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_ATTRIBUTES) {
-            let mut attributes = Attributes::new();
+            let mut attributes = Attributes::default();
             for attribute in attributes.values_mut() {
                 *attribute = extract!(reader as u8)?;
             }
@@ -136,10 +130,7 @@ impl FormChange for ActorChange {
         if change_flags.contains(ActorChangeFlags::BASE_DATA) {
             actor_change.base = Some(ActorBase {
                 flags: ActorFlags::from_bits(extract!(reader as u32)?).ok_or_else(|| {
-                    io_error(TesError::DecodeFailed {
-                        description: String::from("Invalid actor flags"),
-                        source: None,
-                    })
+                    io_error(decode_failed("Invalid actor flags"))
                 })?,
                 magicka: extract!(reader as u16)?,
                 fatigue: extract!(reader as u16)?,
@@ -190,7 +181,7 @@ impl FormChange for ActorChange {
         }
 
         if change_flags.contains(ActorChangeFlags::SKILLS) {
-            let mut skills = Skills::new();
+            let mut skills = Skills::default();
             for skill in skills.values_mut() {
                 *skill = extract!(reader as u8)?;
             }

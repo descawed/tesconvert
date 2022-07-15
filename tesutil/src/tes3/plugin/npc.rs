@@ -154,8 +154,8 @@ impl Form for Npc {
             hair: String::new(),
             script: None,
             level: 0,
-            attributes: Attributes::new(),
-            skills: Skills::new(),
+            attributes: Attributes::default(),
+            skills: Skills::default(),
             health: 0,
             magicka: 0,
             fatigue: 0,
@@ -281,16 +281,10 @@ impl Form for Npc {
                         if last_destination.cell_name == None {
                             last_destination.cell_name = Some(String::from(field.get_zstring()?));
                         } else {
-                            return Err(TesError::DecodeFailed {
-                                description: String::from("Orphaned DNAM field"),
-                                source: None,
-                            });
+                            return Err(decode_failed("Orphaned DNAM field"));
                         }
                     } else {
-                        return Err(TesError::DecodeFailed {
-                            description: String::from("Orphaned DNAM field"),
-                            source: None,
-                        });
+                        return Err(decode_failed("Orphaned DNAM field"));
                     }
                 }
                 b"AI_A" => {
@@ -364,41 +358,26 @@ impl Form for Npc {
                         match last_package {
                             Package::Escort { ref mut cell, .. } => match *cell {
                                 Some(_) => {
-                                    return Err(TesError::DecodeFailed {
-                                        description: String::from("Extraneous CNDT field"),
-                                        source: None,
-                                    })
+                                    return Err(decode_failed("Extraneous CNDT field"))
                                 }
                                 None => *cell = cell_field,
                             },
                             Package::Follow { ref mut cell, .. } => match *cell {
                                 Some(_) => {
-                                    return Err(TesError::DecodeFailed {
-                                        description: String::from("Extraneous CNDT field"),
-                                        source: None,
-                                    })
+                                    return Err(decode_failed("Extraneous CNDT field"))
                                 }
                                 None => *cell = cell_field,
                             },
                             _ => {
-                                return Err(TesError::DecodeFailed {
-                                    description: String::from("Orphaned CNDT field"),
-                                    source: None,
-                                })
+                                return Err(decode_failed("Orphaned CNDT field"))
                             }
                         }
                     } else {
-                        return Err(TesError::DecodeFailed {
-                            description: String::from("Orphaned CNDT field"),
-                            source: None,
-                        });
+                        return Err(decode_failed("Orphaned CNDT field"));
                     }
                 }
                 _ => {
-                    return Err(TesError::DecodeFailed {
-                        description: format!("Unexpected field {}", field.name_as_str()),
-                        source: None,
-                    })
+                    return Err(decode_failed(format!("Unexpected field {}", field.name_as_str())))
                 }
             }
         }

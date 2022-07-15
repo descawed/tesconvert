@@ -282,7 +282,7 @@ impl Form for Spell {
     }
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
-        Spell::assert(&record)?;
+        Spell::assert(record)?;
 
         let mut spell = Spell {
             id: String::new(),

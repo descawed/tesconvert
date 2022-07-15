@@ -532,9 +532,9 @@ impl FormChange for PlayerReferenceChange {
         let ry = extract!(reader as f32)?;
         let rz = extract!(reader as f32)?;
 
-        let mut temp_active_effects = ActorValues::new();
-        let mut tac_unknown = ActorValues::new();
-        let mut damage = ActorValues::new();
+        let mut temp_active_effects = ActorValues::default();
+        let mut tac_unknown = ActorValues::default();
+        let mut damage = ActorValues::default();
 
         for effect in temp_active_effects.values_mut() {
             *effect = extract!(reader as f32)?;
@@ -644,7 +644,7 @@ impl FormChange for PlayerReferenceChange {
             stat_active_effects.push(ActiveEffect::read(&mut reader)?);
         }
 
-        let mut skill_xp = Skills::new();
+        let mut skill_xp = Skills::default();
         for skill in skill_xp.values_mut() {
             *skill = extract!(reader as f32)?;
         }
@@ -652,7 +652,7 @@ impl FormChange for PlayerReferenceChange {
         let num_advancements = extract!(reader as u32)? as usize;
         let mut advancements = Vec::with_capacity(num_advancements);
         for _ in 0..num_advancements {
-            let mut attributes = Attributes::new();
+            let mut attributes = Attributes::default();
             for attribute in attributes.values_mut() {
                 *attribute = extract!(reader as u8)?;
             }
@@ -660,12 +660,12 @@ impl FormChange for PlayerReferenceChange {
             advancements.push(attributes);
         }
 
-        let mut spec_increases = Specializations::new();
+        let mut spec_increases = Specializations::default();
         for specialization in spec_increases.values_mut() {
             *specialization = extract!(reader as u8)?;
         }
 
-        let mut skill_usage = Skills::new();
+        let mut skill_usage = Skills::default();
         for skill in skill_usage.values_mut() {
             *skill = extract!(reader as u32)?;
         }

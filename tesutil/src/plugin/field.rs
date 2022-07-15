@@ -139,7 +139,7 @@ pub trait Field: Sized {
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     // FIXME: the below string functions will fail on non-English versions of the game
     fn get_string(&self) -> Result<&str, TesError> {
-        str::from_utf8(&self.get()[..])
+        str::from_utf8(self.get())
             .map_err(|e| decode_failed_because("failed to decode string", e))
     }
 
@@ -164,7 +164,7 @@ pub trait Field: Sized {
     ///
     /// Returns an error if the data includes internal null bytes or if the data is not valid UTF-8.
     fn get_zstring(&self) -> Result<&str, TesError> {
-        let zstr = CStr::from_bytes_with_nul(&self.get()[..])
+        let zstr = CStr::from_bytes_with_nul(self.get())
             .map_err(|e| decode_failed_because("string contained internal nulls", e))?;
         zstr.to_str()
             .map_err(|e| decode_failed_because("failed to decode string", e))

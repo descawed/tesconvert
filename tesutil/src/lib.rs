@@ -24,7 +24,6 @@ use std::ops::Deref;
 use std::str;
 
 use enum_map::{Enum, EnumMap};
-use ini::ini;
 use len_trait::len::Len;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::*;
@@ -236,7 +235,7 @@ impl<T: Write> WriteExact for T {
                 if num_bytes == buf.len() {
                     Ok(())
                 } else {
-                    Err(io::Error::new(
+                    Err(Error::new(
                         ErrorKind::UnexpectedEof,
                         format!(
                             "Attempted to write {} bytes but could only write {}",
@@ -321,7 +320,7 @@ fn io_error<E>(e: E) -> Error
 where
     E: Into<Box<dyn error::Error + Send + Sync>>,
 {
-    io::Error::new(ErrorKind::InvalidData, e)
+    Error::new(ErrorKind::InvalidData, e)
 }
 
 /// Maximum size in bytes of a record or field

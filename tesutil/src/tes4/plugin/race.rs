@@ -26,7 +26,7 @@ impl Form for Race {
     }
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
-        Race::assert(&record)?;
+        Race::assert(record)?;
 
         let mut race = Race {
             editor_id: String::new(),

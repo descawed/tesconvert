@@ -14,7 +14,7 @@ use tesutil::{Attribute, Attributes, Form, TesError};
 use crate::config::*;
 use crate::oblivion::Oblivion;
 
-use anyhow::*;
+use anyhow::{Context, Result, anyhow};
 #[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]
@@ -706,14 +706,14 @@ impl MorrowindToOblivion {
 
         // we're going to start by pulling in the active spells. we need this here so we can subtract
         // effects before we convert the stats.
-        let mut base_attribute_modifiers: Attributes<f32> = Attributes::new();
-        let mut base_skill_modifiers: tes3::Skills<i32> = tes3::Skills::new();
+        let mut base_attribute_modifiers: Attributes<f32> = Attributes::default();
+        let mut base_skill_modifiers: tes3::Skills<i32> = tes3::Skills::default();
         let mut base_health_modifier = 0f32;
         let mut base_magicka_modifier = 0f32;
         let mut base_fatigue_modifier = 0f32;
 
-        let mut current_attribute_modifiers = Attributes::new();
-        let mut current_skill_modifiers = tes3::Skills::new();
+        let mut current_attribute_modifiers = Attributes::default();
+        let mut current_skill_modifiers = tes3::Skills::default();
         let mut current_health_modifier = 0.;
         let mut current_magicka_modifier = 0.;
         let mut current_fatigue_modifier = 0.;
@@ -1078,7 +1078,7 @@ impl MorrowindToOblivion {
         // there is no move.
         let mut attributes = self.player_data.attribute_progress;
         while attributes.values().any(|v| *v > 0) {
-            let mut advancement = Attributes::new();
+            let mut advancement = Attributes::default();
             for (attribute, value) in advancement.iter_mut() {
                 *value = attributes[attribute] % 10;
             }
@@ -1092,7 +1092,7 @@ impl MorrowindToOblivion {
         ob_player_ref.advancements = advancements;
 
         // skill XP
-        let mut mw_progress = tes3::Skills::new();
+        let mut mw_progress = tes3::Skills::default();
         for (skill, value) in mw_progress.iter_mut() {
             *value = self.player_data.skill_progress[skill]
                 / self.mw.calculate_skill_xp(
@@ -1116,7 +1116,7 @@ impl MorrowindToOblivion {
                 mw_skill => mw_progress[mw_skill],
             } * self
                 .ob
-                .calculate_skill_xp(skill, ob_skills[skill], &ob_class);
+                .calculate_skill_xp(skill, ob_skills[skill], ob_class);
         }
 
         Ok(())

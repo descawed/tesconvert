@@ -1,17 +1,17 @@
 [package]
 name = "tesutil"
 version = "0.1.0"
-authors = ["descawed <descawed@gmail.com>"]
-edition = "2018"
+authors = ["descawed <tesutil@descawed.com>"]
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 len-trait = "0.6"
-bitflags = "1.2"
+bitflags = "1.3"
 flate2 = "1.0"
 num_enum = "0.5"
 thiserror = "1.0"
-enum-map = "0.6"
-rust-ini = "0.15"
+enum-map = "2.4"
+rust-ini = "0.18"
 lazy_static = "1.4"

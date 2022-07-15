@@ -26,7 +26,7 @@ impl Form for Birthsign {
     }
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
-        Birthsign::assert(&record)?;
+        Birthsign::assert(record)?;
 
         let mut birthsign = Birthsign {
             editor_id: None,

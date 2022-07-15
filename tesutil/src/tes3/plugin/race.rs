@@ -59,13 +59,13 @@ impl Form for Race {
     }
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
-        Race::assert(&record)?;
+        Race::assert(record)?;
 
         let mut race = Race {
             id: String::new(),
             name: String::new(),
             skills: [None, None, None, None, None, None, None],
-            attributes: Attributes::new(),
+            attributes: Attributes::default(),
             height: (0., 0.),
             weight: (0., 0.),
             is_playable: false,

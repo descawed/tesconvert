@@ -128,7 +128,7 @@ impl Tes4World {
             if let Some(record) = plugin.get_record(if name == target_name {
                 &self_search
             } else {
-                &search
+                search
             }) {
                 return Some(record);
             }
@@ -165,7 +165,7 @@ impl Tes4World {
             if let Some(record) = plugin.get_record_mut(if name == target_name {
                 &self_search
             } else {
-                &search
+                search
             }) {
                 return Some(record);
             }

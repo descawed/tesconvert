@@ -44,7 +44,7 @@ pub trait World {
 
         files.sort_by(|(_, p1, m1), (_, p2, m2)| {
             // masters go before non-masters, then older plugins before newer
-            p2.is_master().cmp(&p1.is_master()).then(m1.cmp(&m2))
+            p2.is_master().cmp(&p1.is_master()).then(m1.cmp(m2))
         });
 
         Ok(files.into_iter().map(|(a, b, _)| (a, b)).collect())

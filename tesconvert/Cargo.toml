@@ -1,17 +1,17 @@
 [package]
 name = "tesconvert"
 version = "0.1.0"
-authors = ["descawed <descawed@gmail.com>"]
-edition = "2018"
+authors = ["descawed <tesutil@descawed.com>"]
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tesutil = { path = "../tesutil" }
-clap = "2.33"
+clap = "3.2"
 anyhow = "1.0"
-num = "0.3"
-rust-ini = "0.15"
+num = "0.4"
+rust-ini = "0.18"
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.7"
+winreg = "0.10"

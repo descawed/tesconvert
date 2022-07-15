@@ -117,7 +117,7 @@ pub struct PlayerData {
 
 impl PlayerData {
     pub fn birthsign(&self) -> Option<&str> {
-        self.birthsign.as_ref().map(String::as_str)
+        self.birthsign.as_deref()
     }
 }
 

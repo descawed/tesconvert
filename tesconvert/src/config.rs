@@ -3,9 +3,9 @@ use std::fs;
 use std::ops::{Add, Div};
 use std::path::Path;
 
-use anyhow::*;
+use anyhow::{Context, Result};
 use clap::Result as ClapResult;
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{App, Arg, SubCommand};
 use ini::Ini;
 use num::{Float, One};
 
@@ -95,13 +95,13 @@ pub struct Config {
 impl Config {
     fn get(maybe_options: Option<Vec<&str>>, safe: bool) -> ClapResult<Config> {
         let app = App::new("tesconvert")
-            .author("descawed <descawed@gmail.com>")
+            .author("descawed <tesutil@descawed.com>")
             .version("0.1")
             .about("Converts characters between Elder Scrolls games")
-            .setting(AppSettings::SubcommandRequired)
+            .subcommand_required(true)
             .arg(
                 Arg::with_name("mw_path")
-                    .short("m")
+                    .short('m')
                     .long("morrowind-path")
                     .takes_value(true)
                     .value_name("PATH")
@@ -109,7 +109,7 @@ impl Config {
             )
             .arg(
                 Arg::with_name("ob_path")
-                    .short("o")
+                    .short('o')
                     .long("oblivion-path")
                     .takes_value(true)
                     .value_name("PATH")
@@ -117,7 +117,7 @@ impl Config {
             )
             .arg(
                 Arg::with_name("combine")
-                    .short("c")
+                    .short('c')
                     .long("combine")
                     .takes_value(true)
                     .value_name("STRATEGY")
@@ -160,8 +160,7 @@ impl Config {
             _ => unreachable!(), // the match is exhaustive even without this arm, but the compiler doesn't understand that
         };
 
-        let (sub_command, sub_matches) = matches.subcommand();
-        let sub_matches = sub_matches.unwrap();
+        let (sub_command, sub_matches) = matches.subcommand().unwrap();
 
         Ok(Config {
             command: match sub_command {

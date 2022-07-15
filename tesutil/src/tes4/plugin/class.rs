@@ -263,14 +263,14 @@ impl Class {
     /// Fails if an I/O error occurs
     pub fn write_custom<T: Write>(&self, mut f: T) -> Result<(), TesError> {
         for attribute in self.primary_attributes.iter() {
-            serialize!(<Attribute as Enum<()>>::to_usize(*attribute) as u32 => f)?;
+            serialize!(<Attribute as Enum>::into_usize(*attribute) as u32 => f)?;
         }
 
-        serialize!(<Specialization as Enum<()>>::to_usize(self.specialization) as u32 => f)?;
+        serialize!(<Specialization as Enum>::into_usize(self.specialization) as u32 => f)?;
 
         for skill in self.major_skills.iter() {
             let av: ActorValue = (*skill).into();
-            serialize!(<ActorValue as Enum<()>>::to_usize(av) as u32 => f)?;
+            serialize!(<ActorValue as Enum>::into_usize(av) as u32 => f)?;
         }
 
         let mut class_flags = ClassFlags::empty();
