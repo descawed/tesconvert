@@ -5,8 +5,9 @@ use super::Field;
 use crate::TesError;
 
 /// Initialization status of a lazy-loaded record
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub enum RecordStatus {
+    #[default]
     Initialized,
     Finalized,
     Failed,

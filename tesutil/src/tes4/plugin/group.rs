@@ -170,7 +170,8 @@ impl Group {
                     groups.push(group);
                 }
             } else {
-                let record = Tes4Record::read_lazy_with_name(&mut f, name)?;
+                f.seek(SeekFrom::Current(-4))?;
+                let record = Tes4Record::read(&mut f)?;
                 records.push(Arc::new(RwLock::new(record)));
             }
             let end = f.seek(SeekFrom::Current(0))?;

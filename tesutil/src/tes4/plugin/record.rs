@@ -6,7 +6,7 @@ use super::FormId;
 use crate::plugin::*;
 use crate::*;
 
-use binrw::{BinRead, BinReaderExt};
+use binrw::{binrw, BinReaderExt, BinWriterExt};
 
 use bitflags::bitflags;
 
@@ -30,6 +30,7 @@ macro_rules! flag_property {
 }
 
 bitflags! {
+    #[derive(Default)]
     struct RecordFlags: u32 {
         const MASTER = 0x00001;
         const DELETED = 0x00020;
@@ -48,17 +49,6 @@ bitflags! {
 
 const COMPRESSION_LEVEL: u32 = 6;
 
-#[derive(BinRead)]
-struct RawTes4Record {
-    size: u32,
-    #[br(try_map = |f| RecordFlags::from_bits(f).ok_or("Invalid record flags"))]
-    flags: RecordFlags,
-    form_id: u32,
-    vcs_info: u32,
-    #[br(count = size)]
-    data: Vec<u8>,
-}
-
 /// A game object in a plugin
 ///
 /// A record represents an object in the game, such as an NPC, container, global variable, etc.
@@ -70,16 +60,30 @@ struct RawTes4Record {
 /// would be cumbersome to have to explicitly clone these everywhere.
 ///
 /// [`Field::new`]: #method.new
-#[derive(Debug)]
+#[binrw]
+#[derive(Debug, Default)]
 pub struct Tes4Record {
+    #[br(assert(name != *b"GRUP"))]
     name: [u8; 4],
+    #[br(temp)]
+    #[bw(calc = raw_data.len() as u32)]
+    size: u32,
+    #[br(try_map = |f| RecordFlags::from_bits(f).ok_or("Invalid record flags"))]
+    #[bw(map = |f| f.bits)]
     flags: RecordFlags,
+    #[br(map = |f| FormId(f))]
+    #[bw(map = |f| f.0)]
     form_id: FormId,
     vcs_info: u32,
+    #[brw(ignore)]
     status: RecordStatus,
+    #[br(count = size)]
     raw_data: Vec<u8>,
+    #[brw(ignore)]
     changed: bool,
+    #[brw(ignore)]
     fields: Vec<Tes4Field>,
+    #[brw(ignore)]
     groups: Vec<Group>,
 }
 
@@ -108,14 +112,7 @@ impl Record<Tes4Field> for Tes4Record {
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
     fn read_lazy<T: Read + Seek>(mut f: T) -> Result<Tes4Record, TesError> {
-        let mut name = [0u8; 4];
-        f.read_exact(&mut name)?;
-
-        if name == *b"GRUP" {
-            return Err(decode_failed("Expected record, found group"));
-        }
-
-        Tes4Record::read_lazy_with_name(f, name)
+        Ok(f.read_le()?)
     }
 
     /// Returns a reference to the record name
@@ -213,14 +210,8 @@ impl Record<Tes4Field> for Tes4Record {
     /// [`Seek`]: https://doc.rust-lang.org/std/io/trait.Seek.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     fn write<T: Write + Seek>(&self, f: &mut T) -> Result<(), TesError> {
-        f.write_exact(&self.name)?;
-
         if !self.changed {
-            f.write_exact(&(self.raw_data.len() as u32).to_le_bytes())?;
-            f.write_exact(&self.flags.bits.to_le_bytes())?;
-            f.write_exact(&self.form_id.0.to_le_bytes())?;
-            f.write_exact(&self.vcs_info.to_le_bytes())?;
-            f.write_exact(&self.raw_data)?;
+            f.write_le(&self)?;
         } else {
             let size = self.field_size();
 
@@ -234,6 +225,10 @@ impl Record<Tes4Field> for Tes4Record {
                 });
             }
 
+            // we can't write ourselves out with modifying our raw_data (which would require this method
+            // to take &mut self) or making a new record, so we just write our fields out manually
+            f.write_le(&self.name)?;
+
             if self.flags.contains(RecordFlags::COMPRESSED) {
                 let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
                 for field in self.fields.iter() {
@@ -246,17 +241,17 @@ impl Record<Tes4Field> for Tes4Record {
                 let mut comp_buf: Vec<u8> = vec![];
                 encoder.read_to_end(&mut comp_buf)?;
 
-                f.write_exact(&(comp_buf.len() as u32).to_le_bytes())?;
-                f.write_exact(&self.flags.bits.to_le_bytes())?;
-                f.write_exact(&self.form_id.0.to_le_bytes())?;
-                f.write_exact(&self.vcs_info.to_le_bytes())?;
-                f.write_exact(&(size as u32).to_le_bytes())?;
-                f.write_exact(&comp_buf)?;
+                f.write_le(&(comp_buf.len() as u32))?;
+                f.write_le(&self.flags.bits)?;
+                f.write_le(&self.form_id.0)?;
+                f.write_le(&self.vcs_info)?;
+                f.write_le(&(size as u32))?;
+                f.write_le(&comp_buf)?;
             } else {
-                f.write_exact(&(size as u32).to_le_bytes())?;
-                f.write_exact(&self.flags.bits.to_le_bytes())?;
-                f.write_exact(&self.form_id.0.to_le_bytes())?;
-                f.write_exact(&self.vcs_info.to_le_bytes())?;
+                f.write_le(&(size as u32))?;
+                f.write_le(&self.flags.bits)?;
+                f.write_le(&self.form_id.0)?;
+                f.write_le(&self.vcs_info)?;
 
                 for field in self.fields.iter() {
                     field.write(&mut *f)?;
@@ -280,48 +275,8 @@ impl Tes4Record {
     pub fn new(name: &[u8; 4]) -> Tes4Record {
         Tes4Record {
             name: *name,
-            flags: RecordFlags::empty(),
-            form_id: FormId(0),
-            vcs_info: 0,
-            status: RecordStatus::Finalized,
-            raw_data: vec![],
-            changed: true,
-            fields: vec![],
-            groups: vec![],
+            ..Default::default()
         }
-    }
-
-    /// Reads a record from a binary stream with the name already provided
-    ///
-    /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
-    /// On success, this function returns a `Record`. This function takes the record `name` instead
-    /// of reading it because the caller must have already verified that this is a record and not
-    /// a [`Group`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if an I/O error occurs.
-    ///
-    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    /// [`Group`']: struct.Group.html
-    pub fn read_lazy_with_name<T: Read + Seek>(
-        mut f: T,
-        name: [u8; 4],
-    ) -> Result<Tes4Record, TesError> {
-        let raw: RawTes4Record = f.read_le()?;
-
-        Ok(Tes4Record {
-            name,
-            flags: raw.flags,
-            form_id: FormId(raw.form_id),
-            vcs_info: raw.vcs_info,
-            status: RecordStatus::Initialized,
-            raw_data: raw.data,
-            changed: false,
-            fields: vec![],
-            groups: vec![],
-        })
     }
 
     fn require_finalized(&self) {
