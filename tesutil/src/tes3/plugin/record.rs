@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::mem::size_of;
 use std::str;
 
@@ -58,7 +58,7 @@ impl IntoIterator for Tes3Record {
 }
 
 impl Record<Tes3Field> for Tes3Record {
-    fn read_lazy<T: Read>(mut f: T) -> Result<Tes3Record, TesError> {
+    fn read_lazy<T: Read + Seek>(mut f: T) -> Result<Tes3Record, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 

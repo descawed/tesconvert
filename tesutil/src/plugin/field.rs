@@ -139,8 +139,7 @@ pub trait Field: Sized {
     /// [`PluginError::DecodeFailed`]: enum.PluginError.html#variant.DecodeFailed
     // FIXME: the below string functions will fail on non-English versions of the game
     fn get_string(&self) -> Result<&str, TesError> {
-        str::from_utf8(self.get())
-            .map_err(|e| decode_failed_because("failed to decode string", e))
+        str::from_utf8(self.get()).map_err(|e| decode_failed_because("failed to decode string", e))
     }
 
     /// Sets the field's data from a string

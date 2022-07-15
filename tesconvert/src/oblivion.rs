@@ -7,7 +7,7 @@ use tesutil::tes4;
 use tesutil::tes4::Tes4World;
 use tesutil::EffectRange;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 #[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]

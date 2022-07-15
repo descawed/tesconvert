@@ -90,11 +90,13 @@ impl FormChange for ActorChange {
     fn read(record: &ChangeRecord) -> Result<ActorChange, TesError> {
         let change_type = record.change_type();
         if change_type != ChangeType::Npc && change_type != ChangeType::Creature {
-            return Err(decode_failed("ActorChange expects an NPC or creature change record"));
+            return Err(decode_failed(
+                "ActorChange expects an NPC or creature change record",
+            ));
         }
 
-        let change_flags =
-            ActorChangeFlags::from_bits(record.flags()).ok_or(decode_failed("Invalid actor change flags"))?;
+        let change_flags = ActorChangeFlags::from_bits(record.flags())
+            .ok_or_else(|| decode_failed("Invalid actor change flags"))?;
 
         let mut actor_change = ActorChange {
             change_type,
@@ -129,9 +131,8 @@ impl FormChange for ActorChange {
 
         if change_flags.contains(ActorChangeFlags::BASE_DATA) {
             actor_change.base = Some(ActorBase {
-                flags: ActorFlags::from_bits(extract!(reader as u32)?).ok_or_else(|| {
-                    io_error(decode_failed("Invalid actor flags"))
-                })?,
+                flags: ActorFlags::from_bits(extract!(reader as u32)?)
+                    .ok_or_else(|| io_error(decode_failed("Invalid actor flags")))?,
                 magicka: extract!(reader as u16)?,
                 fatigue: extract!(reader as u16)?,
                 gold: extract!(reader as u16)?,
@@ -372,10 +373,13 @@ impl ActorChange {
 mod tests {
     use super::*;
     use crate::tes4::save::*;
+    use std::io::Cursor;
 
     #[test]
     fn read_actor_change() {
-        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut record_ref = TEST_SAVE.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let save = Save::read(cursor).unwrap();
         let player = save.get_change_record(FORM_PLAYER).unwrap();
         let actor_change = ActorChange::read(player).unwrap();
         assert_eq!(

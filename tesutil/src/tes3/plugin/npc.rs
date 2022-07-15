@@ -357,27 +357,24 @@ impl Form for Npc {
                         let cell_field = Some(String::from(field.get_zstring()?));
                         match last_package {
                             Package::Escort { ref mut cell, .. } => match *cell {
-                                Some(_) => {
-                                    return Err(decode_failed("Extraneous CNDT field"))
-                                }
+                                Some(_) => return Err(decode_failed("Extraneous CNDT field")),
                                 None => *cell = cell_field,
                             },
                             Package::Follow { ref mut cell, .. } => match *cell {
-                                Some(_) => {
-                                    return Err(decode_failed("Extraneous CNDT field"))
-                                }
+                                Some(_) => return Err(decode_failed("Extraneous CNDT field")),
                                 None => *cell = cell_field,
                             },
-                            _ => {
-                                return Err(decode_failed("Orphaned CNDT field"))
-                            }
+                            _ => return Err(decode_failed("Orphaned CNDT field")),
                         }
                     } else {
                         return Err(decode_failed("Orphaned CNDT field"));
                     }
                 }
                 _ => {
-                    return Err(decode_failed(format!("Unexpected field {}", field.name_as_str())))
+                    return Err(decode_failed(format!(
+                        "Unexpected field {}",
+                        field.name_as_str()
+                    )))
                 }
             }
         }
@@ -464,12 +461,15 @@ impl Npc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     static NPC_RECORD: &[u8] = include_bytes!("test/npc_record.bin");
 
     #[test]
     fn parse_record() {
-        let record = Tes3Record::read(&mut NPC_RECORD.as_ref()).unwrap();
+        let mut record_ref = NPC_RECORD.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let record = Tes3Record::read(cursor).unwrap();
         let npc = Npc::read(&record).unwrap();
         assert_eq!(npc.id, "player");
         assert_eq!(npc.name.unwrap(), "Cirfenath");

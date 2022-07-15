@@ -1059,10 +1059,13 @@ impl PlayerReferenceChange {
 mod tests {
     use super::*;
     use crate::tes4::save::{Save, TEST_SAVE};
+    use std::io::Cursor;
 
     #[test]
     fn read_player_ref_change() {
-        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut record_ref = TEST_SAVE.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let save = Save::read(cursor).unwrap();
         let player = save.get_change_record(FORM_PLAYER_REF).unwrap();
         let player_change = PlayerReferenceChange::read(player).unwrap();
         assert_eq!(player_change.name, "test");
@@ -1071,7 +1074,9 @@ mod tests {
 
     #[test]
     fn write_player_ref_change() {
-        let mut save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut record_ref = TEST_SAVE.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let mut save = Save::read(cursor).unwrap();
         let mut player = save.get_change_record_mut(FORM_PLAYER_REF).unwrap();
         let original = player.data().to_vec();
         let player_change = PlayerReferenceChange::read(player).unwrap();

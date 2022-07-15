@@ -82,7 +82,7 @@ impl Save {
     /// # Errors
     ///
     /// Fails if an I/O error occurs or if the save format is invalid.
-    pub fn read<T: Read>(mut f: T) -> Result<Save, TesError> {
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<Save, TesError> {
         let mut magic = [0u8; 12];
         f.read_exact(&mut magic)?;
         if magic != *b"TES4SAVEGAME" {
@@ -608,7 +608,9 @@ mod tests {
 
     #[test]
     fn read_save() {
-        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut record_ref = TEST_SAVE.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let save = Save::read(cursor).unwrap();
         assert_eq!(save.player_name, "test");
         assert_eq!(save.player_location, "Vilverin Canosel");
         assert_eq!(save.plugins.len(), 11);
@@ -616,7 +618,9 @@ mod tests {
 
     #[test]
     fn set_name() {
-        let mut save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut record_ref = TEST_SAVE.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let mut save = Save::read(cursor).unwrap();
         save.set_player_name(String::from("short name")).unwrap();
         save.set_player_name(
             String::from("name that is too long oh nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
@@ -625,7 +629,9 @@ mod tests {
 
     #[test]
     fn write_save() {
-        let save = Save::read(&mut TEST_SAVE.as_ref()).unwrap();
+        let mut record_ref = TEST_SAVE.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let save = Save::read(cursor).unwrap();
         let mut buf = vec![0u8; TEST_SAVE.len()];
         let cursor = Cursor::new(&mut buf);
         save.write(cursor).unwrap();

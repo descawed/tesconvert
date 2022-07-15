@@ -6,6 +6,8 @@ use super::FormId;
 use crate::plugin::*;
 use crate::*;
 
+use binrw::{BinRead, BinReaderExt};
+
 use bitflags::bitflags;
 
 use flate2::bufread::{ZlibDecoder, ZlibEncoder};
@@ -46,6 +48,17 @@ bitflags! {
 
 const COMPRESSION_LEVEL: u32 = 6;
 
+#[derive(BinRead)]
+struct RawTes4Record {
+    size: u32,
+    #[br(try_map = |f| RecordFlags::from_bits(f).ok_or("Invalid record flags"))]
+    flags: RecordFlags,
+    form_id: u32,
+    vcs_info: u32,
+    #[br(count = size)]
+    data: Vec<u8>,
+}
+
 /// A game object in a plugin
 ///
 /// A record represents an object in the game, such as an NPC, container, global variable, etc.
@@ -85,8 +98,7 @@ impl Record<Tes4Field> for Tes4Record {
     ///
     /// Reads a record from any type that implements [`Read`] or a mutable reference to such a type.
     /// On success, this function returns a `(Record, usize)`, where the `usize` is the number of
-    /// bytes read. This function takes the record `name` instead of reading it because the caller
-    /// must have already verified that this is a record and not a [`Group`].
+    /// bytes read.
     ///
     /// # Errors
     ///
@@ -95,7 +107,7 @@ impl Record<Tes4Field> for Tes4Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    fn read_lazy<T: Read>(mut f: T) -> Result<Tes4Record, TesError> {
+    fn read_lazy<T: Read + Seek>(mut f: T) -> Result<Tes4Record, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
@@ -293,29 +305,19 @@ impl Tes4Record {
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
     /// [`Group`']: struct.Group.html
-    pub fn read_lazy_with_name<T: Read>(mut f: T, name: [u8; 4]) -> Result<Tes4Record, TesError> {
-        let size = extract!(f as u32)? as usize;
-
-        let mut buf = [0u8; 4];
-        f.read_exact(&mut buf)?;
-
-        let flags = RecordFlags::from_bits(u32::from_le_bytes(buf))
-            .ok_or_else(|| decode_failed("Invalid record flags"))?;
-
-        let form_id = FormId(extract!(f as u32)?);
-        let vcs_info = extract!(f as u32)?;
-
-        let mut data = vec![0u8; size];
-        // read in the field data
-        f.read_exact(&mut data)?;
+    pub fn read_lazy_with_name<T: Read + Seek>(
+        mut f: T,
+        name: [u8; 4],
+    ) -> Result<Tes4Record, TesError> {
+        let raw: RawTes4Record = f.read_le()?;
 
         Ok(Tes4Record {
             name,
-            flags,
-            form_id,
-            vcs_info,
+            flags: raw.flags,
+            form_id: FormId(raw.form_id),
+            vcs_info: raw.vcs_info,
             status: RecordStatus::Initialized,
-            raw_data: data,
+            raw_data: raw.data,
             changed: false,
             fields: vec![],
             groups: vec![],
@@ -445,7 +447,7 @@ mod tests {
     #[test]
     fn read_record() {
         let data = b"GLOB\x21\0\0\0\0\0\0\0\x3a\0\0\0\0\0\0\0EDID\x0a\0TimeScale\0FNAM\x01\0sFLTV\x04\0\0\0\xf0\x41".to_vec();
-        let cursor = io::Cursor::new(data);
+        let cursor = Cursor::new(data);
         let mut record = Tes4Record::read_lazy(cursor).unwrap();
         record.finalize().unwrap();
         assert_eq!(record.name, *b"GLOB");

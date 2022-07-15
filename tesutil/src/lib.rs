@@ -194,6 +194,9 @@ pub enum TesError {
     /// Error parsing an INI file
     #[error(transparent)]
     IniError(#[from] ini::Error),
+    /// Error during binary data I/O
+    #[error(transparent)]
+    BinaryDataError(#[from] binrw::Error),
 }
 
 /// A concrete game object, as opposed to a generic record

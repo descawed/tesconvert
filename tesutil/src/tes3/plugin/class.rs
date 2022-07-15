@@ -168,12 +168,15 @@ impl Class {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     static CLASS_RECORD: &[u8] = include_bytes!("test/clas_record.bin");
 
     #[test]
     fn test_load() {
-        let record = Tes3Record::read(&mut CLASS_RECORD.as_ref()).unwrap();
+        let mut record_ref = CLASS_RECORD.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let record = Tes3Record::read(cursor).unwrap();
         let class = Class::read(&record).unwrap();
         assert_eq!(class.id, "Warrior");
         assert_eq!(class.name, "Warrior");
