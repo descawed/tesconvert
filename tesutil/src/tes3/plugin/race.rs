@@ -1,11 +1,12 @@
 use std::convert::TryFrom;
-use std::io::Read;
 
 use crate::tes3::{Skill, Tes3Field, Tes3Record};
 use crate::{
-    decode_failed, decode_failed_because, extract, extract_string, Attribute, Attributes, Field,
-    Form, Record, TesError,
+    decode_failed, decode_failed_because, read_string, Attribute, Attributes, Field, Form, Record,
+    TesError,
 };
+
+use binrw::BinReaderExt;
 
 const ID_LENGTH: usize = 32;
 
@@ -81,8 +82,8 @@ impl Form for Race {
                 b"RADT" => {
                     let mut reader = field.reader();
                     for skill in &mut race.skills {
-                        let skill_id = extract!(reader as i32)?;
-                        let bonus = extract!(reader as u32)?;
+                        let skill_id: i32 = reader.read_le()?;
+                        let bonus = reader.read_le()?;
                         if skill_id != -1 {
                             let enum_skill = Skill::try_from(skill_id as u8)
                                 .map_err(|e| decode_failed_because("Invalid skill value", e))?;
@@ -91,20 +92,20 @@ impl Form for Race {
                     }
 
                     for (_, (male_value, female_value)) in race.attributes.iter_mut() {
-                        *male_value = extract!(reader as u32)?;
-                        *female_value = extract!(reader as u32)?;
+                        *male_value = reader.read_le()?;
+                        *female_value = reader.read_le()?;
                     }
 
-                    race.height = (extract!(reader as f32)?, extract!(reader as f32)?);
-                    race.weight = (extract!(reader as f32)?, extract!(reader as f32)?);
+                    race.height = (reader.read_le()?, reader.read_le()?);
+                    race.weight = (reader.read_le()?, reader.read_le()?);
 
-                    let flags = extract!(reader as u32)?;
+                    let flags: u32 = reader.read_le()?;
                     race.is_playable = flags & 1 != 0;
                     race.is_beast_race = flags & 2 != 0;
                 }
                 b"NPCS" => race
                     .specials
-                    .push(extract_string(ID_LENGTH, &mut field.get())?),
+                    .push(read_string(ID_LENGTH, &mut field.get())?),
                 b"DESC" => race.description = Some(String::from(field.get_string()?)),
                 _ => {
                     return Err(decode_failed(format!(

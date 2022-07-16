@@ -1,4 +1,3 @@
-use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Arc, RwLock};
 
@@ -22,10 +21,10 @@ pub enum GroupKind {
 }
 
 impl GroupKind {
-    fn read<T: Read>(mut f: T) -> Result<GroupKind, TesError> {
+    fn read<T: Read + Seek>(mut f: T) -> Result<GroupKind, TesError> {
         let mut label = [0u8; 4];
         f.read_exact(&mut label)?;
-        match extract!(f as u32)? {
+        match f.read_le::<u32>()? {
             0 => Ok(GroupKind::Top(label)),
             1 => Ok(GroupKind::WorldChildren(u32::from_le_bytes(label))),
             2 => Ok(GroupKind::InteriorCellBlock(u32::from_le_bytes(label))),
@@ -64,53 +63,53 @@ impl GroupKind {
         }
     }
 
-    fn write<T: Write>(&self, mut f: T) -> io::Result<()> {
+    fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
         match *self {
             GroupKind::Top(label) => {
-                f.write_exact(&label)?;
-                serialize!(0u32 => f)?;
+                f.write_all(&label)?;
+                f.write_le(&0u32)?;
             }
             GroupKind::WorldChildren(id) => {
-                serialize!(id => f)?;
-                serialize!(1u32 => f)?;
+                f.write_le(&id)?;
+                f.write_le(&1u32)?;
             }
             GroupKind::InteriorCellBlock(num) => {
-                serialize!(num => f)?;
-                serialize!(2u32 => f)?;
+                f.write_le(&num)?;
+                f.write_le(&2u32)?;
             }
             GroupKind::InteriorCellSubBlock(num) => {
-                serialize!(num => f)?;
-                serialize!(3u32 => f)?;
+                f.write_le(&num)?;
+                f.write_le(&3u32)?;
             }
             GroupKind::ExteriorCellBlock(y, x) => {
-                serialize!(y => f)?;
-                serialize!(x => f)?;
-                serialize!(4u32 => f)?;
+                f.write_le(&y)?;
+                f.write_le(&x)?;
+                f.write_le(&4u32)?;
             }
             GroupKind::ExteriorCellSubBlock(y, x) => {
-                serialize!(y => f)?;
-                serialize!(x => f)?;
-                serialize!(5u32 => f)?;
+                f.write_le(&y)?;
+                f.write_le(&x)?;
+                f.write_le(&5u32)?;
             }
             GroupKind::CellChildren(id) => {
-                serialize!(id => f)?;
-                serialize!(6u32 => f)?;
+                f.write_le(&id)?;
+                f.write_le(&6u32)?;
             }
             GroupKind::TopicChildren(id) => {
-                serialize!(id => f)?;
-                serialize!(7u32 => f)?;
+                f.write_le(&id)?;
+                f.write_le(&7u32)?;
             }
             GroupKind::CellPersistentChildren(id) => {
-                serialize!(id => f)?;
-                serialize!(8u32 => f)?;
+                f.write_le(&id)?;
+                f.write_le(&8u32)?;
             }
             GroupKind::CellTemporaryChildren(id) => {
-                serialize!(id => f)?;
-                serialize!(9u32 => f)?;
+                f.write_le(&id)?;
+                f.write_le(&9u32)?;
             }
             GroupKind::CellVisibleDistantChildren(id) => {
-                serialize!(id => f)?;
-                serialize!(10u32 => f)?;
+                f.write_le(&id)?;
+                f.write_le(&10u32)?;
             }
         }
         Ok(())
@@ -149,11 +148,11 @@ impl Group {
     ///
     /// Fails if an I/O operation fails or if the group structure is not valid.
     pub fn read_without_name<T: Read + Seek>(mut f: &mut T) -> Result<Group, TesError> {
-        let full_size = extract!(f as u32)? as usize;
+        let full_size = f.read_le::<u32>()? as usize;
         // size includes this header, so subtract that
         let mut size = full_size - 20;
         let kind = GroupKind::read(&mut f)?;
-        let stamp = extract!(f as u32)?;
+        let stamp: u32 = f.read_le()?;
 
         let mut groups = vec![];
         let mut records: Vec<Arc<RwLock<Tes4Record>>> = vec![];
@@ -170,7 +169,8 @@ impl Group {
                     groups.push(group);
                 }
             } else {
-                let record = Tes4Record::read_lazy_with_name(&mut f, name)?;
+                f.seek(SeekFrom::Current(-4))?;
+                let record = Tes4Record::read_lazy(&mut f)?;
                 records.push(Arc::new(RwLock::new(record)));
             }
             let end = f.seek(SeekFrom::Current(0))?;
@@ -235,12 +235,12 @@ impl Group {
     //  beginning, which fails to compile. With `f: &mut T`, we can pass group.write(&mut *f), which
     //  ensures each recursive call sees the same type for T. Is there a better way?
     pub fn write<T: Write + Seek>(&self, f: &mut T) -> Result<(), TesError> {
-        f.write_exact(b"GRUP")?;
+        f.write_all(b"GRUP")?;
 
         let len_offset = f.seek(SeekFrom::Current(0))?;
-        serialize!(0u32 => f)?;
+        f.write_le(&0u32)?;
         self.kind.write(&mut *f)?;
-        serialize!(self.stamp => f)?;
+        f.write_le(&self.stamp)?;
 
         for record in &self.records {
             record.read().unwrap().write(&mut *f)?;
@@ -255,7 +255,7 @@ impl Group {
         f.seek(SeekFrom::Start(len_offset))?;
         // 4 = GRUP characters
         let total_size = (end_offset - len_offset) + 4;
-        serialize!(total_size as u32 => f)?;
+        f.write_le(&(total_size as u32))?;
         f.seek(SeekFrom::Start(end_offset))?; // return to where we were
 
         Ok(())

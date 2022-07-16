@@ -1,12 +1,12 @@
 use std::convert::TryFrom;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 
 use crate::tes4::{ActorValue, FormId, MagicEffectType, Tes4Field, Tes4Record, MAGIC_EFFECTS};
 use crate::{
-    decode_failed, decode_failed_because, extract, serialize, EffectRange, Field, Form,
-    MagicSchool, Record, TesError, WriteExact,
+    decode_failed, decode_failed_because, EffectRange, Field, Form, MagicSchool, Record, TesError,
 };
 
+use binrw::{BinReaderExt, BinWriterExt};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -337,12 +337,12 @@ impl Form for Spell {
                 }
                 b"SPIT" => {
                     let mut reader = field.reader();
-                    spell.spell_type = SpellType::try_from(extract!(reader as u32)? as u8)
+                    spell.spell_type = SpellType::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid spell type", e))?;
-                    spell.cost = extract!(reader as u32)?;
-                    spell.level = SpellLevel::try_from(extract!(reader as u32)? as u8)
+                    spell.cost = reader.read_le()?;
+                    spell.level = SpellLevel::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid spell level", e))?;
-                    spell.flags = SpellFlags::from_bits(extract!(reader as u32)? as u8)
+                    spell.flags = SpellFlags::from_bits(reader.read_le::<u32>()? as u8)
                         .ok_or_else(|| decode_failed("Invalid spell flags"))?;
                 }
                 b"EFID" => (), // the effect ID is also contained in the EFIT field, so we'll just get it from there
@@ -356,12 +356,12 @@ impl Form for Spell {
                                 decode_failed(format!("Unexpected effect ID {:?}", id))
                             })?
                         },
-                        magnitude: extract!(reader as u32)?,
-                        area: extract!(reader as u32)?,
-                        duration: extract!(reader as u32)?,
-                        range: EffectRange::try_from(extract!(reader as u32)? as u8)
+                        magnitude: reader.read_le()?,
+                        area: reader.read_le()?,
+                        duration: reader.read_le()?,
+                        range: EffectRange::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid effect range", e))?,
-                        actor_value: ActorValue::try_from(extract!(reader as u32)? as u8)
+                        actor_value: ActorValue::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid effect actor value", e))?,
                         script_effect: None,
                     })
@@ -370,12 +370,12 @@ impl Form for Spell {
                     if let Some(last_effect) = spell.effects.iter_mut().last() {
                         let mut reader = field.reader();
                         last_effect.script_effect = Some(ScriptEffect {
-                            script: FormId(extract!(reader as u32)?),
-                            school: MagicSchool::try_from(extract!(reader as u32)? as u8).map_err(
+                            script: FormId(reader.read_le()?),
+                            school: MagicSchool::try_from(reader.read_le::<u32>()? as u8).map_err(
                                 |e| decode_failed_because("Invalid script effect magic school", e),
                             )?,
                             visual_effect: {
-                                let id = extract!(reader as u32)?;
+                                let id: u32 = reader.read_le()?;
                                 if id == 0 {
                                     None
                                 } else {
@@ -385,7 +385,7 @@ impl Form for Spell {
                                     })?)
                                 }
                             },
-                            is_hostile: extract!(reader as u32)? & 1 != 0, // other "flag" bits are garbage?
+                            is_hostile: reader.read_le::<u32>()? & 1 != 0, // other "flag" bits are garbage?
                             name: String::new(),
                         });
                     } else {
@@ -418,14 +418,14 @@ impl Form for Spell {
         }
 
         let mut buf = Vec::with_capacity(16);
-        let writer = &mut buf;
+        let mut writer = Cursor::new(&mut buf);
         let spell_type: u8 = self.spell_type.into();
         let spell_level: u8 = self.level.into();
 
-        serialize!(spell_type as u32 => writer)?;
-        serialize!(self.cost => writer)?;
-        serialize!(spell_level as u32 => writer)?;
-        serialize!(self.flags.bits => writer)?;
+        writer.write_le(&(spell_type as u32))?;
+        writer.write_le(&self.cost)?;
+        writer.write_le(&(spell_level as u32))?;
+        writer.write_le(&self.flags.bits)?;
 
         record.add_field(Tes4Field::new(b"SPIT", buf)?);
 
@@ -434,34 +434,34 @@ impl Form for Spell {
             record.add_field(Tes4Field::new(b"EFID", effect_id.to_vec())?);
 
             let mut buf = Vec::with_capacity(24);
-            let writer = &mut buf;
+            let mut writer = Cursor::new(&mut buf);
             let range: u8 = effect.range.into();
             let av: u8 = effect.actor_value.into();
-            writer.write_exact(&effect_id)?;
-            serialize!(effect.magnitude => writer)?;
-            serialize!(effect.area => writer)?;
-            serialize!(effect.duration => writer)?;
-            serialize!(range as u32 => writer)?;
-            serialize!(av as u32 => writer)?;
+            writer.write_all(&effect_id)?;
+            writer.write_le(&effect.magnitude)?;
+            writer.write_le(&effect.area)?;
+            writer.write_le(&effect.duration)?;
+            writer.write_le(&(range as u32))?;
+            writer.write_le(&(av as u32))?;
 
             record.add_field(Tes4Field::new(b"EFIT", buf)?);
 
             if let Some(ref script_effect) = effect.script_effect {
                 let mut buf = Vec::with_capacity(16);
-                let writer = &mut buf;
+                let mut writer = Cursor::new(&mut buf);
                 let school: u8 = script_effect.school.into();
                 let flags = if script_effect.is_hostile { 1u32 } else { 0 };
-                serialize!(script_effect.script.0 => writer)?;
-                serialize!(school as u32 => writer)?;
+                writer.write_le(&script_effect.script.0)?;
+                writer.write_le(&(school as u32))?;
                 match script_effect.visual_effect {
                     Some(ref effect) => {
-                        writer.write_exact(&effect.id())?;
+                        writer.write_all(&effect.id())?;
                     }
                     None => {
-                        serialize!(0u32 => writer)?;
+                        writer.write_le(&0u32)?;
                     }
                 }
-                serialize!(flags => writer)?;
+                writer.write_le(&flags)?;
 
                 record.add_field(Tes4Field::new(b"SCIT", buf)?);
                 record.add_field(Tes4Field::new_zstring(b"FULL", script_effect.name.clone())?);

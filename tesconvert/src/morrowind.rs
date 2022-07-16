@@ -14,7 +14,7 @@ use tesutil::{Attribute, Attributes, Form, TesError};
 use crate::config::*;
 use crate::oblivion::Oblivion;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 #[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]

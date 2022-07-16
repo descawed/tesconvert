@@ -5,6 +5,7 @@ use crate::tes4::plugin::*;
 use crate::tes4::{ActorValue, Skill};
 use crate::Form;
 
+use binrw::{BinReaderExt, BinWriterExt};
 use bitflags::bitflags;
 
 bitflags! {
@@ -75,28 +76,28 @@ impl Form for Class {
                 b"DESC" => class.description = Some(String::from(field.get_zstring()?)),
                 b"ICON" => class.icon = Some(String::from(field.get_zstring()?)),
                 b"DATA" => {
-                    let reader = &mut field.get();
+                    let mut reader = field.reader();
                     for attr in &mut class.primary_attributes {
-                        *attr = ActorValue::try_from(extract!(reader as u32)? as u8)
+                        *attr = ActorValue::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid attribute value", e))?
                             .try_into()?;
                     }
-                    class.specialization = Specialization::try_from(extract!(reader as u32)? as u8)
+                    class.specialization = Specialization::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid specialization", e))?;
                     for skill in class.major_skills.iter_mut() {
-                        *skill = ActorValue::try_from(extract!(reader as u32)? as u8)
+                        *skill = ActorValue::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid skill value", e))?
                             .try_into()?;
                     }
-                    let class_flags = ClassFlags::from_bits(extract!(reader as u32)?)
+                    let class_flags = ClassFlags::from_bits(reader.read_le()?)
                         .ok_or_else(|| decode_failed("Invalid class flags"))?;
                     class.is_playable = class_flags.contains(ClassFlags::PLAYABLE);
                     class.is_guard = class_flags.contains(ClassFlags::GUARD);
-                    class.services = ServiceFlags::from_bits(extract!(reader as u32)?)
+                    class.services = ServiceFlags::from_bits(reader.read_le()?)
                         .ok_or_else(|| decode_failed("Invalid service flags"))?;
-                    class.skill_trained = Skill::try_from(extract!(reader as u8)?)
+                    class.skill_trained = Skill::try_from(reader.read_le::<u8>()?)
                         .map_err(|e| decode_failed_because("Invalid training skill value", e))?;
-                    class.max_training_level = extract!(reader as u8)?;
+                    class.max_training_level = reader.read_le()?;
                     // 2 additional unused bytes at the end
                 }
                 _ => {
@@ -143,37 +144,37 @@ impl Class {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn read_custom<T: Read>(mut f: T) -> Result<Class, TesError> {
+    pub fn read_custom<T: Read + Seek>(mut f: T) -> Result<Class, TesError> {
         let mut primary_attributes = [Attribute::Strength; 2];
         for attr in &mut primary_attributes {
-            *attr = ActorValue::try_from(extract!(f as u32)? as u8)
+            *attr = ActorValue::try_from(f.read_le::<u32>()? as u8)
                 .map_err(|e| decode_failed_because("Invalid attribute value", e))?
                 .try_into()?;
         }
 
-        let specialization = Specialization::try_from(extract!(f as u32)? as u8)
+        let specialization = Specialization::try_from(f.read_le::<u32>()? as u8)
             .map_err(|e| decode_failed_because("Invalid specialization", e))?;
 
         let mut major_skills = [Skill::Acrobatics; 7];
         for skill in &mut major_skills {
-            *skill = ActorValue::try_from(extract!(f as u32)? as u8)
+            *skill = ActorValue::try_from(f.read_le::<u32>()? as u8)
                 .map_err(|e| decode_failed_because("Invalid skill value", e))?
                 .try_into()?;
         }
 
-        let flags = ClassFlags::from_bits(extract!(f as u32)?)
+        let flags = ClassFlags::from_bits(f.read_le()?)
             .ok_or_else(|| decode_failed("Invalid class flags"))?;
         let is_playable = flags.contains(ClassFlags::PLAYABLE);
         let is_guard = flags.contains(ClassFlags::GUARD);
 
-        let services = ServiceFlags::from_bits(extract!(f as u32)?)
+        let services = ServiceFlags::from_bits(f.read_le()?)
             .ok_or_else(|| decode_failed("Invalid service flags"))?;
-        let skill_trained = Skill::try_from(extract!(f as u8)?)
+        let skill_trained = Skill::try_from(f.read_le::<u8>()?)
             .map_err(|e| decode_failed_because("Invalid training skill value", e))?;
-        let max_training_level = extract!(f as u8)?;
-        extract!(f as u16)?; // dummy
-        let name = extract_bstring(&mut f)?;
-        let icon = Some(extract_bstring(&mut f)?);
+        let max_training_level = f.read_le()?;
+        f.seek(SeekFrom::Current(2))?; // dummy
+        let name = read_bstring(&mut f)?;
+        let icon = Some(read_bstring(&mut f)?);
 
         Ok(Class {
             editor_id: None,
@@ -261,16 +262,16 @@ impl Class {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn write_custom<T: Write>(&self, mut f: T) -> Result<(), TesError> {
+    pub fn write_custom<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
         for attribute in self.primary_attributes.iter() {
-            serialize!(<Attribute as Enum>::into_usize(*attribute) as u32 => f)?;
+            f.write_le(&(<Attribute as Enum>::into_usize(*attribute) as u32))?;
         }
 
-        serialize!(<Specialization as Enum>::into_usize(self.specialization) as u32 => f)?;
+        f.write_le(&(<Specialization as Enum>::into_usize(self.specialization) as u32))?;
 
         for skill in self.major_skills.iter() {
             let av: ActorValue = (*skill).into();
-            serialize!(<ActorValue as Enum>::into_usize(av) as u32 => f)?;
+            f.write_le(&(<ActorValue as Enum>::into_usize(av) as u32))?;
         }
 
         let mut class_flags = ClassFlags::empty();
@@ -281,13 +282,13 @@ impl Class {
             class_flags |= ClassFlags::GUARD;
         }
 
-        serialize!(class_flags.bits => f)?;
-        serialize!(self.services.bits => f)?;
-        serialize!(self.skill_trained as u8 => f)?;
-        serialize!(self.max_training_level => f)?;
-        serialize!(0u16 => f)?;
-        serialize_bstring(&mut f, &self.name)?;
-        serialize_bstring(
+        f.write_le(&class_flags.bits)?;
+        f.write_le(&self.services.bits)?;
+        f.write_le(&(self.skill_trained as u8))?;
+        f.write_le(&self.max_training_level)?;
+        f.write_le(&0u16)?;
+        write_bstring(&mut f, &self.name)?;
+        write_bstring(
             &mut f,
             match self.icon.as_ref() {
                 Some(icon) => &icon[..],
@@ -302,12 +303,15 @@ impl Class {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     static CLASS_RECORD: &[u8] = include_bytes!("test/clas_record.bin");
 
     #[test]
     fn test_load() {
-        let record = Tes4Record::read(&mut CLASS_RECORD.as_ref()).unwrap();
+        let mut record_ref = CLASS_RECORD.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let record = Tes4Record::read(cursor).unwrap();
         let class = Class::read(&record).unwrap();
         assert_eq!(class.editor_id.unwrap(), "SE32Smith");
         assert_eq!(class.name, "Vitharn Smith");

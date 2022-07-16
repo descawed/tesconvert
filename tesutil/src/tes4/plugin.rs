@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Cursor, Read, Seek};
 use std::path::Path;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{FindForm, FormId};
 use crate::*;
+
+use binrw::BinReaderExt;
 
 mod field;
 pub use field::*;
@@ -115,10 +117,10 @@ impl Tes4Plugin {
             match field.name() {
                 b"HEDR" => {
                     let data = field.consume();
-                    let reader: &mut &[u8] = &mut data.as_ref();
-                    plugin.version = extract!(reader as f32)?;
-                    extract!(reader as u32)?; // number of records and groups; not needed
-                    plugin.next_form_id = extract!(reader as u32)?;
+                    let mut reader = Cursor::new(&data);
+                    plugin.version = reader.read_le()?;
+                    reader.seek(SeekFrom::Current(4))?; // number of records and groups; not needed
+                    plugin.next_form_id = reader.read_le()?;
                 }
                 b"OFST" => plugin.offsets = Some(field),
                 b"DELE" => plugin.deleted = Some(field),

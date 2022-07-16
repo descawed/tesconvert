@@ -1,10 +1,12 @@
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Seek, Write};
 use std::mem::size_of;
 use std::str;
 
 use super::field::Tes3Field;
 use crate::plugin::*;
 use crate::*;
+
+use binrw::BinReaderExt;
 
 const FLAG_DELETED: u32 = 0x0020;
 const FLAG_PERSISTENT: u32 = 0x0400;
@@ -58,19 +60,14 @@ impl IntoIterator for Tes3Record {
 }
 
 impl Record<Tes3Field> for Tes3Record {
-    fn read_lazy<T: Read>(mut f: T) -> Result<Tes3Record, TesError> {
+    fn read_lazy<T: Read + Seek>(mut f: T) -> Result<Tes3Record, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
-        let size = extract!(f as u32)? as usize;
+        let size = f.read_le::<u32>()? as usize;
 
-        let mut buf = [0u8; 4];
-        // the next field is useless, but skipping bytes is apparently needlessly complicated
-        // via the Read trait? so we'll just do a dummy read into buf and then do the real read
-        f.read_exact(&mut buf)?;
-        f.read_exact(&mut buf)?;
-
-        let flags = u32::from_le_bytes(buf);
+        f.seek(SeekFrom::Current(4))?;
+        let flags: u32 = f.read_le()?;
 
         let mut data = vec![0u8; size];
         // read in the field data
@@ -101,7 +98,7 @@ impl Record<Tes3Field> for Tes3Record {
     fn finalize(&mut self) -> Result<(), TesError> {
         if self.status == RecordStatus::Initialized {
             let mut size = self.raw_data.len();
-            let mut reader: &mut &[u8] = &mut self.raw_data.as_ref();
+            let mut reader = Cursor::new(&self.raw_data);
             while size > 0 {
                 match Tes3Field::read(&mut reader) {
                     Ok(field) => {
@@ -157,7 +154,7 @@ impl Record<Tes3Field> for Tes3Record {
     /// Returns an error if an I/O error occurs.
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
-    fn write<T: Write>(&self, mut f: &mut T) -> Result<(), TesError> {
+    fn write<T: Write + Seek>(&self, mut f: &mut T) -> Result<(), TesError> {
         let flags = if self.is_deleted { FLAG_DELETED } else { 0 }
             | if self.is_persistent {
                 FLAG_PERSISTENT
@@ -171,13 +168,13 @@ impl Record<Tes3Field> for Tes3Record {
             }
             | if self.is_blocked { FLAG_BLOCKED } else { 0 };
 
-        f.write_exact(&self.name)?;
+        f.write_all(&self.name)?;
 
         if !self.changed {
-            f.write_exact(&(self.raw_data.len() as u32).to_le_bytes())?;
-            f.write_exact(b"\0\0\0\0")?; // dummy field
-            f.write_exact(&flags.to_le_bytes())?;
-            f.write_exact(&self.raw_data)?;
+            f.write_le(&(self.raw_data.len() as u32))?;
+            f.write_all(b"\0\0\0\0")?; // dummy field
+            f.write_le(&flags)?;
+            f.write_all(&self.raw_data)?;
         } else {
             let size = self.field_size();
 
@@ -189,9 +186,9 @@ impl Record<Tes3Field> for Tes3Record {
                 });
             }
 
-            f.write_exact(&(size as u32).to_le_bytes())?;
-            f.write_exact(b"\0\0\0\0")?; // dummy field
-            f.write_exact(&flags.to_le_bytes())?;
+            f.write_le(&(size as u32))?;
+            f.write_all(b"\0\0\0\0")?; // dummy field
+            f.write_le(&flags)?;
 
             for field in self.fields.iter() {
                 field.write(&mut f)?;

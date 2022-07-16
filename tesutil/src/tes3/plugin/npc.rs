@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Seek;
 
 use super::field::Tes3Field;
 use super::record::Tes3Record;
@@ -6,6 +7,7 @@ use crate::plugin::Field;
 use crate::tes3::Skills;
 use crate::*;
 
+use binrw::BinReaderExt;
 use bitflags::bitflags;
 
 bitflags! {
@@ -192,39 +194,38 @@ impl Form for Npc {
                 b"KNAM" => npc.hair = String::from(field.get_zstring()?),
                 b"SCRI" => npc.script = Some(String::from(field.get_zstring()?)),
                 b"NPDT" => {
-                    let mut data = field.get();
+                    let data = field.get();
                     let len = data.len();
-                    let reader = &mut data;
-                    npc.level = extract!(reader as u16)?;
+                    let mut reader = field.reader();
+                    npc.level = reader.read_le()?;
                     if len == 12 {
                         // auto-calculated; many fields are not present
-                        npc.disposition = extract!(reader as u8)?;
-                        npc.reputation = extract!(reader as u8)?;
-                        npc.rank = extract!(reader as u8)?;
+                        npc.disposition = reader.read_le()?;
+                        npc.reputation = reader.read_le()?;
+                        npc.rank = reader.read_le()?;
                         // UESP says these next 3 bytes are junk and OpenMW labels them as unknown,
                         // so we're going to ignore them
-                        let mut buf = [0u8; 3];
-                        reader.read_exact(&mut buf)?;
-                        npc.gold = extract!(reader as u32)?;
+                        reader.seek(SeekFrom::Current(3))?;
+                        npc.gold = reader.read_le()?;
                     } else {
                         // not auto-calculated; all fields are present
                         for attribute in npc.attributes.values_mut() {
-                            *attribute = extract!(reader as u8)?;
+                            *attribute = reader.read_le()?;
                         }
 
                         for skill in npc.skills.values_mut() {
-                            *skill = extract!(reader as u8)?;
+                            *skill = reader.read_le()?;
                         }
 
-                        npc.health = extract!(reader as u16)?;
-                        npc.magicka = extract!(reader as u16)?;
-                        npc.fatigue = extract!(reader as u16)?;
+                        npc.health = reader.read_le()?;
+                        npc.magicka = reader.read_le()?;
+                        npc.fatigue = reader.read_le()?;
 
-                        npc.disposition = extract!(reader as u8)?;
-                        npc.reputation = extract!(reader as u8)?;
-                        npc.rank = extract!(reader as u8)?;
-                        extract!(reader as u8)?; // skip dummy byte
-                        npc.gold = extract!(reader as u32)?;
+                        npc.disposition = reader.read_le()?;
+                        npc.reputation = reader.read_le()?;
+                        npc.rank = reader.read_le()?;
+                        reader.seek(SeekFrom::Current(1))?; // skip dummy byte
+                        npc.gold = reader.read_le()?;
                     }
                 }
                 b"FLAG" => {
@@ -235,41 +236,38 @@ impl Form for Npc {
                         })?
                 }
                 b"NPCO" => {
-                    let mut data = field.get();
-                    let mut reader = &mut data;
-                    let count = extract!(reader as u32)?;
-                    let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
+                    let mut reader = field.reader();
+                    let count = reader.read_le()?;
+                    let id = read_string(NPC_STRING_LENGTH, &mut reader)?;
                     npc.inventory.insert(id, count);
                 }
                 b"NPCS" => {
-                    let spell = extract_string(NPC_STRING_LENGTH, &mut field.get())
+                    let spell = read_string(NPC_STRING_LENGTH, &mut field.get())
                         .map_err(|e| decode_failed_because("Could not parse NPCS", e))?;
                     npc.spells.push(spell);
                 }
                 b"AIDT" => {
-                    let mut data = field.get();
-                    let reader = &mut data;
-                    npc.hello = extract!(reader as u16)?;
-                    npc.fight = extract!(reader as u8)?;
-                    npc.flee = extract!(reader as u8)?;
-                    npc.alarm = extract!(reader as u8)?;
-                    npc.ai_unknown1 = extract!(reader as u8)?;
-                    npc.ai_unknown2 = extract!(reader as u8)?;
-                    npc.ai_unknown3 = extract!(reader as u8)?;
+                    let mut reader = field.reader();
+                    npc.hello = reader.read_le()?;
+                    npc.fight = reader.read_le()?;
+                    npc.flee = reader.read_le()?;
+                    npc.alarm = reader.read_le()?;
+                    npc.ai_unknown1 = reader.read_le()?;
+                    npc.ai_unknown2 = reader.read_le()?;
+                    npc.ai_unknown3 = reader.read_le()?;
                     // according to UESP, the remaining flag bits are "filled with junk data",
                     // so we mask them out to prevent an error when reading the flags
-                    let flags = extract!(reader as u32)? & 0x3ffff;
+                    let flags = reader.read_le::<u32>()? & 0x3ffff;
                     npc.services = ServiceFlags::from_bits(flags).unwrap();
                 }
                 b"DODT" => {
-                    let mut data = field.get();
-                    let reader = &mut data;
-                    let pos_x = extract!(reader as f32)?;
-                    let pos_y = extract!(reader as f32)?;
-                    let pos_z = extract!(reader as f32)?;
-                    let rot_x = extract!(reader as f32)?;
-                    let rot_y = extract!(reader as f32)?;
-                    let rot_z = extract!(reader as f32)?;
+                    let mut reader = field.reader();
+                    let pos_x = reader.read_le()?;
+                    let pos_y = reader.read_le()?;
+                    let pos_z = reader.read_le()?;
+                    let rot_x = reader.read_le()?;
+                    let rot_y = reader.read_le()?;
+                    let rot_z = reader.read_le()?;
                     npc.destinations.push(Destination {
                         position: (pos_x, pos_y, pos_z),
                         rotation: (rot_x, rot_y, rot_z),
@@ -288,21 +286,19 @@ impl Form for Npc {
                     }
                 }
                 b"AI_A" => {
-                    let mut data = field.get();
-                    let mut reader = &mut data;
-                    npc.packages.push(Package::Activate(extract_string(
+                    let mut reader = field.reader();
+                    npc.packages.push(Package::Activate(read_string(
                         NPC_STRING_LENGTH,
                         &mut reader,
                     )?));
                 }
                 b"AI_E" => {
-                    let mut data = field.get();
-                    let mut reader = &mut data;
-                    let x = extract!(reader as f32)?;
-                    let y = extract!(reader as f32)?;
-                    let z = extract!(reader as f32)?;
-                    let duration = extract!(reader as u16)?;
-                    let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
+                    let mut reader = field.reader();
+                    let x = reader.read_le()?;
+                    let y = reader.read_le()?;
+                    let z = reader.read_le()?;
+                    let duration = reader.read_le()?;
+                    let id = read_string(NPC_STRING_LENGTH, &mut reader)?;
                     npc.packages.push(Package::Escort {
                         x,
                         y,
@@ -313,13 +309,12 @@ impl Form for Npc {
                     });
                 }
                 b"AI_F" => {
-                    let mut data = field.get();
-                    let mut reader = &mut data;
-                    let x = extract!(reader as f32)?;
-                    let y = extract!(reader as f32)?;
-                    let z = extract!(reader as f32)?;
-                    let duration = extract!(reader as u16)?;
-                    let id = extract_string(NPC_STRING_LENGTH, &mut reader)?;
+                    let mut reader = field.reader();
+                    let x = reader.read_le()?;
+                    let y = reader.read_le()?;
+                    let z = reader.read_le()?;
+                    let duration = reader.read_le()?;
+                    let id = read_string(NPC_STRING_LENGTH, &mut reader)?;
                     npc.packages.push(Package::Follow {
                         x,
                         y,
@@ -330,19 +325,17 @@ impl Form for Npc {
                     });
                 }
                 b"AI_T" => {
-                    let mut data = field.get();
-                    let reader = &mut data;
-                    let x = extract!(reader as f32)?;
-                    let y = extract!(reader as f32)?;
-                    let z = extract!(reader as f32)?;
+                    let mut reader = field.reader();
+                    let x = reader.read_le()?;
+                    let y = reader.read_le()?;
+                    let z = reader.read_le()?;
                     npc.packages.push(Package::Travel { x, y, z });
                 }
                 b"AI_W" => {
-                    let mut data = field.get();
-                    let reader = &mut data;
-                    let distance = extract!(reader as u16)?;
-                    let duration = extract!(reader as u16)?;
-                    let time_of_day = extract!(reader as u8)?;
+                    let mut reader = field.reader();
+                    let distance = reader.read_le()?;
+                    let duration = reader.read_le()?;
+                    let time_of_day = reader.read_le()?;
                     let mut idles = [0u8; 8];
                     reader.read_exact(&mut idles)?;
                     npc.packages.push(Package::Wander {
@@ -357,27 +350,24 @@ impl Form for Npc {
                         let cell_field = Some(String::from(field.get_zstring()?));
                         match last_package {
                             Package::Escort { ref mut cell, .. } => match *cell {
-                                Some(_) => {
-                                    return Err(decode_failed("Extraneous CNDT field"))
-                                }
+                                Some(_) => return Err(decode_failed("Extraneous CNDT field")),
                                 None => *cell = cell_field,
                             },
                             Package::Follow { ref mut cell, .. } => match *cell {
-                                Some(_) => {
-                                    return Err(decode_failed("Extraneous CNDT field"))
-                                }
+                                Some(_) => return Err(decode_failed("Extraneous CNDT field")),
                                 None => *cell = cell_field,
                             },
-                            _ => {
-                                return Err(decode_failed("Orphaned CNDT field"))
-                            }
+                            _ => return Err(decode_failed("Orphaned CNDT field")),
                         }
                     } else {
                         return Err(decode_failed("Orphaned CNDT field"));
                     }
                 }
                 _ => {
-                    return Err(decode_failed(format!("Unexpected field {}", field.name_as_str())))
+                    return Err(decode_failed(format!(
+                        "Unexpected field {}",
+                        field.name_as_str()
+                    )))
                 }
             }
         }
@@ -464,12 +454,15 @@ impl Npc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     static NPC_RECORD: &[u8] = include_bytes!("test/npc_record.bin");
 
     #[test]
     fn parse_record() {
-        let record = Tes3Record::read(&mut NPC_RECORD.as_ref()).unwrap();
+        let mut record_ref = NPC_RECORD.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let record = Tes3Record::read(cursor).unwrap();
         let npc = Npc::read(&record).unwrap();
         assert_eq!(npc.id, "player");
         assert_eq!(npc.name.unwrap(), "Cirfenath");

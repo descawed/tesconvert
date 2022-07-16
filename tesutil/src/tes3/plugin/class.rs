@@ -1,9 +1,9 @@
 use std::convert::TryFrom;
-use std::io::Read;
 
 use crate::tes3::plugin::*;
 use crate::tes3::{Skill, SkillType};
 
+use binrw::BinReaderExt;
 use bitflags::bitflags;
 
 bitflags! {
@@ -89,25 +89,25 @@ impl Form for Class {
                 b"FNAM" => class.name = String::from(field.get_zstring()?),
                 b"DESC" => class.description = Some(String::from(field.get_string()?)),
                 b"CLDT" => {
-                    let reader = &mut field.get();
+                    let mut reader = field.reader();
                     for attr in &mut class.primary_attributes {
-                        *attr = Attribute::try_from(extract!(reader as u32)? as u8)
+                        *attr = Attribute::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid attribute value", e))?;
                     }
-                    class.specialization = Specialization::try_from(extract!(reader as u32)? as u8)
+                    class.specialization = Specialization::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid specialization", e))?;
                     for (major, minor) in class
                         .major_skills
                         .iter_mut()
                         .zip(class.minor_skills.iter_mut())
                     {
-                        *minor = Skill::try_from(extract!(reader as u32)? as u8)
+                        *minor = Skill::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid skill value", e))?;
-                        *major = Skill::try_from(extract!(reader as u32)? as u8)
+                        *major = Skill::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid skill value", e))?;
                     }
-                    class.is_playable = extract!(reader as u32)? != 0;
-                    class.auto_calc_flags = AutoCalcFlags::from_bits(extract!(reader as u32)?)
+                    class.is_playable = reader.read_le::<u32>()? != 0;
+                    class.auto_calc_flags = AutoCalcFlags::from_bits(reader.read_le()?)
                         .ok_or_else(|| decode_failed("Invalid auto-calc flags"))?;
                 }
                 _ => {
@@ -168,12 +168,15 @@ impl Class {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     static CLASS_RECORD: &[u8] = include_bytes!("test/clas_record.bin");
 
     #[test]
     fn test_load() {
-        let record = Tes3Record::read(&mut CLASS_RECORD.as_ref()).unwrap();
+        let mut record_ref = CLASS_RECORD.as_ref();
+        let cursor = Cursor::new(&mut record_ref);
+        let record = Tes3Record::read(cursor).unwrap();
         let class = Class::read(&record).unwrap();
         assert_eq!(class.id, "Warrior");
         assert_eq!(class.name, "Warrior");

@@ -3,7 +3,10 @@ use crate::plugin::Field;
 use crate::tes3::Skills;
 use crate::Form;
 
+use binrw::{binrw, BinReaderExt};
+
 /// Information about the state of a resting player
+#[binrw]
 #[derive(Debug)]
 pub struct RestState {
     hours_left: i32,
@@ -13,6 +16,7 @@ pub struct RestState {
 }
 
 /// Player exterior location?
+#[binrw]
 #[derive(Debug)]
 pub struct ExteriorLocation {
     x: i32,
@@ -20,6 +24,7 @@ pub struct ExteriorLocation {
 }
 
 /// Honestly don't know what this is
+#[binrw]
 #[derive(Debug)]
 pub struct Lnam {
     // in my test, these had the exact same values as ENAM (above)
@@ -37,9 +42,11 @@ pub struct Faction {
 }
 
 /// Player animation data
+#[binrw]
 #[derive(Debug)]
 pub struct AnimationData {
     anim_group_index: i32,
+    #[br(count = 40)]
     unknown: Vec<u8>, // always 40
 }
 
@@ -147,49 +154,44 @@ impl Form for PlayerData {
                 b"PNAM" => {
                     let mut reader = field.reader();
 
-                    player_data.player_flags = extract!(reader as u32)?;
-                    player_data.level_progress = extract!(reader as u32)?;
+                    player_data.player_flags = reader.read_le()?;
+                    player_data.level_progress = reader.read_le()?;
 
                     for skill in player_data.skill_progress.values_mut() {
-                        *skill = extract!(reader as f32)?;
+                        *skill = reader.read_le()?;
                     }
 
                     for attribute in player_data.attribute_progress.values_mut() {
-                        *attribute = extract!(reader as u8)?;
+                        *attribute = reader.read_le()?;
                     }
 
-                    player_data.telekinesis_range_bonus = extract!(reader as i32)?;
-                    player_data.vision_bonus = extract!(reader as f32)?;
-                    player_data.detect_key_magnitude = extract!(reader as i32)?;
-                    player_data.detect_enchantment_magnitude = extract!(reader as i32)?;
-                    player_data.detect_animal_magnitude = extract!(reader as i32)?;
+                    player_data.telekinesis_range_bonus = reader.read_le()?;
+                    player_data.vision_bonus = reader.read_le()?;
+                    player_data.detect_key_magnitude = reader.read_le()?;
+                    player_data.detect_enchantment_magnitude = reader.read_le()?;
+                    player_data.detect_animal_magnitude = reader.read_le()?;
 
-                    player_data.mark_x = extract!(reader as f32)?;
-                    player_data.mark_y = extract!(reader as f32)?;
-                    player_data.mark_z = extract!(reader as f32)?;
-                    player_data.mark_rot = extract!(reader as f32)?;
-                    player_data.mark_grid_x = extract!(reader as i32)?;
-                    player_data.mark_grid_y = extract!(reader as i32)?;
+                    player_data.mark_x = reader.read_le()?;
+                    player_data.mark_y = reader.read_le()?;
+                    player_data.mark_z = reader.read_le()?;
+                    player_data.mark_rot = reader.read_le()?;
+                    player_data.mark_grid_x = reader.read_le()?;
+                    player_data.mark_grid_y = reader.read_le()?;
 
                     player_data.unknown1 = vec![0u8; 40];
                     reader.read_exact(player_data.unknown1.as_mut())?;
 
                     for specialization in player_data.spec_increases.values_mut() {
-                        *specialization = extract!(reader as u8)?;
+                        *specialization = reader.read_le()?;
                     }
 
-                    player_data.unknown2 = extract!(reader as u8)?;
+                    player_data.unknown2 = reader.read_le()?;
                 }
                 b"SNAM" => player_data.snam = field.get().to_vec(),
                 b"NAM9" => player_data.nam9 = Some(field.get_u32()?),
                 b"RNAM" => {
                     let mut reader = field.reader();
-                    player_data.rest_state = Some(RestState {
-                        hours_left: extract!(reader as i32)?,
-                        x: extract!(reader as f32)?,
-                        y: extract!(reader as f32)?,
-                        z: extract!(reader as f32)?,
-                    });
+                    player_data.rest_state = Some(reader.read_le()?);
                 }
                 b"CNAM" => player_data.bounty = Some(field.get_i32()?),
                 b"BNAM" => player_data.birthsign = Some(String::from(field.get_zstring()?)),
@@ -207,45 +209,33 @@ impl Form for PlayerData {
                 }
                 b"ENAM" => {
                     let mut reader = field.reader();
-                    player_data.exterior = Some(ExteriorLocation {
-                        x: extract!(reader as i32)?,
-                        y: extract!(reader as i32)?,
-                    });
+                    player_data.exterior = Some(reader.read_le()?);
                 }
                 b"LNAM" => {
                     let mut reader = field.reader();
-                    player_data.lnam = Some(Lnam {
-                        unknown1: extract!(reader as i32)?,
-                        unknown2: extract!(reader as i32)?,
-                    });
+                    player_data.lnam = Some(reader.read_le()?);
                 }
                 b"FNAM" => {
                     let mut reader = field.reader();
                     player_data.factions.push(Faction {
-                        rank: extract!(reader as u32)?,
-                        reputation: extract!(reader as i32)?,
-                        flags: extract!(reader as u32)?,
-                        name: extract_string(32, &mut reader)?,
+                        rank: reader.read_le()?,
+                        reputation: reader.read_le()?,
+                        flags: reader.read_le()?,
+                        name: read_string(32, &mut reader)?,
                     });
                 }
                 b"AADT" => {
                     let mut reader = field.reader();
-                    let anim_group_index = extract!(reader as i32)?;
-                    let mut buf = vec![0u8; 40];
-                    reader.read_exact(buf.as_mut())?;
-                    player_data.animation_data = Some(AnimationData {
-                        anim_group_index,
-                        unknown: buf,
-                    });
+                    player_data.animation_data = Some(reader.read_le()?);
                 }
                 b"KNAM" => {
                     let mut reader = field.reader();
                     player_data.quick_keys.reserve(10);
                     for _ in 0..10 {
                         player_data.quick_keys.push(QuickKey {
-                            bind_type: extract!(reader as u8)?,
-                            bound_form: extract_string(35, &mut reader)?,
-                            unknown: extract!(reader as i32)?,
+                            bind_type: reader.read_le()?,
+                            bound_form: read_string(35, &mut reader)?,
+                            unknown: reader.read_le()?,
                         });
                     }
                 }

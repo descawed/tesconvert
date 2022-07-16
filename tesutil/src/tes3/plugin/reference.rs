@@ -1,6 +1,9 @@
 use crate::tes3::plugin::*;
 use crate::tes3::Skills;
 use crate::Form;
+use std::io::Cursor;
+
+use binrw::{BinReaderExt, BinWriterExt};
 
 /// A statistic, such as an attribute, skill, health, etc.
 #[derive(Debug, Default)]
@@ -10,10 +13,10 @@ pub struct Stat<T> {
 }
 
 macro_rules! extract_stats {
-    ($f:ident, $p:ident, $t:ty, $($s:ident),+) => {
+    ($f:ident, $p:ident, $($s:ident),+) => {
         $({
-            $p.$s.current = extract!($f as $t)?;
-            $p.$s.base = extract!($f as $t)?;
+            $p.$s.current = $f.read_le()?;
+            $p.$s.base = $f.read_le()?;
         })*
     }
 }
@@ -21,8 +24,8 @@ macro_rules! extract_stats {
 macro_rules! serialize_stats {
     ($f:ident, $p:ident, $($s:ident),+) => {
         $({
-            serialize!($p.$s.current => $f)?;
-            serialize!($p.$s.base => $f)?;
+            $f.write_le(&$p.$s.current)?;
+            $f.write_le(&$p.$s.base)?;
         })*
     }
 }
@@ -87,37 +90,35 @@ impl Form for PlayerReference {
         for field in record.iter() {
             match field.name() {
                 b"ACDT" => {
-                    let mut buf_ref = field.get();
-                    let reader = &mut buf_ref;
+                    let mut reader = field.reader();
 
                     reader.read_exact(&mut player.unknown1)?;
-                    player.flags = extract!(reader as u32)?;
-                    player.breath_meter = extract!(reader as f32)?;
+                    player.flags = reader.read_le()?;
+                    player.breath_meter = reader.read_le()?;
                     reader.read_exact(&mut player.unknown2)?;
-                    extract_stats!(reader, player, f32, health, fatigue, magicka);
+                    extract_stats!(reader, player, health, fatigue, magicka);
                     reader.read_exact(&mut player.unknown3)?;
 
                     for attribute in player.attributes.values_mut() {
-                        (*attribute).current = extract!(reader as f32)?;
-                        (*attribute).base = extract!(reader as f32)?;
+                        (*attribute).current = reader.read_le()?;
+                        (*attribute).base = reader.read_le()?;
                     }
 
                     for magic_effect in &mut player.magic_effects {
-                        *magic_effect = extract!(reader as f32)?;
+                        *magic_effect = reader.read_le()?;
                     }
 
                     reader.read_exact(&mut player.unknown4)?;
-                    player.gold = extract!(reader as u32)?;
-                    player.count_down = extract!(reader as u8)?;
+                    player.gold = reader.read_le()?;
+                    player.count_down = reader.read_le()?;
                     reader.read_exact(&mut player.unknown5)?;
                 }
                 b"CHRD" => {
-                    let mut buf_ref = field.get();
-                    let reader = &mut buf_ref;
+                    let mut reader = field.reader();
 
                     for skill in player.skills.values_mut() {
-                        (*skill).current = extract!(reader as i32)?;
-                        (*skill).base = extract!(reader as i32)?;
+                        (*skill).current = reader.read_le()?;
+                        (*skill).base = reader.read_le()?;
                     }
                 }
                 _ => (),
@@ -137,36 +138,36 @@ impl Form for PlayerReference {
             match field.name() {
                 b"ACDT" => {
                     let mut buf: Vec<u8> = Vec::new();
-                    let writer = &mut buf;
+                    let mut writer = Cursor::new(&mut buf);
 
                     // write operations on Vec<u8> are infallible
-                    writer.write_exact(&self.unknown1)?;
-                    serialize!(self.flags => writer)?;
-                    serialize!(self.breath_meter => writer)?;
-                    writer.write_exact(&self.unknown2)?;
+                    writer.write_all(&self.unknown1)?;
+                    writer.write_le(&self.flags)?;
+                    writer.write_le(&self.breath_meter)?;
+                    writer.write_all(&self.unknown2)?;
                     serialize_stats!(writer, self, health, fatigue, magicka);
-                    writer.write_exact(&self.unknown3)?;
+                    writer.write_all(&self.unknown3)?;
                     for attribute in self.attributes.values() {
-                        serialize!(attribute.current => writer)?;
-                        serialize!(attribute.base => writer)?;
+                        writer.write_le(&attribute.current)?;
+                        writer.write_le(&attribute.base)?;
                     }
                     for effect in &self.magic_effects {
-                        serialize!(effect => writer)?;
+                        writer.write_le(&effect)?;
                     }
-                    writer.write_exact(&self.unknown4)?;
-                    serialize!(self.gold => writer)?;
-                    serialize!(self.count_down => writer)?;
-                    writer.write_exact(&self.unknown5)?;
+                    writer.write_all(&self.unknown4)?;
+                    writer.write_le(&self.gold)?;
+                    writer.write_le(&self.count_down)?;
+                    writer.write_all(&self.unknown5)?;
 
                     field.set(buf)?;
                 }
                 b"CHRD" => {
                     let mut buf: Vec<u8> = Vec::new();
-                    let writer = &mut buf;
+                    let mut writer = Cursor::new(&mut buf);
 
                     for skill in self.skills.values() {
-                        serialize!(skill.current => writer)?;
-                        serialize!(skill.base => writer)?;
+                        writer.write_le(&skill.current)?;
+                        writer.write_le(&skill.base)?;
                     }
 
                     field.set(buf)?;

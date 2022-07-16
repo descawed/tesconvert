@@ -1,12 +1,15 @@
 use crate::tes4::FormId;
 use crate::*;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::convert::{Into, TryFrom};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
+
+use binrw::{binrw, BinReaderExt, BinWriterExt};
 
 /// Indicates the type of record being changed
+#[binrw]
 #[derive(Copy, Clone, Debug, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
+#[brw(repr = u8)]
 pub enum ChangeType {
     Faction = 6,
     Apparatus = 19,
@@ -33,37 +36,24 @@ pub enum ChangeType {
 }
 
 /// A record in a save that records changes to objects
+#[binrw]
 #[derive(Debug)]
 pub struct ChangeRecord {
     form_id: FormId,
     change_type: ChangeType,
     flags: u32,
     version: u8,
+    #[br(temp)]
+    #[bw(calc = data.len() as u16)]
+    size: u16,
+    #[br(count = size)]
     data: Vec<u8>,
 }
 
 impl ChangeRecord {
     /// Reads a change record from a binary stream
-    pub fn read<T: Read>(mut f: T) -> Result<(ChangeRecord, usize), TesError> {
-        let form_id = FormId(extract!(f as u32)?);
-        let change_type = ChangeType::try_from(extract!(f as u8)?)
-            .map_err(|e| decode_failed_because("Invalid change type", e))?;
-        let flags = extract!(f as u32)?;
-        let version = extract!(f as u8)?;
-        let data_size = extract!(f as u16)? as usize;
-        let mut data = vec![0u8; data_size];
-        f.read_exact(&mut data)?;
-
-        Ok((
-            ChangeRecord {
-                form_id,
-                change_type,
-                flags,
-                version,
-                data,
-            },
-            data_size + 12,
-        )) // 12 byte header
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<ChangeRecord, TesError> {
+        Ok(f.read_le()?)
     }
 
     /// Gets the change type of this record
@@ -105,13 +95,8 @@ impl ChangeRecord {
     }
 
     /// Writes a change record to a binary stream
-    pub fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
-        serialize!(self.form_id.0 => f)?;
-        serialize!(Into::<u8>::into(self.change_type) => f)?;
-        serialize!(self.flags => f)?;
-        serialize!(self.version => f)?;
-        serialize!(self.data.len() as u16 => f)?;
-        f.write_exact(self.data.as_ref())?;
+    pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
+        f.write_le(&self)?;
         Ok(())
     }
 }

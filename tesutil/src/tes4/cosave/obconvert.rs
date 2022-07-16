@@ -1,9 +1,11 @@
 use std::collections::HashMap;
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Seek, SeekFrom};
 
 use super::Plugin;
 use crate::tes4::FormId;
-use crate::{decode_failed, extract, extract_bstring, serialize, serialize_bstring, TesError};
+use crate::{decode_failed, read_bstring, write_bstring, TesError};
+
+use binrw::{BinReaderExt, BinWriterExt};
 
 const FORM_MAP_VERSION: u32 = 0;
 const ACTIVE_SPELL_VERSION: u32 = 0;
@@ -44,8 +46,8 @@ impl ObConvert {
                     let data_len = chunk.data.len() as u64;
                     let mut reader = Cursor::new(&chunk.data);
                     while reader.seek(SeekFrom::Current(0))? < data_len {
-                        let mw_id = extract_bstring(&mut reader)?;
-                        let form_id = FormId(extract!(reader as u32)?);
+                        let mw_id = read_bstring(&mut reader)?;
+                        let form_id = FormId(reader.read_le()?);
                         convert.form_map.insert(mw_id, form_id);
                     }
                 }
@@ -60,8 +62,8 @@ impl ObConvert {
                     let data_len = chunk.data.len() as u64;
                     let mut reader = Cursor::new(&chunk.data);
                     while reader.seek(SeekFrom::Current(0))? < data_len {
-                        let form_id = FormId(extract!(reader as u32)?);
-                        let seconds_active = extract!(reader as f32)?;
+                        let form_id = FormId(reader.read_le()?);
+                        let seconds_active = reader.read_le()?;
                         convert.active_spells.insert(form_id, seconds_active);
                     }
                 }
@@ -89,19 +91,19 @@ impl ObConvert {
             match &chunk.tag {
                 b"FMAP" => {
                     let mut data = vec![];
-                    let mut writer = &mut &mut data;
+                    let mut writer = Cursor::new(&mut data);
                     for (mw_id, form_id) in &self.form_map {
-                        serialize_bstring(&mut writer, mw_id)?;
-                        serialize!(form_id.0 => writer)?;
+                        write_bstring(&mut writer, mw_id)?;
+                        writer.write_le(&form_id.0)?;
                     }
                     chunk.set_data(data);
                 }
                 b"ASPL" => {
                     let mut data = vec![];
-                    let writer = &mut &mut data;
+                    let mut writer = Cursor::new(&mut data);
                     for (form_id, seconds_active) in &self.active_spells {
-                        serialize!(form_id.0 => writer)?;
-                        serialize!(seconds_active => writer)?;
+                        writer.write_le(&form_id.0)?;
+                        writer.write_le(&seconds_active)?;
                     }
                     chunk.set_data(data);
                 }

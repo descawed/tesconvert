@@ -23,28 +23,11 @@ use std::iter;
 use std::ops::Deref;
 use std::str;
 
+use binrw::{BinReaderExt, BinWriterExt};
 use enum_map::{Enum, EnumMap};
 use len_trait::len::Len;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::*;
-
-// have to use a macro instead of a generic because from_le_bytes isn't a trait method
-#[macro_export]
-macro_rules! extract {
-    ($f:ident as $t:ty) => {{
-        let mut buf = [0u8; std::mem::size_of::<$t>()];
-        $f.read_exact(&mut buf)
-            .map(move |_| <$t>::from_le_bytes(buf))
-    }};
-}
-
-#[macro_export]
-macro_rules! serialize {
-    ($v:expr => $f:ident) => {{
-        let value = $v;
-        $f.write(&value.to_le_bytes())
-    }};
-}
 
 /// Wrapper around either an owned value or a reference to such a value
 #[derive(Debug)]
@@ -194,6 +177,9 @@ pub enum TesError {
     /// Error parsing an INI file
     #[error(transparent)]
     IniError(#[from] ini::Error),
+    /// Error during binary data I/O
+    #[error(transparent)]
+    BinaryDataError(#[from] binrw::Error),
 }
 
 /// A concrete game object, as opposed to a generic record
@@ -223,34 +209,7 @@ pub trait Form: Sized {
     fn write(&self, record: &mut Self::Record) -> Result<(), TesError>;
 }
 
-// doing only a partial write could result in invalid plugins, so we want to treat this as an error
-trait WriteExact {
-    fn write_exact(&mut self, buf: &[u8]) -> io::Result<()>;
-}
-
-impl<T: Write> WriteExact for T {
-    fn write_exact(&mut self, buf: &[u8]) -> io::Result<()> {
-        match self.write(buf) {
-            Ok(num_bytes) => {
-                if num_bytes == buf.len() {
-                    Ok(())
-                } else {
-                    Err(Error::new(
-                        ErrorKind::UnexpectedEof,
-                        format!(
-                            "Attempted to write {} bytes but could only write {}",
-                            buf.len(),
-                            num_bytes
-                        ),
-                    ))
-                }
-            }
-            Err(e) => Err(e),
-        }
-    }
-}
-
-fn extract_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
+fn read_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
     let mut buf = vec![0u8; size];
     f.read_exact(&mut buf)?;
     // ensure there is exactly one null byte at the end of the string
@@ -267,27 +226,29 @@ fn extract_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
     }
 }
 
-fn serialize_str<T: Write>(s: &str, size: usize, mut f: T) -> io::Result<()> {
+fn write_str<T: Write>(s: &str, size: usize, mut f: T) -> io::Result<()> {
     let mut buf = vec![0u8; size];
     buf[..s.len()].copy_from_slice(s.as_bytes());
-    f.write_exact(&buf)
+    f.write_all(&buf)
 }
 
-fn extract_bstring_raw<T: Read>(mut f: T) -> io::Result<Vec<u8>> {
-    let size = extract!(f as u8)? as usize;
+fn read_bstring_raw<T: Read>(mut f: T) -> io::Result<Vec<u8>> {
+    let mut size_buf = [0u8];
+    f.read_exact(&mut size_buf)?;
+    let size = size_buf[0] as usize;
     let mut buf = vec![0u8; size];
     f.read_exact(&mut buf)?;
     Ok(buf)
 }
 
-fn extract_bstring<T: Read>(f: T) -> io::Result<String> {
-    let buf = extract_bstring_raw(f)?;
+fn read_bstring<T: Read>(f: T) -> io::Result<String> {
+    let buf = read_bstring_raw(f)?;
     let s = str::from_utf8(&buf).map_err(io_error)?;
     Ok(String::from(s))
 }
 
-fn extract_bzstring<T: Read>(f: T) -> io::Result<String> {
-    let buf = extract_bstring_raw(f)?;
+fn read_bzstring<T: Read>(f: T) -> io::Result<String> {
+    let buf = read_bstring_raw(f)?;
     let cs = CStr::from_bytes_with_nul(&buf).map_err(io_error)?;
     match cs.to_str() {
         Ok(s) => Ok(String::from(s)),
@@ -295,24 +256,24 @@ fn extract_bzstring<T: Read>(f: T) -> io::Result<String> {
     }
 }
 
-fn serialize_bstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
+fn write_bstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
     if data.len() > MAX_BSTRING {
         return Err(io_error("bstring too large"));
     }
 
-    serialize!(data.len() as u8 => f)?;
-    f.write_exact(data.as_bytes())
+    f.write_all(&(data.len() as u8).to_le_bytes())?;
+    f.write_all(data.as_bytes())
 }
 
-fn serialize_bzstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
+fn write_bzstring<T: Write>(mut f: T, data: &str) -> io::Result<()> {
     let size = data.len() + 1; // +1 for null
     if size > MAX_BSTRING {
         return Err(io_error("bstring too large"));
     }
 
-    serialize!(size as u8 => f)?;
-    f.write_exact(data.as_bytes())?;
-    serialize!(0u8 => f)?;
+    f.write_all(&(size as u8).to_le_bytes())?;
+    f.write_all(data.as_bytes())?;
+    f.write_all(b"\0")?;
     Ok(())
 }
 
@@ -383,14 +344,14 @@ mod tests {
     #[test]
     fn test_extract_string() {
         let data = b"abcd\0\0\0\0\0\0";
-        let s = extract_string(10, &mut data.as_ref()).unwrap();
+        let s = read_string(10, &mut data.as_ref()).unwrap();
         assert_eq!(s, "abcd");
     }
 
     #[test]
     fn test_serialize_str() {
         let mut buf = [0u8; 10];
-        serialize_str("abcd", 10, &mut buf.as_mut()).unwrap();
+        write_str("abcd", 10, &mut buf.as_mut()).unwrap();
         assert_eq!(buf, *b"abcd\0\0\0\0\0\0");
     }
 }

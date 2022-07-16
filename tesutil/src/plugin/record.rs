@@ -5,8 +5,9 @@ use super::Field;
 use crate::TesError;
 
 /// Initialization status of a lazy-loaded record
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub enum RecordStatus {
+    #[default]
     Initialized,
     Finalized,
     Failed,
@@ -23,9 +24,9 @@ pub trait Record<F: Field>: IntoIterator<Item = F> + Sized {
     /// some of them. To finish loading the record, call its `finalize` method. Some record methods
     /// will panic if called on a lazy-loaded record that has not been finalized. Refer to
     /// individual method documentation for details.
-    fn read_lazy<T: Read>(f: T) -> Result<Self, TesError>;
+    fn read_lazy<T: Read + Seek>(f: T) -> Result<Self, TesError>;
 
-    fn read<T: Read>(f: T) -> Result<Self, TesError> {
+    fn read<T: Read + Seek>(f: T) -> Result<Self, TesError> {
         let mut record = Self::read_lazy(f)?;
         record.finalize()?;
         Ok(record)

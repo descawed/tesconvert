@@ -1,12 +1,11 @@
 use std::convert::TryFrom;
-use std::io::Read;
 
 use crate::tes3::{Skill, Tes3Field, Tes3Record};
 use crate::{
-    decode_failed, decode_failed_because, extract, Attribute, EffectRange, Field, Form, Record,
-    TesError,
+    decode_failed, decode_failed_because, Attribute, EffectRange, Field, Form, Record, TesError,
 };
 
+use binrw::BinReaderExt;
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -299,19 +298,19 @@ impl Form for Spell {
                 b"FNAM" => spell.name = String::from(field.get_zstring()?),
                 b"SPDT" => {
                     let mut reader = field.reader();
-                    spell.spell_type = SpellType::try_from(extract!(reader as u32)? as u8)
+                    spell.spell_type = SpellType::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid spell type", e))?;
-                    spell.cost = extract!(reader as u32)?;
-                    spell.flags = SpellFlags::from_bits(extract!(reader as u32)?)
+                    spell.cost = reader.read_le()?;
+                    spell.flags = SpellFlags::from_bits(reader.read_le()?)
                         .ok_or_else(|| decode_failed("Invalid spell flags"))?;
                 }
                 b"ENAM" => {
                     let mut reader = field.reader();
                     spell.effects.push(SpellEffect {
-                        effect: MagicEffectType::try_from(extract!(reader as u16)? as u8)
+                        effect: MagicEffectType::try_from(reader.read_le::<u16>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid magic effect", e))?,
                         skill: {
-                            let skill = extract!(reader as u8)?;
+                            let skill: u8 = reader.read_le()?;
                             if skill == 0xff {
                                 None
                             } else {
@@ -323,7 +322,7 @@ impl Form for Spell {
                             }
                         },
                         attribute: {
-                            let attribute = extract!(reader as u8)?;
+                            let attribute: u8 = reader.read_le()?;
                             if attribute == 0xff {
                                 None
                             } else {
@@ -332,12 +331,12 @@ impl Form for Spell {
                                 })?)
                             }
                         },
-                        range: EffectRange::try_from(extract!(reader as u32)? as u8)
+                        range: EffectRange::try_from(reader.read_le::<u32>()? as u8)
                             .map_err(|e| decode_failed_because("Invalid effect range", e))?,
-                        area: extract!(reader as u32)?,
-                        duration: extract!(reader as u32)?,
-                        min_magnitude: extract!(reader as u32)?,
-                        max_magnitude: extract!(reader as u32)?,
+                        area: reader.read_le()?,
+                        duration: reader.read_le()?,
+                        min_magnitude: reader.read_le()?,
+                        max_magnitude: reader.read_le()?,
                     });
                 }
                 _ => {

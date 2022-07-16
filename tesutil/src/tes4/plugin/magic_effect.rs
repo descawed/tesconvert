@@ -1,12 +1,11 @@
 use std::convert::{Into, TryFrom};
-use std::io::Read;
 
 use crate::tes4::{ActorValue, FormId, Tes4Field, Tes4Record};
 use crate::{
-    decode_failed, decode_failed_because, extract, EffectRange, Field, Form, MagicSchool, Record,
-    TesError,
+    decode_failed, decode_failed_because, EffectRange, Field, Form, MagicSchool, Record, TesError,
 };
 
+use binrw::BinReaderExt;
 use bitflags::bitflags;
 use enum_map::*;
 use lazy_static::lazy_static;
@@ -823,14 +822,14 @@ impl Form for MagicEffect {
                 },
                 b"DATA" => {
                     let mut reader = field.reader();
-                    effect.flags = EffectFlags::from_bits(extract!(reader as u32)?)
+                    effect.flags = EffectFlags::from_bits(reader.read_le()?)
                         .ok_or_else(|| decode_failed("Invalid magic effect flags"))?;
-                    effect.base_cost = extract!(reader as f32)?;
-                    effect.associated_form = FormId(extract!(reader as u32)?);
-                    effect.school = MagicSchool::try_from(extract!(reader as u32)? as u8)
+                    effect.base_cost = reader.read_le()?;
+                    effect.associated_form = FormId(reader.read_le()?);
+                    effect.school = MagicSchool::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid school in magic effect", e))?;
                     effect.resist_value = {
-                        let resist = extract!(reader as u32)?;
+                        let resist: u32 = reader.read_le()?;
                         if resist == 0 {
                             None
                         } else {
@@ -839,16 +838,16 @@ impl Form for MagicEffect {
                     };
                     effect
                         .counter_effects
-                        .reserve(extract!(reader as u32)? as usize);
-                    effect.light = FormId(extract!(reader as u32)?);
-                    effect.projectile_speed = extract!(reader as f32)?;
-                    effect.effect_shader = FormId(extract!(reader as u32)?);
-                    effect.casting_sound = FormId(extract!(reader as u32)?);
-                    effect.bolt_sound = FormId(extract!(reader as u32)?);
-                    effect.hit_sound = FormId(extract!(reader as u32)?);
-                    effect.area_sound = FormId(extract!(reader as u32)?);
-                    effect.constant_effect_enchantment_factor = extract!(reader as f32)?;
-                    effect.constant_effect_barter_factor = extract!(reader as f32)?;
+                        .reserve(reader.read_le::<u32>()? as usize);
+                    effect.light = FormId(reader.read_le()?);
+                    effect.projectile_speed = reader.read_le()?;
+                    effect.effect_shader = FormId(reader.read_le()?);
+                    effect.casting_sound = FormId(reader.read_le()?);
+                    effect.bolt_sound = FormId(reader.read_le()?);
+                    effect.hit_sound = FormId(reader.read_le()?);
+                    effect.area_sound = FormId(reader.read_le()?);
+                    effect.constant_effect_enchantment_factor = reader.read_le()?;
+                    effect.constant_effect_barter_factor = reader.read_le()?;
                 }
                 b"ESCE" => effect.counter_effects.push(
                     MagicEffectType::from_id(field.get())

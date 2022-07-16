@@ -1,8 +1,10 @@
-use std::io::{Read, Write};
+use std::io::{Read, Seek, Write};
 use std::mem::size_of;
 
 use crate::plugin::Field;
 use crate::*;
+
+use binrw::{binrw, BinReaderExt, BinWriterExt};
 
 /// An attribute of a record
 ///
@@ -17,9 +19,14 @@ use crate::*;
 /// `b"STRV"` or `b"DATA"`, and it would be cumbersome to have to explicitly clone these everywhere.
 /// The data, on the other hand, is taken as an owned value, because this is much more likely to be
 /// dynamic.
+#[binrw]
 #[derive(Debug)]
 pub struct Tes3Field {
     name: [u8; 4],
+    #[br(temp)]
+    #[bw(calc = data.len() as u32)]
+    size: u32,
+    #[br(count = size)]
     data: Vec<u8>,
 }
 
@@ -75,16 +82,8 @@ impl Field for Tes3Field {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn read<T: Read>(mut f: T) -> Result<Tes3Field, TesError> {
-        let mut name = [0u8; 4];
-        f.read_exact(&mut name)?;
-
-        let size = extract!(f as u32)? as usize;
-        let mut data = vec![0u8; size];
-
-        f.read_exact(&mut data)?;
-
-        Ok(Tes3Field { name, data })
+    fn read<T: Read + Seek>(mut f: T) -> Result<Tes3Field, TesError> {
+        Ok(f.read_le()?)
     }
 
     /// Returns the field name
@@ -215,12 +214,8 @@ impl Field for Tes3Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
-        let len = self.data.len();
-
-        f.write_exact(&self.name)?;
-        f.write_exact(&(len as u32).to_le_bytes())?;
-        f.write_exact(&self.data)?;
+    fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
+        f.write_le(&self)?;
 
         Ok(())
     }
@@ -229,6 +224,7 @@ impl Field for Tes3Field {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn create_field() {
@@ -238,7 +234,7 @@ mod tests {
     #[test]
     fn read_field() {
         let data = b"NAME\x09\0\0\0GameHour\0";
-        let field = Tes3Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes3Field::read(Cursor::new(&data)).unwrap();
         assert_eq!(field.name, *b"NAME");
         assert_eq!(field.data, b"GameHour\0");
         assert_eq!(field.size(), data.len());
@@ -247,7 +243,7 @@ mod tests {
     #[test]
     fn read_field_empty() {
         let data = b"";
-        if Tes3Field::read(&mut data.as_ref()).is_ok() {
+        if Tes3Field::read(Cursor::new(&data)).is_ok() {
             panic!("Read of empty field succeeded");
         }
     }
@@ -255,7 +251,7 @@ mod tests {
     #[test]
     fn read_field_invalid_len() {
         let data = b"NAME\x0f\0\0\0GameHour\0";
-        if Tes3Field::read(&mut data.as_ref()).is_ok() {
+        if Tes3Field::read(Cursor::new(&data)).is_ok() {
             panic!("Read of field with invalid length succeeded");
         }
     }
@@ -264,14 +260,14 @@ mod tests {
     fn write_field() {
         let field = Tes3Field::new(b"NAME", b"PCHasCrimeGold\0".to_vec()).unwrap();
         let mut buf = vec![];
-        field.write(&mut buf).unwrap();
+        field.write(Cursor::new(&mut buf)).unwrap();
         assert_eq!(buf, *b"NAME\x0f\0\0\0PCHasCrimeGold\0");
     }
 
     #[test]
     fn read_zstring_field() {
         let data = b"NAME\x09\0\0\0GameHour\0";
-        let field = Tes3Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes3Field::read(Cursor::new(&data)).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(s, "GameHour");
     }
@@ -279,7 +275,7 @@ mod tests {
     #[test]
     fn read_string_field() {
         let data = b"BNAM\x15\0\0\0shield_nordic_leather";
-        let field = Tes3Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes3Field::read(Cursor::new(&data)).unwrap();
         let s = field.get_string().unwrap();
         assert_eq!(s, "shield_nordic_leather");
     }
@@ -287,7 +283,7 @@ mod tests {
     #[test]
     fn read_raw_field() {
         let data = b"ALDT\x0c\0\0\0\0\0\xa0\x40\x0a\0\0\0\0\0\0\0";
-        let field = Tes3Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes3Field::read(Cursor::new(&data)).unwrap();
         let d = field.get();
         assert_eq!(d, *b"\0\0\xa0\x40\x0a\0\0\0\0\0\0\0");
     }
@@ -295,7 +291,7 @@ mod tests {
     #[test]
     fn read_numeric_field() {
         let data = b"DATA\x08\0\0\0\x75\x39\xc2\x04\0\0\0\0";
-        let field = Tes3Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes3Field::read(Cursor::new(&data)).unwrap();
         let v = field.get_u64().unwrap();
         assert_eq!(v, 0x4c23975u64);
     }
