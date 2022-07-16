@@ -201,7 +201,7 @@ impl Form for ActiveSpellList {
                         .effects
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned CNAM in SPLM"))?;
-                    reader.seek(SeekFrom::Current(0))?; // always 0 according to OpenMW
+                    reader.seek(SeekFrom::Current(4))?; // always 0 according to OpenMW
                     effect.summon = Some(read_string(ID_LENGTH, &mut reader)?);
                 }
                 b"VNAM" => {
