@@ -171,7 +171,7 @@ impl Group {
                 }
             } else {
                 f.seek(SeekFrom::Current(-4))?;
-                let record = Tes4Record::read(&mut f)?;
+                let record = Tes4Record::read_lazy(&mut f)?;
                 records.push(Arc::new(RwLock::new(record)));
             }
             let end = f.seek(SeekFrom::Current(0))?;

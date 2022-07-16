@@ -128,8 +128,8 @@ impl Record<Tes4Field> for Tes4Record {
         if self.status == RecordStatus::Initialized {
             let mut raw_reader: &[u8] = self.raw_data.as_ref();
             let mut size = if self.uses_compression() {
-                match extract!(raw_reader as u32) {
-                    Ok(size) => size as usize,
+                match (&raw_reader[..4]).try_into() {
+                    Ok(size) => u32::from_le_bytes(size) as usize,
                     Err(e) => {
                         self.status = RecordStatus::Failed;
                         return Err(decode_failed_because(
@@ -142,8 +142,7 @@ impl Record<Tes4Field> for Tes4Record {
                 self.raw_data.len()
             };
 
-            let mut zlib_reader =
-                ZlibDecoder::new(<Vec<u8> as AsRef<[u8]>>::as_ref(&self.raw_data));
+            let mut zlib_reader = ZlibDecoder::new(&self.raw_data[4..]);
 
             while size > 0 {
                 let result = if self.uses_compression() {
@@ -275,6 +274,7 @@ impl Tes4Record {
     pub fn new(name: &[u8; 4]) -> Tes4Record {
         Tes4Record {
             name: *name,
+            status: RecordStatus::Finalized,
             ..Default::default()
         }
     }
