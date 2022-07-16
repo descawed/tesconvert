@@ -1,5 +1,5 @@
 use crate::tes3::{Tes3Field, Tes3Record};
-use crate::{decode_failed, extract_string, Field, Form, Record, TesError};
+use crate::{decode_failed, read_string, Field, Form, Record, TesError};
 
 const ID_LENGTH: usize = 32;
 
@@ -44,7 +44,7 @@ impl Form for Birthsign {
                 b"FNAM" => birthsign.name = Some(String::from(field.get_zstring()?)),
                 b"NPCS" => birthsign
                     .spells
-                    .push(extract_string(ID_LENGTH, &mut field.get())?),
+                    .push(read_string(ID_LENGTH, &mut field.get())?),
                 b"TNAM" => birthsign.texture = Some(String::from(field.get_zstring()?)),
                 b"DESC" => birthsign.description = Some(String::from(field.get_zstring()?)),
                 _ => {

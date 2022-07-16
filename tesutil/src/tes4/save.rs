@@ -89,80 +89,80 @@ impl Save {
             return Err(decode_failed("Not a valid Oblivion save"));
         }
 
-        let version = (extract!(f as u8)?, extract!(f as u8)?);
+        let version = (f.read_le()?, f.read_le()?);
         let mut exe_time = [0u8; 16];
         f.read_exact(&mut exe_time)?;
 
-        let header_version = extract!(f as u32)?;
-        extract!(f as u32)?; // save header size, but I don't think we need this?
-        let save_number = extract!(f as u32)?;
-        let player_name = extract_bzstring(&mut f)?;
-        let player_level = extract!(f as u16)?;
-        let player_location = extract_bzstring(&mut f)?;
-        let game_days = extract!(f as f32)?;
-        let game_ticks = extract!(f as u32)?;
+        let header_version = f.read_le()?;
+        f.seek(SeekFrom::Current(4))?; // save header size, but I don't think we need this?
+        let save_number = f.read_le()?;
+        let player_name = read_bzstring(&mut f)?;
+        let player_level = f.read_le()?;
+        let player_location = read_bzstring(&mut f)?;
+        let game_days = f.read_le()?;
+        let game_ticks = f.read_le()?;
 
         let mut game_time = [0u8; 16];
         f.read_exact(&mut game_time)?;
 
-        let screen_size = extract!(f as u32)? as usize;
-        let screen_width = extract!(f as u32)?;
-        let screen_height = extract!(f as u32)?;
+        let screen_size = f.read_le::<u32>()? as usize;
+        let screen_width = f.read_le()?;
+        let screen_height = f.read_le()?;
         // - 8 because we already read the width and height
         let mut screen_data = vec![0u8; screen_size - 8];
         f.read_exact(&mut screen_data)?;
 
-        let num_plugins = extract!(f as u8)? as usize;
+        let num_plugins = f.read_le::<u8>()? as usize;
         let mut plugins = Vec::with_capacity(num_plugins);
         for _ in 0..num_plugins {
-            plugins.push(extract_bstring(&mut f)?);
+            plugins.push(read_bstring(&mut f)?);
         }
 
-        extract!(f as u32)?; // form IDs offset; don't need it
-        let num_change_records = extract!(f as u32)? as usize;
-        let next_form_id = extract!(f as u32)?;
-        let world_id = extract!(f as u32)?;
-        let world_x = extract!(f as u32)?;
-        let world_y = extract!(f as u32)?;
-        let player_cell = extract!(f as u32)?;
-        let player_x = extract!(f as f32)?;
-        let player_y = extract!(f as f32)?;
-        let player_z = extract!(f as f32)?;
+        f.seek(SeekFrom::Current(4))?; // form IDs offset; don't need it
+        let num_change_records = f.read_le::<u32>()? as usize;
+        let next_form_id = f.read_le()?;
+        let world_id = f.read_le()?;
+        let world_x = f.read_le()?;
+        let world_y = f.read_le()?;
+        let player_cell = f.read_le()?;
+        let player_x = f.read_le()?;
+        let player_y = f.read_le()?;
+        let player_z = f.read_le()?;
 
-        let num_globals = extract!(f as u16)? as usize;
+        let num_globals = f.read_le::<u16>()? as usize;
         let mut globals = Vec::with_capacity(num_globals);
         for _ in 0..num_globals {
-            let iref = extract!(f as u32)?;
-            let value = extract!(f as f32)?;
+            let iref = f.read_le()?;
+            let value = f.read_le()?;
             globals.push((iref, value));
         }
 
-        extract!(f as u16)?; // another size we don't need
-        let num_deaths = extract!(f as u32)? as usize;
+        f.seek(SeekFrom::Current(2))?; // another size we don't need
+        let num_deaths = f.read_le::<u32>()? as usize;
         let mut deaths = Vec::with_capacity(num_deaths);
         for _ in 0..num_deaths {
-            let actor = extract!(f as u32)?;
-            let count = extract!(f as u16)?;
+            let actor = f.read_le()?;
+            let count = f.read_le()?;
             deaths.push((actor, count));
         }
 
-        let game_seconds = extract!(f as f32)?;
+        let game_seconds = f.read_le()?;
 
-        let processes_size = extract!(f as u16)? as usize;
+        let processes_size = f.read_le::<u16>()? as usize;
         let mut processes_data = vec![0u8; processes_size];
         f.read_exact(&mut processes_data)?;
 
-        let spec_event_size = extract!(f as u16)? as usize;
+        let spec_event_size = f.read_le::<u16>()? as usize;
         let mut spec_event_data = vec![0u8; spec_event_size];
         f.read_exact(&mut spec_event_data)?;
 
-        let weather_size = extract!(f as u16)? as usize;
+        let weather_size = f.read_le::<u16>()? as usize;
         let mut weather_data = vec![0u8; weather_size];
         f.read_exact(&mut weather_data)?;
 
-        let player_combat_count = extract!(f as u32)?;
+        let player_combat_count = f.read_le()?;
 
-        let num_created = extract!(f as u32)? as usize;
+        let num_created = f.read_le::<u32>()? as usize;
         let mut created_ids = Vec::with_capacity(num_created);
         let mut created_records = HashMap::with_capacity(num_created);
         for _ in 0..num_created {
@@ -172,7 +172,7 @@ impl Save {
             created_records.insert(form_id, RwLock::new(record));
         }
 
-        let quick_keys_size = extract!(f as u16)? as usize;
+        let quick_keys_size = f.read_le::<u16>()? as usize;
         let mut quick_keys_data = vec![0u8; quick_keys_size];
         f.read_exact(&mut quick_keys_data)?;
         let mut i = 0;
@@ -197,41 +197,41 @@ impl Save {
             }
         }
 
-        let reticle_size = extract!(f as u16)? as usize;
+        let reticle_size = f.read_le::<u16>()? as usize;
         let mut reticle_data = vec![0u8; reticle_size];
         f.read_exact(&mut reticle_data)?;
 
-        let interface_size = extract!(f as u16)? as usize;
+        let interface_size = f.read_le::<u16>()? as usize;
         let mut interface_data = vec![0u8; interface_size];
         f.read_exact(&mut interface_data)?;
 
-        let region_size = extract!(f as u16)? as usize;
+        let region_size = f.read_le::<u16>()? as usize;
         let mut region_data = vec![0u8; region_size];
         f.read_exact(&mut region_data)?;
 
         let mut change_ids = Vec::with_capacity(num_change_records);
         let mut change_records = HashMap::with_capacity(num_change_records);
         for _ in 0..num_change_records {
-            let record = ChangeRecord::read(&mut f)?.0;
+            let record = ChangeRecord::read(&mut f)?;
             let form_id = record.form_id();
             change_ids.push(form_id);
             change_records.insert(form_id, record);
         }
 
-        let temp_effects_size = extract!(f as u32)? as usize;
+        let temp_effects_size = f.read_le::<u32>()? as usize;
         let mut temporary_effects = vec![0u8; temp_effects_size];
         f.read_exact(&mut temporary_effects)?;
 
-        let num_form_ids = extract!(f as u32)? as usize;
+        let num_form_ids = f.read_le::<u32>()? as usize;
         let mut form_ids = Vec::with_capacity(num_form_ids);
         for _ in 0..num_form_ids {
-            form_ids.push(FormId(extract!(f as u32)?));
+            form_ids.push(FormId(f.read_le()?));
         }
 
-        let num_world_spaces = extract!(f as u32)? as usize;
+        let num_world_spaces = f.read_le::<u32>()? as usize;
         let mut world_spaces = Vec::with_capacity(num_world_spaces);
         for _ in 0..num_world_spaces {
-            world_spaces.push(extract!(f as u32)?);
+            world_spaces.push(f.read_le()?);
         }
 
         Ok(Save {
@@ -458,105 +458,105 @@ impl Save {
     ///
     /// Fails if an I/O error occurs.
     pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
-        f.write_exact(b"TES4SAVEGAME")?;
-        f.write_exact(&[self.version.0, self.version.1])?;
-        f.write_exact(&self.exe_time)?;
+        f.write_all(b"TES4SAVEGAME")?;
+        f.write_all(&[self.version.0, self.version.1])?;
+        f.write_all(&self.exe_time)?;
 
-        serialize!(self.header_version => f)?;
+        f.write_le(&self.header_version)?;
         // header size = screenshot size + hard-coded fields + name and location bzstrings
         let header_size =
             self.screen_data.len() + 46 + self.player_name.len() + self.player_location.len();
-        serialize!(header_size as u32 => f)?;
-        serialize!(self.save_number => f)?;
-        serialize_bzstring(&mut f, &self.player_name)?;
-        serialize!(self.player_level => f)?;
-        serialize_bzstring(&mut f, &self.player_location)?;
-        serialize!(self.game_days => f)?;
-        serialize!(self.game_ticks => f)?;
-        f.write_exact(&self.game_time)?;
+        f.write_le(&(header_size as u32))?;
+        f.write_le(&self.save_number)?;
+        write_bzstring(&mut f, &self.player_name)?;
+        f.write_le(&self.player_level)?;
+        write_bzstring(&mut f, &self.player_location)?;
+        f.write_le(&self.game_days)?;
+        f.write_le(&self.game_ticks)?;
+        f.write_all(&self.game_time)?;
         let screen_size = self.screen_data.len() + 8;
-        serialize!(screen_size as u32 => f)?;
-        serialize!(self.screen_width => f)?;
-        serialize!(self.screen_height => f)?;
-        f.write_exact(&self.screen_data)?;
+        f.write_le(&(screen_size as u32))?;
+        f.write_le(&self.screen_width)?;
+        f.write_le(&self.screen_height)?;
+        f.write_all(&self.screen_data)?;
 
-        serialize!(self.plugins.len() as u8 => f)?;
+        f.write_le(&(self.plugins.len() as u8))?;
         for plugin in self.plugins.iter() {
-            serialize_bstring(&mut f, plugin)?;
+            write_bstring(&mut f, plugin)?;
         }
 
         // we don't have this value yet, so record the current offset so we can come back later
         let form_id_offset = f.seek(SeekFrom::Current(0))?;
         // write dummy value
-        f.write_exact(b"\0\0\0\0")?;
-        serialize!(self.change_records.len() as u32 => f)?;
-        serialize!(self.next_form_id => f)?;
-        serialize!(self.world_id => f)?;
-        serialize!(self.world_x => f)?;
-        serialize!(self.world_y => f)?;
-        serialize!(self.player_cell => f)?;
-        serialize!(self.player_x => f)?;
-        serialize!(self.player_y => f)?;
-        serialize!(self.player_z => f)?;
+        f.write_all(b"\0\0\0\0")?;
+        f.write_le(&(self.change_records.len() as u32))?;
+        f.write_le(&self.next_form_id)?;
+        f.write_le(&self.world_id)?;
+        f.write_le(&self.world_x)?;
+        f.write_le(&self.world_y)?;
+        f.write_le(&self.player_cell)?;
+        f.write_le(&self.player_x)?;
+        f.write_le(&self.player_y)?;
+        f.write_le(&self.player_z)?;
 
-        serialize!(self.globals.len() as u16 => f)?;
+        f.write_le(&(self.globals.len() as u16))?;
         for (iref, value) in self.globals.iter() {
-            serialize!(iref => f)?;
-            serialize!(value => f)?;
+            f.write_le(&iref)?;
+            f.write_le(&value)?;
         }
 
         let tes_class_size = self.deaths.len() * 6 + 8;
-        serialize!(tes_class_size as u16 => f)?;
-        serialize!(self.deaths.len() as u32 => f)?;
+        f.write_le(&(tes_class_size as u16))?;
+        f.write_le(&(self.deaths.len() as u32))?;
         for (actor, count) in self.deaths.iter() {
-            serialize!(actor => f)?;
-            serialize!(count => f)?;
+            f.write_le(&actor)?;
+            f.write_le(&count)?;
         }
 
-        serialize!(self.game_seconds => f)?;
+        f.write_le(&self.game_seconds)?;
 
-        serialize!(self.processes_data.len() as u16 => f)?;
-        f.write_exact(&self.processes_data)?;
+        f.write_le(&(self.processes_data.len() as u16))?;
+        f.write_all(&self.processes_data)?;
 
-        serialize!(self.spec_event_data.len() as u16 => f)?;
-        f.write_exact(&self.spec_event_data)?;
+        f.write_le(&(self.spec_event_data.len() as u16))?;
+        f.write_all(&self.spec_event_data)?;
 
-        serialize!(self.weather_data.len() as u16 => f)?;
-        f.write_exact(&self.weather_data)?;
+        f.write_le(&(self.weather_data.len() as u16))?;
+        f.write_all(&self.weather_data)?;
 
-        serialize!(self.player_combat_count => f)?;
+        f.write_le(&self.player_combat_count)?;
 
-        serialize!(self.created_records.len() as u32 => f)?;
+        f.write_le(&(self.created_records.len() as u32))?;
         for form_id in &self.created_ids {
             if let Some(created_record) = self.created_records.get(form_id) {
                 created_record.read().unwrap().write(&mut f)?;
             }
         }
 
-        serialize!(0u16 => f)?;
+        f.write_le(&0u16)?;
         let start = f.seek(SeekFrom::Current(0))?;
         for quick_key in self.quick_keys.iter() {
             if let Some(setting) = quick_key {
-                serialize!(1u8 => f)?;
-                serialize!(setting => f)?;
+                f.write_le(&1u8)?;
+                f.write_le(&setting)?;
             } else {
-                serialize!(0u8 => f)?;
+                f.write_le(&0u8)?;
             }
         }
         // calculate the number of bytes we just wrote and update the size at the beginning
         let end = f.seek(SeekFrom::Current(0))?;
         f.seek(SeekFrom::Start(start - 2))?;
-        serialize!((end - start) as u16 => f)?;
+        f.write_le(&((end - start) as u16))?;
         f.seek(SeekFrom::Start(end))?;
 
-        serialize!(self.reticle_data.len() as u16 => f)?;
-        f.write_exact(&self.reticle_data)?;
+        f.write_le(&(self.reticle_data.len() as u16))?;
+        f.write_all(&self.reticle_data)?;
 
-        serialize!(self.interface_data.len() as u16 => f)?;
-        f.write_exact(&self.interface_data)?;
+        f.write_le(&(self.interface_data.len() as u16))?;
+        f.write_all(&self.interface_data)?;
 
-        serialize!(self.region_data.len() as u16 => f)?;
-        f.write_exact(&self.region_data)?;
+        f.write_le(&(self.region_data.len() as u16))?;
+        f.write_all(&self.region_data)?;
 
         for id in &self.change_ids {
             if let Some(change_record) = self.change_records.get(id) {
@@ -564,23 +564,23 @@ impl Save {
             }
         }
 
-        serialize!(self.temporary_effects.len() as u32 => f)?;
-        f.write_exact(&self.temporary_effects)?;
+        f.write_le(&(self.temporary_effects.len() as u32))?;
+        f.write_all(&self.temporary_effects)?;
 
         // now go back and fill in the form ID offset
         let current_pos = f.seek(SeekFrom::Current(0))?;
         f.seek(SeekFrom::Start(form_id_offset))?;
-        serialize!(current_pos as u32 => f)?;
+        f.write_le(&(current_pos as u32))?;
         f.seek(SeekFrom::Start(current_pos))?;
 
-        serialize!(self.form_ids.len() as u32 => f)?;
+        f.write_le(&(self.form_ids.len() as u32))?;
         for form_id in self.form_ids.iter() {
-            serialize!(form_id.0 => f)?;
+            f.write_le(&form_id.0)?;
         }
 
-        serialize!(self.world_spaces.len() as u32 => f)?;
+        f.write_le(&(self.world_spaces.len() as u32))?;
         for world_space in self.world_spaces.iter() {
-            serialize!(world_space => f)?;
+            f.write_le(&world_space)?;
         }
 
         Ok(())

@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Seek, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::Path;
 use std::str;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::plugin::*;
 use crate::*;
+
+use binrw::{BinReaderExt, BinWriterExt};
 
 mod field;
 pub use field::*;
@@ -303,12 +305,12 @@ impl Tes3Plugin {
         }
 
         // decode header structure
-        let mut head_reader: &[u8] = header_data.as_ref();
-        let version = extract!(head_reader as f32)?;
-        let flags = extract!(head_reader as u32)?;
-        let author = extract_string(AUTHOR_LENGTH, &mut head_reader)?;
-        let description = extract_string(DESCRIPTION_LENGTH, &mut head_reader)?;
-        let num_records = extract!(head_reader as u32)? as usize;
+        let mut head_reader: Cursor<&[u8]> = Cursor::new(header_data.as_ref());
+        let version = head_reader.read_le()?;
+        let flags: u32 = head_reader.read_le()?;
+        let author = read_string(AUTHOR_LENGTH, &mut head_reader)?;
+        let description = read_string(DESCRIPTION_LENGTH, &mut head_reader)?;
+        let num_records = head_reader.read_le::<u32>()? as usize;
 
         let mut plugin = Tes3Plugin {
             version,
@@ -346,16 +348,16 @@ impl Tes3Plugin {
                 b"GMDT" => {
                     // TODO: write a test for this part
                     let data = field.consume();
-                    let mut reader: &mut &[u8] = &mut data.as_ref();
-                    let current_health = extract!(reader as f32)?;
-                    let max_health = extract!(reader as f32)?;
-                    let hour = extract!(reader as f32)?;
+                    let mut reader: Cursor<&[u8]> = Cursor::new(data.as_ref());
+                    let current_health = reader.read_le()?;
+                    let max_health = reader.read_le()?;
+                    let hour = reader.read_le()?;
                     let mut unknown1 = [0u8; 12];
                     reader.read_exact(&mut unknown1)?;
-                    let current_cell = extract_string(CELL_LENGTH, &mut reader)?;
+                    let current_cell = read_string(CELL_LENGTH, &mut reader)?;
                     let mut unknown2 = [0u8; 4];
                     reader.read_exact(&mut unknown2)?;
-                    let player_name = extract_string(NAME_LENGTH, &mut reader)?;
+                    let player_name = read_string(NAME_LENGTH, &mut reader)?;
 
                     plugin.save = Some(SaveInfo {
                         current_health,
@@ -799,7 +801,7 @@ impl Tes3Plugin {
     pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
         let mut header = Tes3Record::new(b"TES3");
         let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LENGTH);
-        let mut buf_writer = &mut buf;
+        let mut buf_writer = Cursor::new(&mut buf);
 
         // we can get away with this because the game doesn't actually care about this field, it
         // just reads until EOF
@@ -809,11 +811,11 @@ impl Tes3Plugin {
             self.records.len() as u32
         };
 
-        serialize!(self.version => buf_writer)?;
-        serialize!(if self.is_master { FLAG_MASTER } else { 0 } => buf_writer)?;
-        serialize_str(&self.author, AUTHOR_LENGTH, &mut buf_writer)?;
-        serialize_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
-        serialize!(num_records => buf_writer)?;
+        buf_writer.write_le(&self.version)?;
+        buf_writer.write_le(&(if self.is_master { FLAG_MASTER } else { 0 }))?;
+        write_str(&self.author, AUTHOR_LENGTH, &mut buf_writer)?;
+        write_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
+        buf_writer.write_le(&num_records)?;
 
         header.add_field(Tes3Field::new(b"HEDR", buf).unwrap());
 
@@ -825,14 +827,14 @@ impl Tes3Plugin {
 
         if let Some(ref save) = self.save {
             let mut game_data = vec![0u8; 0x7c];
-            let mut writer = &mut &mut game_data;
-            serialize!(save.current_health => writer)?;
-            serialize!(save.max_health => writer)?;
-            serialize!(save.hour => writer)?;
-            writer.write_exact(&save.unknown1)?;
-            serialize_str(&save.current_cell, CELL_LENGTH, &mut writer)?;
-            writer.write_exact(&save.unknown2)?;
-            serialize_str(&save.player_name, NAME_LENGTH, &mut writer)?;
+            let mut writer = Cursor::new(&mut game_data);
+            writer.write_le(&save.current_health)?;
+            writer.write_le(&save.max_health)?;
+            writer.write_le(&save.hour)?;
+            writer.write_all(&save.unknown1)?;
+            write_str(&save.current_cell, CELL_LENGTH, &mut writer)?;
+            writer.write_all(&save.unknown2)?;
+            write_str(&save.player_name, NAME_LENGTH, &mut writer)?;
 
             header.add_field(Tes3Field::new(b"GMDT", game_data).unwrap());
         }
@@ -945,7 +947,7 @@ mod tests {
 
     #[test]
     fn read_plugin() {
-        let cursor = io::Cursor::new(TEST_PLUGIN);
+        let cursor = Cursor::new(TEST_PLUGIN);
         let plugin = Tes3Plugin::read(cursor).unwrap();
         assert_eq!(plugin.version, VERSION_1_3);
         assert!(!plugin.is_master);
@@ -977,7 +979,7 @@ mod tests {
         test_record.add_field(Tes3Field::new_i32(b"INTV", -50));
         plugin.add_record(test_record).unwrap();
 
-        let mut cursor = io::Cursor::new(buf);
+        let mut cursor = Cursor::new(buf);
         plugin.write(&mut cursor).unwrap();
 
         assert_eq!(cursor.into_inner(), EXPECTED_PLUGIN);
@@ -985,7 +987,7 @@ mod tests {
 
     #[test]
     fn fetch_record() {
-        let cursor = io::Cursor::new(TEST_PLUGIN);
+        let cursor = Cursor::new(TEST_PLUGIN);
         let plugin = Tes3Plugin::read(cursor).unwrap();
         let record = plugin.get_record("BM_wolf_grey_summon").unwrap().unwrap();
         assert_eq!(record.len(), 9);

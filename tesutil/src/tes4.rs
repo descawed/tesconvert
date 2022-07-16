@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 use crate::{Attribute, Specialization, TesError};
+use binrw::binrw;
 use enum_map::{Enum, EnumMap};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -15,6 +16,7 @@ pub use world::*;
 pub mod cosave;
 
 /// A unique identifier for a record
+#[binrw]
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Hash)]
 pub struct FormId(pub u32);
 

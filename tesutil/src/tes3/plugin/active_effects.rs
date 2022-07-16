@@ -1,12 +1,11 @@
 use std::convert::TryFrom;
 
 use super::{Tes3Field, Tes3Record};
-use crate::{
-    decode_failed, decode_failed_because, extract, extract_string, Field, Form, Record, TesError,
-};
+use crate::{decode_failed, decode_failed_because, read_string, Field, Form, Record, TesError};
 
+use binrw::BinReaderExt;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 
 /// Type of magical spell/item an effect originated from
 #[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
@@ -132,12 +131,12 @@ impl Form for ActiveSpellList {
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned SPDT in SPLM"))?;
                     let mut reader = field.reader();
-                    spell.magic_type = MagicType::try_from(extract!(reader as u32)? as u8)
+                    spell.magic_type = MagicType::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid magic type in SPDT", e))?;
-                    spell.id = extract_string(ID_LENGTH, &mut reader)?;
+                    spell.id = read_string(ID_LENGTH, &mut reader)?;
                     reader.read_exact(&mut spell.unknown1)?;
-                    spell.caster = extract_string(ID_LENGTH, &mut reader)?;
-                    spell.source = extract_string(ID_LENGTH, &mut reader)?;
+                    spell.caster = read_string(ID_LENGTH, &mut reader)?;
+                    spell.source = read_string(ID_LENGTH, &mut reader)?;
                     reader.read_exact(&mut spell.unknown2)?;
                 }
                 // TODO: I'm actually not sure if this field is a string or a zstring. OpenMW seems to parse both the same.
@@ -154,15 +153,15 @@ impl Form for ActiveSpellList {
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned NPDT in SPLM"))?;
                     let effect = ActiveEffect {
-                        affected_actor: extract_string(ID_LENGTH, &mut reader)?,
-                        index: extract!(reader as i32)?,
+                        affected_actor: read_string(ID_LENGTH, &mut reader)?,
+                        index: reader.read_le()?,
                         unknown1: {
                             let mut buf = [0; 4];
                             reader.read_exact(&mut buf)?;
                             buf
                         },
-                        magnitude: extract!(reader as i32)?,
-                        seconds_active: extract!(reader as f32)?,
+                        magnitude: reader.read_le()?,
+                        seconds_active: reader.read_le()?,
                         unknown2: {
                             let mut buf = [0; 8];
                             reader.read_exact(&mut buf)?;
@@ -186,9 +185,9 @@ impl Form for ActiveSpellList {
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned INAM in SPLM"))?;
                     let associated_item = EffectAssociatedItem {
-                        unknown1: extract!(reader as i32)?,
-                        unknown2: extract!(reader as u8)?,
-                        id: extract_string(ASSOCIATED_ID_LENGTH, &mut reader)?,
+                        unknown1: reader.read_le()?,
+                        unknown2: reader.read_le()?,
+                        id: read_string(ASSOCIATED_ID_LENGTH, &mut reader)?,
                     };
                     effect.associated_items.push(associated_item);
                 }
@@ -202,8 +201,8 @@ impl Form for ActiveSpellList {
                         .effects
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned CNAM in SPLM"))?;
-                    extract!(reader as i32)?; // always 0 according to OpenMW
-                    effect.summon = Some(extract_string(ID_LENGTH, &mut reader)?);
+                    reader.seek(SeekFrom::Current(0))?; // always 0 according to OpenMW
+                    effect.summon = Some(read_string(ID_LENGTH, &mut reader)?);
                 }
                 b"VNAM" => {
                     let spell = list

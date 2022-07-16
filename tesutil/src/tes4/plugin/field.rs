@@ -1,3 +1,4 @@
+use std::io::{Read, Seek, Write};
 use std::mem::size_of;
 
 use crate::plugin::Field;
@@ -74,19 +75,19 @@ impl Field for Tes4Field {
     ///
     /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn read<T: Read>(mut f: T) -> Result<Tes4Field, TesError> {
+    fn read<T: Read + Seek>(mut f: T) -> Result<Tes4Field, TesError> {
         let mut name = [0u8; 4];
         f.read_exact(&mut name)?;
 
         let size = if name == *b"XXXX" {
-            extract!(f as u16)?; // always 4 bytes
-            let real_size = extract!(f as u32)?;
+            f.seek(SeekFrom::Current(2))?;
+            let real_size: u32 = f.read_le()?;
             // now fetch the actual record
             f.read_exact(&mut name)?;
-            extract!(f as u16)?; // regular size is irrelevant here
+            f.seek(SeekFrom::Current(2))?;
             real_size as usize
         } else {
-            extract!(f as u16)? as usize
+            f.read_le::<u16>()? as usize
         };
 
         let mut data = vec![0u8; size];
@@ -205,18 +206,18 @@ impl Field for Tes4Field {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    fn write<T: Write>(&self, mut f: T) -> Result<(), TesError> {
+    fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
         let mut len = self.data.len();
 
         if len > u16::MAX as usize {
-            f.write_exact(b"XXXX\x04\0")?;
-            serialize!(len as u32 => f)?;
+            f.write_all(b"XXXX\x04\0")?;
+            f.write_le(&(len as u32))?;
             len = 0;
         }
 
-        f.write_exact(&self.name)?;
-        f.write_exact(&(len as u16).to_le_bytes())?;
-        f.write_exact(&self.data)?;
+        f.write_all(&self.name)?;
+        f.write_le(&(len as u16))?;
+        f.write_all(&self.data)?;
 
         Ok(())
     }
@@ -225,19 +226,20 @@ impl Field for Tes4Field {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn write_tes4_field() {
         let field = Tes4Field::new(b"EDID", b"sNoTalkFleeing\0".to_vec()).unwrap();
         let mut buf = vec![];
-        field.write(&mut buf).unwrap();
+        field.write(Cursor::new(&mut buf)).unwrap();
         assert_eq!(buf, *b"EDID\x0f\0sNoTalkFleeing\0");
     }
 
     #[test]
     fn read_tes4_field() {
         let data = b"EDID\x13\0fDialogSpeachDelay\0";
-        let field = Tes4Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes4Field::read(Cursor::new(&data)).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(s, "fDialogSpeachDelay");
     }
@@ -245,7 +247,7 @@ mod tests {
     #[test]
     fn read_long_tes4_field() {
         let data = b"XXXX\x04\0\x51\0\0\0DATA\0\0Choose your 7 major skills. You will start at 25 (Apprentice Level) in each one.\0";
-        let field = Tes4Field::read(&mut data.as_ref()).unwrap();
+        let field = Tes4Field::read(Cursor::new(&data)).unwrap();
         let s = field.get_zstring().unwrap();
         assert_eq!(field.name, *b"DATA");
         assert_eq!(

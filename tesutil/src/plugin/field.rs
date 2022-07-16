@@ -1,5 +1,5 @@
 use std::ffi::{CStr, CString};
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read, Seek, Write};
 use std::mem::size_of;
 use std::str;
 
@@ -80,7 +80,7 @@ pub trait Field: Sized {
         Self::new(name, zstr.into_bytes_with_nul())
     }
 
-    fn read<T: Read>(f: T) -> Result<Self, TesError>;
+    fn read<T: Read + Seek>(f: T) -> Result<Self, TesError>;
 
     fn name(&self) -> &[u8];
 
@@ -126,7 +126,7 @@ pub trait Field: Sized {
 
     fn size(&self) -> usize;
 
-    fn write<T: Write>(&self, f: T) -> Result<(), TesError>;
+    fn write<T: Write + Seek>(&self, f: T) -> Result<(), TesError>;
 
     /// Gets a reference to the field's data as a string
     ///

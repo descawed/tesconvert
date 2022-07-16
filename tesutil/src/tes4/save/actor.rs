@@ -1,9 +1,10 @@
-use std::io::Read;
+use std::io::{Cursor, Read};
 
 use crate::tes4::save::{Attributes, ChangeRecord, ChangeType, FormChange};
 use crate::tes4::Skills;
 use crate::*;
 
+use binrw::{binrw, BinReaderExt, BinWriterExt};
 use bitflags::bitflags;
 
 bitflags! {
@@ -39,8 +40,11 @@ bitflags! {
 }
 
 /// Actor base data
+#[binrw]
 #[derive(Debug)]
 pub struct ActorBase {
+    #[br(try_map = |f| ActorFlags::from_bits(f).ok_or("Invalid actor flags"))]
+    #[bw(map = |f| f.bits)]
     flags: ActorFlags,
     pub magicka: u16,
     pub fatigue: u16,
@@ -113,48 +117,39 @@ impl FormChange for ActorChange {
             combat_style: None,
         };
 
-        let mut data = record.data();
-        let mut reader = &mut data;
+        let data = record.data();
+        let mut reader = Cursor::new(&data);
 
         if change_flags.contains(ActorChangeFlags::FORM_FLAGS) {
-            actor_change.flags = Some(extract!(reader as u32)?);
+            actor_change.flags = Some(reader.read_le()?);
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_ATTRIBUTES) {
             let mut attributes = Attributes::default();
             for attribute in attributes.values_mut() {
-                *attribute = extract!(reader as u8)?;
+                *attribute = reader.read_le()?;
             }
 
             actor_change.attributes = Some(attributes);
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_DATA) {
-            actor_change.base = Some(ActorBase {
-                flags: ActorFlags::from_bits(extract!(reader as u32)?)
-                    .ok_or_else(|| io_error(decode_failed("Invalid actor flags")))?,
-                magicka: extract!(reader as u16)?,
-                fatigue: extract!(reader as u16)?,
-                gold: extract!(reader as u16)?,
-                level: extract!(reader as i16)?,
-                calc_min: extract!(reader as u16)?,
-                calc_max: extract!(reader as u16)?,
-            });
+            actor_change.base = Some(reader.read_le()?);
         }
 
         if change_flags.contains(ActorChangeFlags::FACTIONS) {
-            let num_factions = extract!(reader as u16)?;
+            let num_factions: u16 = reader.read_le()?;
             for _ in 0..num_factions {
                 actor_change
                     .factions
-                    .push((extract!(reader as u32)?, extract!(reader as i8)?));
+                    .push((reader.read_le()?, reader.read_le()?));
             }
         }
 
         if change_flags.contains(ActorChangeFlags::SPELL_LIST) {
-            let num_spells = extract!(reader as u16)?;
+            let num_spells: u16 = reader.read_le()?;
             for _ in 0..num_spells {
-                actor_change.spells.push(extract!(reader as u32)?);
+                actor_change.spells.push(reader.read_le()?);
             }
         }
 
@@ -165,33 +160,33 @@ impl FormChange for ActorChange {
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_HEALTH) {
-            actor_change.base_health = Some(extract!(reader as u32)?);
+            actor_change.base_health = Some(reader.read_le()?);
         }
 
         if change_flags.contains(ActorChangeFlags::BASE_MODIFIERS) {
-            let num_modifiers = extract!(reader as u16)?;
+            let num_modifiers: u16 = reader.read_le()?;
             for _ in 0..num_modifiers {
                 actor_change
                     .modifiers
-                    .push((extract!(reader as u8)?, extract!(reader as f32)?));
+                    .push((reader.read_le()?, reader.read_le()?));
             }
         }
 
         if change_flags.contains(ActorChangeFlags::FULL_NAME) {
-            actor_change.full_name = Some(extract_bstring(&mut reader)?);
+            actor_change.full_name = Some(read_bstring(&mut reader)?);
         }
 
         if change_flags.contains(ActorChangeFlags::SKILLS) {
             let mut skills = Skills::default();
             for skill in skills.values_mut() {
-                *skill = extract!(reader as u8)?;
+                *skill = reader.read_le()?;
             }
 
             actor_change.skills = Some(skills);
         }
 
         if change_flags.contains(ActorChangeFlags::COMBAT_STYLE) {
-            actor_change.combat_style = Some(extract!(reader as u32)?);
+            actor_change.combat_style = Some(reader.read_le()?);
         }
 
         Ok(actor_change)
@@ -204,86 +199,80 @@ impl FormChange for ActorChange {
     /// Fails if an I/O error occurs
     fn write(&self, record: &mut ChangeRecord) -> Result<(), TesError> {
         let mut buf: Vec<u8> = vec![];
-        let mut writer = &mut &mut buf;
+        let mut writer = Cursor::new(&mut buf);
         let mut flags = ActorChangeFlags::empty();
 
         if let Some(form_flags) = self.flags {
             flags |= ActorChangeFlags::FORM_FLAGS;
-            serialize!(form_flags => writer)?;
+            writer.write_le(&form_flags)?;
         }
 
         if let Some(ref attributes) = self.attributes {
             flags |= ActorChangeFlags::BASE_ATTRIBUTES;
             for attribute in attributes.values() {
-                serialize!(attribute => writer)?;
+                writer.write_le(&attribute)?;
             }
         }
 
         if let Some(ref base_data) = self.base {
             flags |= ActorChangeFlags::BASE_DATA;
-            serialize!(base_data.flags.bits => writer)?;
-            serialize!(base_data.magicka => writer)?;
-            serialize!(base_data.fatigue => writer)?;
-            serialize!(base_data.gold => writer)?;
-            serialize!(base_data.level => writer)?;
-            serialize!(base_data.calc_min => writer)?;
-            serialize!(base_data.calc_max => writer)?;
+            writer.write_le(base_data)?;
         }
 
         if !self.factions.is_empty() {
             flags |= ActorChangeFlags::FACTIONS;
             let len = self.factions.len() as u16;
-            serialize!(len => writer)?;
+            writer.write_le(&len)?;
             for faction in self.factions.iter() {
-                serialize!(faction.0 => writer)?;
-                serialize!(faction.1 => writer)?;
+                writer.write_le(&faction.0)?;
+                writer.write_le(&faction.1)?;
             }
         }
 
         if !self.spells.is_empty() {
             flags |= ActorChangeFlags::SPELL_LIST;
             let len = self.spells.len() as u16;
-            serialize!(len => writer)?;
+            writer.write_le(&len)?;
             for spell in self.spells.iter() {
-                serialize!(spell => writer)?;
+                writer.write_le(&spell)?;
             }
         }
 
         if let Some(ref ai_data) = self.ai_data {
             flags |= ActorChangeFlags::AI_DATA;
-            writer.write_exact(ai_data)?;
+            writer.write_all(ai_data)?;
         }
 
         if let Some(base_health) = self.base_health {
             flags |= ActorChangeFlags::BASE_HEALTH;
-            serialize!(base_health => writer)?;
+            writer.write_le(&base_health)?;
         }
 
         if !self.modifiers.is_empty() {
             flags |= ActorChangeFlags::BASE_MODIFIERS;
             let len = self.modifiers.len() as u16;
-            serialize!(len => writer)?;
+            writer.write_le(&len)?;
             for modifier in self.modifiers.iter() {
-                serialize!(modifier.0 => writer)?;
-                serialize!(modifier.1 => writer)?;
+                writer.write_le(&modifier.0)?;
+                writer.write_le(&modifier.1)?;
             }
         }
 
         if let Some(ref name) = self.full_name {
             flags |= ActorChangeFlags::FULL_NAME;
-            serialize_bstring(&mut writer, &name[..])?;
+            write_bstring(&mut writer, &name[..])?;
         }
 
         if let Some(ref skills) = self.skills {
             flags |= ActorChangeFlags::SKILLS;
             for skill in skills.values() {
-                serialize!(skill => writer)?;
+                writer.write_le(&skill)?;
             }
         }
 
         if let Some(combat_style) = self.combat_style {
             flags |= ActorChangeFlags::COMBAT_STYLE;
-            serialize!(combat_style => writer)?;
+            writer.write_le(&combat_style)?;
         }
 
         record.set_data(flags.bits, buf)?;

@@ -1,4 +1,4 @@
-use std::io::{Read, Seek, Write};
+use std::io::{Cursor, Read, Seek, Write};
 
 use super::field::Tes4Field;
 use super::group::Group;
@@ -71,8 +71,6 @@ pub struct Tes4Record {
     #[br(try_map = |f| RecordFlags::from_bits(f).ok_or("Invalid record flags"))]
     #[bw(map = |f| f.bits)]
     flags: RecordFlags,
-    #[br(map = |f| FormId(f))]
-    #[bw(map = |f| f.0)]
     form_id: FormId,
     vcs_info: u32,
     #[brw(ignore)]
@@ -126,9 +124,9 @@ impl Record<Tes4Field> for Tes4Record {
 
     fn finalize(&mut self) -> Result<(), TesError> {
         if self.status == RecordStatus::Initialized {
-            let mut raw_reader: &[u8] = self.raw_data.as_ref();
-            let mut size = if self.uses_compression() {
-                match (&raw_reader[..4]).try_into() {
+            let mut decompressed_buf = vec![];
+            let (mut size, buf) = if self.uses_compression() {
+                let size = match (&self.raw_data[..4]).try_into() {
                     Ok(size) => u32::from_le_bytes(size) as usize,
                     Err(e) => {
                         self.status = RecordStatus::Failed;
@@ -137,21 +135,20 @@ impl Record<Tes4Field> for Tes4Record {
                             e,
                         ));
                     }
-                }
-            } else {
-                self.raw_data.len()
-            };
-
-            let mut zlib_reader = ZlibDecoder::new(&self.raw_data[4..]);
-
-            while size > 0 {
-                let result = if self.uses_compression() {
-                    Tes4Field::read(&mut zlib_reader)
-                } else {
-                    Tes4Field::read(&mut raw_reader)
                 };
 
-                match result {
+                let mut zlib_reader = ZlibDecoder::new(&self.raw_data[4..]);
+                zlib_reader.read_to_end(&mut decompressed_buf)?;
+
+                (size, &decompressed_buf)
+            } else {
+                (self.raw_data.len(), &self.raw_data)
+            };
+
+            let mut cursor = Cursor::new(buf);
+
+            while size > 0 {
+                match Tes4Field::read(&mut cursor) {
                     Ok(field) => {
                         let field_size = field.size();
                         if field_size > size {
@@ -230,8 +227,9 @@ impl Record<Tes4Field> for Tes4Record {
 
             if self.flags.contains(RecordFlags::COMPRESSED) {
                 let mut raw_buf: Vec<u8> = Vec::with_capacity(size);
+                let mut cursor = Cursor::new(&mut raw_buf);
                 for field in self.fields.iter() {
-                    field.write(&mut &mut raw_buf)?;
+                    field.write(&mut cursor)?;
                 }
 
                 let mut buf_reader: &[u8] = raw_buf.as_ref();
