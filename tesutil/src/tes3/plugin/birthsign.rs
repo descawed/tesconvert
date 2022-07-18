@@ -44,7 +44,7 @@ impl Form for Birthsign {
                 b"FNAM" => birthsign.name = Some(String::from(field.get_zstring()?)),
                 b"NPCS" => birthsign
                     .spells
-                    .push(read_string(ID_LENGTH, &mut field.get())?),
+                    .push(read_string::<ID_LENGTH, _>(&mut field.get())?),
                 b"TNAM" => birthsign.texture = Some(String::from(field.get_zstring()?)),
                 b"DESC" => birthsign.description = Some(String::from(field.get_zstring()?)),
                 _ => {

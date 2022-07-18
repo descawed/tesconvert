@@ -221,7 +221,7 @@ impl Form for PlayerData {
                         rank: reader.read_le()?,
                         reputation: reader.read_le()?,
                         flags: reader.read_le()?,
-                        name: read_string(32, &mut reader)?,
+                        name: read_string::<32, _>(&mut reader)?,
                     });
                 }
                 b"AADT" => {
@@ -234,7 +234,7 @@ impl Form for PlayerData {
                     for _ in 0..10 {
                         player_data.quick_keys.push(QuickKey {
                             bind_type: reader.read_le()?,
-                            bound_form: read_string(35, &mut reader)?,
+                            bound_form: read_string::<35, _>(&mut reader)?,
                             unknown: reader.read_le()?,
                         });
                     }
@@ -247,10 +247,10 @@ impl Form for PlayerData {
                 }
                 b"WERE" => player_data.werewolf_data = field.get().to_vec(),
                 _ => {
-                    return Err(TesError::DecodeFailed {
-                        description: format!("Unexpected field {}", field.name_as_str()),
-                        source: None,
-                    })
+                    return Err(decode_failed(format!(
+                        "Unexpected field {}",
+                        field.name_as_str()
+                    )));
                 }
             }
         }

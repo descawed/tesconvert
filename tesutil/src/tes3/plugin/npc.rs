@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Seek;
 
 use super::field::Tes3Field;
+use super::package::Package;
 use super::record::Tes3Record;
 use crate::plugin::Field;
 use crate::tes3::Skills;
@@ -54,39 +55,6 @@ pub struct Destination {
     position: (f32, f32, f32),
     rotation: (f32, f32, f32),
     cell_name: Option<String>,
-}
-
-/// NPC AI packages
-#[derive(Debug)]
-pub enum Package {
-    Activate(String),
-    Escort {
-        x: f32,
-        y: f32,
-        z: f32,
-        duration: u16,
-        id: String,
-        cell: Option<String>,
-    },
-    Follow {
-        x: f32,
-        y: f32,
-        z: f32,
-        duration: u16,
-        id: String,
-        cell: Option<String>,
-    },
-    Travel {
-        x: f32,
-        y: f32,
-        z: f32,
-    },
-    Wander {
-        distance: u16,
-        duration: u16,
-        time_of_day: u8,
-        idles: [u8; 8],
-    },
 }
 
 /// An NPC (or the PC) in the game
@@ -238,11 +206,11 @@ impl Form for Npc {
                 b"NPCO" => {
                     let mut reader = field.reader();
                     let count = reader.read_le()?;
-                    let id = read_string(NPC_STRING_LENGTH, &mut reader)?;
+                    let id = read_string::<NPC_STRING_LENGTH, _>(&mut reader)?;
                     npc.inventory.insert(id, count);
                 }
                 b"NPCS" => {
-                    let spell = read_string(NPC_STRING_LENGTH, &mut field.get())
+                    let spell = read_string::<NPC_STRING_LENGTH, _>(&mut field.get())
                         .map_err(|e| decode_failed_because("Could not parse NPCS", e))?;
                     npc.spells.push(spell);
                 }
@@ -285,84 +253,10 @@ impl Form for Npc {
                         return Err(decode_failed("Orphaned DNAM field"));
                     }
                 }
-                b"AI_A" => {
-                    let mut reader = field.reader();
-                    npc.packages.push(Package::Activate(read_string(
-                        NPC_STRING_LENGTH,
-                        &mut reader,
-                    )?));
+                b"AI_A" | b"AI_E" | b"AI_F" | b"AI_T" | b"AI_W" => {
+                    npc.packages.push(Package::read(&field)?)
                 }
-                b"AI_E" => {
-                    let mut reader = field.reader();
-                    let x = reader.read_le()?;
-                    let y = reader.read_le()?;
-                    let z = reader.read_le()?;
-                    let duration = reader.read_le()?;
-                    let id = read_string(NPC_STRING_LENGTH, &mut reader)?;
-                    npc.packages.push(Package::Escort {
-                        x,
-                        y,
-                        z,
-                        duration,
-                        id,
-                        cell: None,
-                    });
-                }
-                b"AI_F" => {
-                    let mut reader = field.reader();
-                    let x = reader.read_le()?;
-                    let y = reader.read_le()?;
-                    let z = reader.read_le()?;
-                    let duration = reader.read_le()?;
-                    let id = read_string(NPC_STRING_LENGTH, &mut reader)?;
-                    npc.packages.push(Package::Follow {
-                        x,
-                        y,
-                        z,
-                        duration,
-                        id,
-                        cell: None,
-                    });
-                }
-                b"AI_T" => {
-                    let mut reader = field.reader();
-                    let x = reader.read_le()?;
-                    let y = reader.read_le()?;
-                    let z = reader.read_le()?;
-                    npc.packages.push(Package::Travel { x, y, z });
-                }
-                b"AI_W" => {
-                    let mut reader = field.reader();
-                    let distance = reader.read_le()?;
-                    let duration = reader.read_le()?;
-                    let time_of_day = reader.read_le()?;
-                    let mut idles = [0u8; 8];
-                    reader.read_exact(&mut idles)?;
-                    npc.packages.push(Package::Wander {
-                        distance,
-                        duration,
-                        time_of_day,
-                        idles,
-                    });
-                }
-                b"CNDT" => {
-                    if let Some(last_package) = npc.packages.last_mut() {
-                        let cell_field = Some(String::from(field.get_zstring()?));
-                        match last_package {
-                            Package::Escort { ref mut cell, .. } => match *cell {
-                                Some(_) => return Err(decode_failed("Extraneous CNDT field")),
-                                None => *cell = cell_field,
-                            },
-                            Package::Follow { ref mut cell, .. } => match *cell {
-                                Some(_) => return Err(decode_failed("Extraneous CNDT field")),
-                                None => *cell = cell_field,
-                            },
-                            _ => return Err(decode_failed("Orphaned CNDT field")),
-                        }
-                    } else {
-                        return Err(decode_failed("Orphaned CNDT field"));
-                    }
-                }
+                b"CNDT" => Package::read_cell_name(npc.packages.last_mut(), &field)?,
                 _ => {
                     return Err(decode_failed(format!(
                         "Unexpected field {}",

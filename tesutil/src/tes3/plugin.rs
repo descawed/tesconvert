@@ -13,6 +13,9 @@ use binrw::{BinReaderExt, BinWriterExt};
 mod field;
 pub use field::*;
 
+mod package;
+pub use package::*;
+
 mod npc;
 pub use npc::*;
 
@@ -24,6 +27,9 @@ pub use record::*;
 
 mod reference;
 pub use reference::*;
+
+mod npc_change;
+pub use npc_change::*;
 
 mod class;
 pub use class::*;
@@ -308,8 +314,8 @@ impl Tes3Plugin {
         let mut head_reader: Cursor<&[u8]> = Cursor::new(header_data.as_ref());
         let version = head_reader.read_le()?;
         let flags: u32 = head_reader.read_le()?;
-        let author = read_string(AUTHOR_LENGTH, &mut head_reader)?;
-        let description = read_string(DESCRIPTION_LENGTH, &mut head_reader)?;
+        let author = read_string::<AUTHOR_LENGTH, _>(&mut head_reader)?;
+        let description = read_string::<DESCRIPTION_LENGTH, _>(&mut head_reader)?;
         let num_records = head_reader.read_le::<u32>()? as usize;
 
         let mut plugin = Tes3Plugin {
@@ -354,10 +360,10 @@ impl Tes3Plugin {
                     let hour = reader.read_le()?;
                     let mut unknown1 = [0u8; 12];
                     reader.read_exact(&mut unknown1)?;
-                    let current_cell = read_string(CELL_LENGTH, &mut reader)?;
+                    let current_cell = read_string::<CELL_LENGTH, _>(&mut reader)?;
                     let mut unknown2 = [0u8; 4];
                     reader.read_exact(&mut unknown2)?;
-                    let player_name = read_string(NAME_LENGTH, &mut reader)?;
+                    let player_name = read_string::<NAME_LENGTH, _>(&mut reader)?;
 
                     plugin.save = Some(SaveInfo {
                         current_health,
@@ -813,8 +819,8 @@ impl Tes3Plugin {
 
         buf_writer.write_le(&self.version)?;
         buf_writer.write_le(&(if self.is_master { FLAG_MASTER } else { 0 }))?;
-        write_str(&self.author, AUTHOR_LENGTH, &mut buf_writer)?;
-        write_str(&self.description, DESCRIPTION_LENGTH, &mut buf_writer)?;
+        write_str::<AUTHOR_LENGTH, _>(&self.author, &mut buf_writer)?;
+        write_str::<DESCRIPTION_LENGTH, _>(&self.description, &mut buf_writer)?;
         buf_writer.write_le(&num_records)?;
 
         header.add_field(Tes3Field::new(b"HEDR", buf).unwrap());
@@ -832,9 +838,9 @@ impl Tes3Plugin {
             writer.write_le(&save.max_health)?;
             writer.write_le(&save.hour)?;
             writer.write_all(&save.unknown1)?;
-            write_str(&save.current_cell, CELL_LENGTH, &mut writer)?;
+            write_str::<CELL_LENGTH, _>(&save.current_cell, &mut writer)?;
             writer.write_all(&save.unknown2)?;
-            write_str(&save.player_name, NAME_LENGTH, &mut writer)?;
+            write_str::<NAME_LENGTH, _>(&save.player_name, &mut writer)?;
 
             header.add_field(Tes3Field::new(b"GMDT", game_data).unwrap());
         }

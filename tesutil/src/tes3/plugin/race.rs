@@ -105,7 +105,7 @@ impl Form for Race {
                 }
                 b"NPCS" => race
                     .specials
-                    .push(read_string(ID_LENGTH, &mut field.get())?),
+                    .push(read_string::<ID_LENGTH, _>(&mut field.get())?),
                 b"DESC" => race.description = Some(String::from(field.get_string()?)),
                 _ => {
                     return Err(decode_failed(format!(

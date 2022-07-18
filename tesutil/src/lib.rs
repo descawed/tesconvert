@@ -209,12 +209,12 @@ pub trait Form: Sized {
     fn write(&self, record: &mut Self::Record) -> Result<(), TesError>;
 }
 
-fn read_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
-    let mut buf = vec![0u8; size];
-    f.read_exact(&mut buf)?;
+fn read_string_bytes<'a, T: Into<&'a [u8]>>(buf: T) -> io::Result<String> {
+    let buf = buf.into();
     // ensure there is exactly one null byte at the end of the string
     let chars: Vec<u8> = buf
         .into_iter()
+        .map(|b| *b)
         .take_while(|b| *b != 0)
         .chain(iter::once(0))
         .collect();
@@ -226,9 +226,37 @@ fn read_string<T: Read>(size: usize, mut f: T) -> io::Result<String> {
     }
 }
 
-fn write_str<T: Write>(s: &str, size: usize, mut f: T) -> io::Result<()> {
+fn read_string<const N: usize, T: Read>(mut f: T) -> io::Result<String> {
+    let mut buf = [0; N];
+    f.read_exact(&mut buf)?;
+    read_string_bytes(buf.as_ref())
+}
+
+fn read_string_dyn<T: Read>(size: usize, mut f: T) -> io::Result<String> {
+    let mut buf = vec![0u8; size];
+    f.read_exact(&mut buf)?;
+    read_string_bytes(buf.as_ref())
+}
+
+fn make_str<const N: usize>(s: &str) -> [u8; N] {
+    let mut buf = [0; N];
+    buf[..s.len()].copy_from_slice(s.as_bytes());
+    buf
+}
+
+fn make_str_vec(s: &str, size: usize) -> Vec<u8> {
     let mut buf = vec![0u8; size];
     buf[..s.len()].copy_from_slice(s.as_bytes());
+    buf
+}
+
+fn write_str_dyn<T: Write>(s: &str, size: usize, mut f: T) -> io::Result<()> {
+    let buf = make_str_vec(s, size);
+    f.write_all(&buf)
+}
+
+fn write_str<const N: usize, T: Write>(s: &str, mut f: T) -> io::Result<()> {
+    let buf = make_str::<N>(s);
     f.write_all(&buf)
 }
 
@@ -344,14 +372,14 @@ mod tests {
     #[test]
     fn test_extract_string() {
         let data = b"abcd\0\0\0\0\0\0";
-        let s = read_string(10, &mut data.as_ref()).unwrap();
+        let s = read_string::<10, _>(&mut data.as_ref()).unwrap();
         assert_eq!(s, "abcd");
     }
 
     #[test]
     fn test_serialize_str() {
         let mut buf = [0u8; 10];
-        write_str("abcd", 10, &mut buf.as_mut()).unwrap();
+        write_str::<10, _>("abcd", &mut buf.as_mut()).unwrap();
         assert_eq!(buf, *b"abcd\0\0\0\0\0\0");
     }
 }

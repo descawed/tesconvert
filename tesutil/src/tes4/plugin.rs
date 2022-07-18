@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn load_plugin() {
-        let cursor = io::Cursor::new(TEST_PLUGIN);
+        let cursor = Cursor::new(TEST_PLUGIN);
         let plugin = Tes4Plugin::read(cursor).unwrap();
 
         let record = plugin

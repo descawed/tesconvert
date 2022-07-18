@@ -133,10 +133,10 @@ impl Form for ActiveSpellList {
                     let mut reader = field.reader();
                     spell.magic_type = MagicType::try_from(reader.read_le::<u32>()? as u8)
                         .map_err(|e| decode_failed_because("Invalid magic type in SPDT", e))?;
-                    spell.id = read_string(ID_LENGTH, &mut reader)?;
+                    spell.id = read_string::<ID_LENGTH, _>(&mut reader)?;
                     reader.read_exact(&mut spell.unknown1)?;
-                    spell.caster = read_string(ID_LENGTH, &mut reader)?;
-                    spell.source = read_string(ID_LENGTH, &mut reader)?;
+                    spell.caster = read_string::<ID_LENGTH, _>(&mut reader)?;
+                    spell.source = read_string::<ID_LENGTH, _>(&mut reader)?;
                     reader.read_exact(&mut spell.unknown2)?;
                 }
                 // TODO: I'm actually not sure if this field is a string or a zstring. OpenMW seems to parse both the same.
@@ -153,7 +153,7 @@ impl Form for ActiveSpellList {
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned NPDT in SPLM"))?;
                     let effect = ActiveEffect {
-                        affected_actor: read_string(ID_LENGTH, &mut reader)?,
+                        affected_actor: read_string::<ID_LENGTH, _>(&mut reader)?,
                         index: reader.read_le()?,
                         unknown1: {
                             let mut buf = [0; 4];
@@ -187,7 +187,7 @@ impl Form for ActiveSpellList {
                     let associated_item = EffectAssociatedItem {
                         unknown1: reader.read_le()?,
                         unknown2: reader.read_le()?,
-                        id: read_string(ASSOCIATED_ID_LENGTH, &mut reader)?,
+                        id: read_string::<ASSOCIATED_ID_LENGTH, _>(&mut reader)?,
                     };
                     effect.associated_items.push(associated_item);
                 }
@@ -202,7 +202,7 @@ impl Form for ActiveSpellList {
                         .last_mut()
                         .ok_or_else(|| decode_failed("Orphaned CNAM in SPLM"))?;
                     reader.seek(SeekFrom::Current(4))?; // always 0 according to OpenMW
-                    effect.summon = Some(read_string(ID_LENGTH, &mut reader)?);
+                    effect.summon = Some(read_string::<ID_LENGTH, _>(&mut reader)?);
                 }
                 b"VNAM" => {
                     let spell = list
