@@ -23,9 +23,7 @@ impl Form for Birthsign {
     type Field = Tes3Field;
     type Record = Tes3Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"BSGN"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"BSGN";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         Birthsign::assert(record)?;

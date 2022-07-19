@@ -103,9 +103,7 @@ impl Form for ActiveSpellList {
     type Field = Tes3Field;
     type Record = Tes3Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"SPLM"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"SPLM";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         ActiveSpellList::assert(record)?;

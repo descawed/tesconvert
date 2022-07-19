@@ -5,7 +5,7 @@ use std::path::Path;
 use super::cosave::*;
 use super::plugin::*;
 use super::save::*;
-use super::{FindForm, FormId, MagicEffect, MagicEffectType, MAGIC_EFFECTS};
+use super::{FindForm, FormId, MagicEffectType, SpellEffect, MAGIC_EFFECTS};
 use crate::{Form, OwnedOrRef, TesError, World};
 
 static BASE_GAME: &str = "Oblivion.esm";

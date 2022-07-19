@@ -5,11 +5,11 @@ use std::path::Path;
 use std::thread;
 
 use tesutil::tes3::{InventoryItem, SkillType, Tes3World};
-use tesutil::tes4;
 use tesutil::tes4::cosave::{CoSave, ObConvert, OPCODE_BASE};
 use tesutil::tes4::save::*;
 use tesutil::tes4::{ActorValue, FindForm, FormId, Tes4World};
 use tesutil::{tes3, EffectRange};
+use tesutil::{tes4, Record};
 use tesutil::{Attribute, Attributes, Form, TesError};
 
 use crate::config::*;
@@ -519,26 +519,8 @@ impl MorrowindToOblivion {
         })
     }
 
-    fn convert_spell(&self, mw_spell: &tes3::Spell) -> Result<Option<tes4::Spell>> {
-        let mut ob_spell = tes4::Spell::new(None, Some(String::from(mw_spell.name())));
-        if mw_spell.is_auto_calc() {
-            ob_spell.set_auto_calc(true);
-        } else {
-            ob_spell.set_auto_calc(false);
-            ob_spell.cost = mw_spell.cost();
-        }
-        // choosing not to set this flag right now because I don't think it's desirable to add new player start spells in the save
-        // ob_spell.set_player_start_spell(spell.is_player_start_spell());
-        ob_spell.spell_type = match mw_spell.spell_type() {
-            tes3::SpellType::Spell => tes4::SpellType::Spell,
-            tes3::SpellType::Ability => tes4::SpellType::Ability,
-            tes3::SpellType::Power => tes4::SpellType::Power,
-            tes3::SpellType::Disease => tes4::SpellType::Disease,
-            _ => return Ok(None),
-        };
-
-        let mut converted_any = false;
-        for effect in mw_spell.effects() {
+    fn convert_effect(&self, effect: &tes3::SpellEffect) -> Result<Option<tes4::SpellEffect>> {
+        Ok(
             if let Some(effect_type) = Morrowind::oblivion_effect(effect.effect()) {
                 // TODO: what should we do if a spell includes both e.g. a Calm Creature and Calm Humanoid effect?
                 let mut ob_effect = tes4::SpellEffect::new(effect_type);
@@ -562,7 +544,7 @@ impl MorrowindToOblivion {
                 ob_effect.set_actor_value(if let Some(mw_skill) = effect.skill() {
                     tes4::ActorValue::from(match Morrowind::oblivion_skill(mw_skill) {
                         Some(skill) => skill,
-                        None => continue, // skip this effect if it can't be converted properly
+                        None => return Ok(None),
                     })
                 } else if let Some(attribute) = effect.attribute() {
                     tes4::ActorValue::from(attribute)
@@ -570,8 +552,35 @@ impl MorrowindToOblivion {
                     effect_type.default_actor_value()
                 })?;
 
-                ob_spell.add_effect(ob_effect);
+                Some(ob_effect)
+            } else {
+                None
+            },
+        )
+    }
 
+    fn convert_spell(&self, mw_spell: &tes3::Spell) -> Result<Option<tes4::Spell>> {
+        let mut ob_spell = tes4::Spell::new(None, Some(String::from(mw_spell.name())));
+        if mw_spell.is_auto_calc() {
+            ob_spell.set_auto_calc(true);
+        } else {
+            ob_spell.set_auto_calc(false);
+            ob_spell.cost = mw_spell.cost();
+        }
+        // choosing not to set this flag right now because I don't think it's desirable to add new player start spells in the save
+        // ob_spell.set_player_start_spell(spell.is_player_start_spell());
+        ob_spell.spell_type = match mw_spell.spell_type() {
+            tes3::SpellType::Spell => tes4::SpellType::Spell,
+            tes3::SpellType::Ability => tes4::SpellType::Ability,
+            tes3::SpellType::Power => tes4::SpellType::Power,
+            tes3::SpellType::Disease => tes4::SpellType::Disease,
+            _ => return Ok(None),
+        };
+
+        let mut converted_any = false;
+        for effect in mw_spell.effects() {
+            if let Some(ob_effect) = self.convert_effect(effect)? {
+                ob_spell.add_effect(ob_effect);
                 converted_any = true;
             }
         }
@@ -655,7 +664,6 @@ impl MorrowindToOblivion {
                     .ob
                     .world()
                     .get(&FindForm::ByIndex(*id))
-                    .ok()
                     .unwrap()
                     .unwrap();
                 matches!(
@@ -1130,6 +1138,33 @@ impl MorrowindToOblivion {
         Ok(())
     }
 
+    fn convert_potion(&self, mw_potion: &tes3::Potion) -> Result<Option<tes4::Potion>> {
+        let mut ob_potion = tes4::Potion::new(
+            mw_potion.id.clone(),
+            mw_potion.name.clone().unwrap_or_else(String::new),
+        );
+
+        ob_potion.is_auto_calc = mw_potion.alchemy_data.is_auto_calc;
+        ob_potion.value = mw_potion.alchemy_data.value;
+        ob_potion.weight = mw_potion.alchemy_data.weight;
+
+        let mut converted_any = false;
+        for effect in &mw_potion.effects {
+            if let Some(ob_effect) = self.convert_effect(effect)? {
+                ob_potion.add_effect(ob_effect);
+                converted_any = true;
+            }
+        }
+
+        // only add the spell if we successfully converted at least one effect
+        Ok(if converted_any {
+            ob_potion.use_auto_graphics();
+            Some(ob_potion)
+        } else {
+            None
+        })
+    }
+
     fn convert_inventory(&self, ob_player_ref: &mut PlayerReferenceChange) -> Result<()> {
         let ob_player_npc: tes4::Npc = self
             .ob
@@ -1138,6 +1173,7 @@ impl MorrowindToOblivion {
             .ok_or_else(|| anyhow!("Missing Oblivion player NPC record"))?;
 
         let mut stacks = HashMap::new();
+        let mut created_forms = HashMap::new();
         ob_player_ref.clear_inventory();
         let mut mw_inventory: Vec<(&InventoryItem, bool)> = self
             .player_change
@@ -1149,43 +1185,65 @@ impl MorrowindToOblivion {
                 continue; // can't convert scripted items
             }
 
-            if let Some(form_id) = self.form_map.borrow().get(&mw_item.id).copied() {
-                let iref = self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id));
-                if !stacks.contains_key(&iref) {
-                    stacks.insert(iref, Item::new(iref, 0));
+            let iref = if let Some(iref) = created_forms.get(mw_item.id.as_str()).copied() {
+                iref
+            } else if let Some(form_id) = self.form_map.borrow().get(&mw_item.id).copied() {
+                self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id))
+            } else if let Some(record) = self.mw.world.get_record(&mw_item.id)? {
+                match record.name() {
+                    tes3::Potion::RECORD_TYPE => {
+                        let mw_potion = tes3::Potion::read(&*record)?;
+                        if let Some(ob_potion) = self.convert_potion(&mw_potion)? {
+                            let iref =
+                                self.with_save_mut(|ob_save| ob_save.add_form(&ob_potion))?;
+
+                            created_forms.insert(mw_item.id.as_str(), iref);
+
+                            iref
+                        } else {
+                            continue;
+                        }
+                    }
+                    _ => continue,
                 }
+            } else {
+                continue;
+            };
 
-                let ob_item = stacks.get_mut(&iref).unwrap();
-                ob_item.stack_count += mw_item.count as i32;
-
-                let mut properties = vec![];
-                if mw_item.is_equipped {
-                    // FIXME: look up clothing type of Oblivion form and use EquippedAccessory if ring or amulet
-                    properties.push(Property::EquippedItem);
-                }
-
-                if mw_item.count > 1 {
-                    properties.push(Property::AffectedItemCount(mw_item.count as u16));
-                }
-
-                if let Some(durability) = mw_item.remaining_durability {
-                    // TODO: convert Morrowind integer health to Oblivion float health
-                }
-
-                if let Some(charge) = mw_item.enchantment_charge {
-                    properties.push(Property::EnchantmentPoints(charge));
-                }
-
-                if let Some(ref soul) = mw_item.soul {
-                    // TODO: look up soul type from Morrowind
-                }
-
-                if !properties.is_empty() {
-                    ob_item.add_change(properties);
-                }
-
-                *was_converted = true;
+            if !stacks.contains_key(&iref) {
+                stacks.insert(iref, Item::new(iref, 0));
             }
+
+            let ob_item = stacks.get_mut(&iref).unwrap();
+            ob_item.stack_count += mw_item.count as i32;
+
+            let mut properties = vec![];
+            if mw_item.is_equipped {
+                // FIXME: look up clothing type of Oblivion form and use EquippedAccessory if ring or amulet
+                properties.push(Property::EquippedItem);
+            }
+
+            if mw_item.count > 1 {
+                properties.push(Property::AffectedItemCount(mw_item.count as u16));
+            }
+
+            if let Some(durability) = mw_item.remaining_durability {
+                // TODO: convert Morrowind integer health to Oblivion float health
+            }
+
+            if let Some(charge) = mw_item.enchantment_charge {
+                properties.push(Property::EnchantmentPoints(charge));
+            }
+
+            if let Some(ref soul) = mw_item.soul {
+                // TODO: look up soul type from Morrowind
+            }
+
+            if !properties.is_empty() {
+                ob_item.add_change(properties);
+            }
+
+            *was_converted = true;
         }
 
         // remove default items

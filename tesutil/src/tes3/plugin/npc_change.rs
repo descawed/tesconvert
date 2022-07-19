@@ -67,9 +67,7 @@ impl Form for NpcChange {
     type Field = Tes3Field;
     type Record = Tes3Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"NPCC"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"NPCC";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         NpcChange::assert(&record)?;

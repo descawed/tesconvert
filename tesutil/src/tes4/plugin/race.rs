@@ -21,9 +21,7 @@ impl Form for Race {
     type Field = Tes4Field;
     type Record = Tes4Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"RACE"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"RACE";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         Race::assert(record)?;

@@ -23,7 +23,7 @@ use std::iter;
 use std::ops::Deref;
 use std::str;
 
-use binrw::{BinReaderExt, BinWriterExt};
+use binrw::{binrw, BinReaderExt, BinWriterExt};
 use enum_map::{Enum, EnumMap};
 use len_trait::len::Len;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -88,8 +88,10 @@ impl TryFrom<tes4::ActorValue> for Attribute {
 pub type Attributes<T> = EnumMap<Attribute, T>;
 
 /// Range of a magic effect
+#[binrw]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
+#[brw(repr = u8)]
 pub enum EffectRange {
     Self_, // Self is a reserved word
     Touch,
@@ -188,13 +190,13 @@ pub trait Form: Sized {
     type Record: Record<Self::Field>;
 
     /// The 4-byte ID for this form's record
-    fn record_type() -> &'static [u8; 4];
+    const RECORD_TYPE: &'static [u8; 4];
 
     fn read(record: &Self::Record) -> Result<Self, TesError>;
 
     /// Assert that a record matches this Form type
     fn assert(record: &Self::Record) -> Result<(), TesError> {
-        let rt = Self::record_type();
+        let rt = Self::RECORD_TYPE;
         if record.name() != rt {
             return Err(decode_failed(format!(
                 "Expected {} record, got {}",

@@ -345,6 +345,11 @@ impl MagicEffectType {
         }
     }
 
+    /// Gets a magic effect from a 4-byte ID provided as a u32
+    pub fn from_id_int(id: u32) -> Option<MagicEffectType> {
+        MagicEffectType::from_id(&id.to_le_bytes())
+    }
+
     /// Gets a magic effect from a 4-byte ID, if the ID is valid
     pub fn from_id(id: &[u8]) -> Option<MagicEffectType> {
         use MagicEffectType::*;
@@ -741,6 +746,11 @@ impl MagicEffect {
         !self.flags.contains(EffectFlags::NO_AREA)
     }
 
+    /// Is this a hostile effect?
+    pub fn is_hostile(&self) -> bool {
+        self.flags.contains(EffectFlags::HOSTILE)
+    }
+
     /// Is this effect's magnitude a percent?
     pub fn is_magnitude_percent(&self) -> bool {
         self.flags.contains(EffectFlags::MAGNITUDE_PERCENT)
@@ -776,9 +786,7 @@ impl Form for MagicEffect {
     type Field = Tes4Field;
     type Record = Tes4Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"MGEF"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"MGEF";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         MagicEffect::assert(record)?;

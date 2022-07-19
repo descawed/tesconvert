@@ -79,7 +79,7 @@ pub struct Npc {
     editor_id: String,
     name: String,
     model: String,
-    modb: f32,
+    bound_radius: f32,
     actor_settings: ActorSettings,
     factions: Vec<FactionRank>,
     death_item: Option<FormId>,
@@ -108,7 +108,7 @@ impl Default for Npc {
             editor_id: String::new(),
             name: String::new(),
             model: String::new(),
-            modb: 0.,
+            bound_radius: 0.,
             actor_settings: ActorSettings::default(),
             factions: vec![],
             death_item: None,
@@ -144,9 +144,7 @@ impl Form for Npc {
     type Field = Tes4Field;
     type Record = Tes4Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"NPC_"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"NPC_";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         Npc::assert(&record)?;
@@ -158,7 +156,7 @@ impl Form for Npc {
                 b"EDID" => npc.editor_id = String::from(field.get_zstring()?),
                 b"FULL" => npc.name = String::from(field.get_zstring()?),
                 b"MODL" => npc.model = String::from(field.get_zstring()?),
-                b"MODB" => npc.modb = field.get_f32()?,
+                b"MODB" => npc.bound_radius = field.get_f32()?,
                 b"ACBS" => npc.actor_settings = field.reader().read_le()?,
                 b"SNAM" => npc.factions.push(field.reader().read_le()?),
                 b"INAM" => npc.death_item = Some(FormId(field.get_u32()?)),

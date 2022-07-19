@@ -49,6 +49,9 @@ pub use race::*;
 mod birthsign;
 pub use birthsign::*;
 
+mod potion;
+pub use potion::*;
+
 /// Save game information
 ///
 /// For saves (.ess files), this information is included in the TES3 record.
@@ -754,7 +757,7 @@ impl Tes3Plugin {
         &self,
         id: &str,
     ) -> Result<Option<T>, TesError> {
-        Ok(match self.get_record_with_type(id, T::record_type()) {
+        Ok(match self.get_record_with_type(id, T::RECORD_TYPE) {
             Some(record) => Some(T::read(&*record)?),
             None => None,
         })

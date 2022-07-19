@@ -410,7 +410,7 @@ impl Save {
     where
         T: Form<Field = Tes4Field, Record = Tes4Record>,
     {
-        let mut record = Tes4Record::new(T::record_type());
+        let mut record = Tes4Record::new(T::RECORD_TYPE);
         form.write(&mut record)?;
         Ok(self.add_record(record))
     }

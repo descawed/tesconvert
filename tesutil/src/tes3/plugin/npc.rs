@@ -100,9 +100,7 @@ impl Form for Npc {
     type Field = Tes3Field;
     type Record = Tes3Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"NPC_"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"NPC_";
 
     /// Reads NPC data from a raw record
     ///

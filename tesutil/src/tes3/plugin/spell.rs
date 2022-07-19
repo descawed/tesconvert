@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::tes3::{Skill, Tes3Field, Tes3Record};
+use crate::tes3::{MagicEffectType, Skill, SpellEffect, Tes3Field, Tes3Record};
 use crate::{
     decode_failed, decode_failed_because, Attribute, EffectRange, Field, Form, Record, TesError,
 };
@@ -9,157 +9,10 @@ use binrw::BinReaderExt;
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-pub enum MagicEffectType {
-    WaterBreathing,
-    SwiftSwim,
-    WaterWalking,
-    Shield,
-    FireShield,
-    LightningShield,
-    FrostShield,
-    Burden,
-    Feather,
-    Jump,
-    Levitate,
-    SlowFall,
-    Lock,
-    Open,
-    FireDamage,
-    ShockDamage,
-    FrostDamage,
-    DrainAttribute,
-    DrainHealth,
-    DrainMagicka,
-    DrainFatigue,
-    DrainSkill,
-    DamageAttribute,
-    DamageHealth,
-    DamageMagicka,
-    DamageFatigue,
-    DamageSkill,
-    Poison,
-    WeaknessToFire,
-    WeaknessToFrost,
-    WeaknessToShock,
-    WeaknessToMagicka,
-    WeaknessToCommonDisease,
-    WeaknessToBlightDisease,
-    WeaknessToCorprusDisease,
-    WeaknessToPoison,
-    WeaknessToNormalWeapons,
-    DisintegrateWeapon,
-    DisintegrateArmor,
-    Invisibility,
-    Chameleon,
-    Light,
-    Sanctuary,
-    NightEye,
-    Charm,
-    Paralyze,
-    Silence,
-    Blind,
-    Sound,
-    CalmHumanoid,
-    CalmCreature,
-    FrenzyHumanoid,
-    FrenzyCreature,
-    DemoralizeHumanoid,
-    DemoralizeCreature,
-    RallyHumanoid,
-    RallyCreature,
-    Dispel,
-    Soultrap,
-    Telekinesis,
-    Mark,
-    Recall,
-    DivineIntervention,
-    AlmsiviIntervention,
-    DetectAnimal,
-    DetectEnchantment,
-    DetectKey,
-    SpellAbsorption,
-    Reflect,
-    CureCommonDisease,
-    CureBlightDisease,
-    CureCorprusDisease,
-    CurePoison,
-    CureParalyzation,
-    RestoreAttribute,
-    RestoreHealth,
-    RestoreMagicka,
-    RestoreFatigue,
-    RestoreSkill,
-    FortifyAttribute,
-    FortifyHealth,
-    FortifyMagicka,
-    FortifyFatigue,
-    FortifySkill,
-    FortifyMaximumMagicka,
-    AbsorbAttribute,
-    AbsorbHealth,
-    AbsorbMagicka,
-    AbsorbFatigue,
-    AbsorbSkill,
-    ResistFire,
-    ResistFrost,
-    ResistShock,
-    ResistMagicka,
-    ResistCommonDisease,
-    ResistBlightDisease,
-    ResistCorprusDisease,
-    ResistPoison,
-    ResistNormalWeapons,
-    ResistParalysis,
-    RemoveCurse,
-    TurnUndead,
-    SummonScamp,
-    SummonClannfear,
-    SummonDaedroth,
-    SummonDremora,
-    SummonAncestralGhost,
-    SummonSkeletalMinion,
-    SummonBonewalker,
-    SummonGreaterBonewalker,
-    SummonBonelord,
-    SummonWingedTwilight,
-    SummonHunger,
-    SummonGoldenSaint,
-    SummonFlameAtronach,
-    SummonFrostAtronach,
-    SummonStormAtronach,
-    FortifyAttack,
-    CommandCreature,
-    CommandHumanoid,
-    BoundDagger,
-    BoundLongsword,
-    BoundMace,
-    BoundBattleAxe,
-    BoundSpear,
-    BoundLongbow,
-    ExtraSpell,
-    BoundCuirass,
-    BoundHelm,
-    BoundBoots,
-    BoundShield,
-    BoundGloves,
-    Corprus,
-    Vampirism,
-    SummonCenturionSphere,
-    SunDamage,
-    StuntedMagicka,
-    SummonFabricant,
-    CallWolf,
-    CallBear,
-    SummonBonewolf,
-    SummonCreature04,
-    SummonCreature05,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum SpellType {
+    #[default]
     Spell,
     Ability,
     Blight,
@@ -169,6 +22,7 @@ pub enum SpellType {
 }
 
 bitflags! {
+    #[derive(Default)]
     struct SpellFlags: u32 {
         const AUTO_CALC = 0x01;
         const PC_START_SPELL = 0x02;
@@ -176,55 +30,8 @@ bitflags! {
     }
 }
 
-/// An individual effect of a spell
-#[derive(Debug)]
-pub struct SpellEffect {
-    effect: MagicEffectType,
-    skill: Option<Skill>,
-    attribute: Option<Attribute>,
-    range: EffectRange,
-    area: u32,
-    duration: u32,
-    min_magnitude: u32,
-    max_magnitude: u32,
-}
-
-impl SpellEffect {
-    pub fn effect(&self) -> MagicEffectType {
-        self.effect
-    }
-
-    pub fn skill(&self) -> Option<Skill> {
-        self.skill
-    }
-
-    pub fn attribute(&self) -> Option<Attribute> {
-        self.attribute
-    }
-
-    /// Gets the spell's range
-    pub fn range(&self) -> EffectRange {
-        self.range
-    }
-
-    /// Gets the spell's area
-    pub fn area(&self) -> u32 {
-        self.area
-    }
-
-    /// Gets the spell's duration
-    pub fn duration(&self) -> u32 {
-        self.duration
-    }
-
-    /// Get the spell's range of magnitude
-    pub fn magnitude(&self) -> (u32, u32) {
-        (self.min_magnitude, self.max_magnitude)
-    }
-}
-
 /// A spell, ability, or disease
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Spell {
     id: String,
     name: String,
@@ -276,21 +83,12 @@ impl Form for Spell {
     type Field = Tes3Field;
     type Record = Tes3Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"SPEL"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"SPEL";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         Spell::assert(record)?;
 
-        let mut spell = Spell {
-            id: String::new(),
-            name: String::new(),
-            spell_type: SpellType::Spell,
-            cost: 0,
-            flags: SpellFlags::empty(),
-            effects: vec![],
-        };
+        let mut spell = Spell::default();
 
         for field in record.iter() {
             match field.name() {
@@ -304,41 +102,7 @@ impl Form for Spell {
                     spell.flags = SpellFlags::from_bits(reader.read_le()?)
                         .ok_or_else(|| decode_failed("Invalid spell flags"))?;
                 }
-                b"ENAM" => {
-                    let mut reader = field.reader();
-                    spell.effects.push(SpellEffect {
-                        effect: MagicEffectType::try_from(reader.read_le::<u16>()? as u8)
-                            .map_err(|e| decode_failed_because("Invalid magic effect", e))?,
-                        skill: {
-                            let skill: u8 = reader.read_le()?;
-                            if skill == 0xff {
-                                None
-                            } else {
-                                Some(
-                                    Skill::try_from(skill).map_err(|e| {
-                                        decode_failed_because("Invalid skill value", e)
-                                    })?,
-                                )
-                            }
-                        },
-                        attribute: {
-                            let attribute: u8 = reader.read_le()?;
-                            if attribute == 0xff {
-                                None
-                            } else {
-                                Some(Attribute::try_from(attribute).map_err(|e| {
-                                    decode_failed_because("Invalid attribute value", e)
-                                })?)
-                            }
-                        },
-                        range: EffectRange::try_from(reader.read_le::<u32>()? as u8)
-                            .map_err(|e| decode_failed_because("Invalid effect range", e))?,
-                        area: reader.read_le()?,
-                        duration: reader.read_le()?,
-                        min_magnitude: reader.read_le()?,
-                        max_magnitude: reader.read_le()?,
-                    });
-                }
+                b"ENAM" => spell.effects.push(field.reader().read_le()?),
                 _ => {
                     return Err(decode_failed(format!(
                         "Unexpected field {}",

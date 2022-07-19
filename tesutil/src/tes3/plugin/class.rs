@@ -47,9 +47,7 @@ impl Form for Class {
     type Field = Tes3Field;
     type Record = Tes3Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"CLAS"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"CLAS";
 
     /// Reads class data from a raw record
     ///

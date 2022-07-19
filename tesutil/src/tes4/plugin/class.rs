@@ -54,9 +54,7 @@ impl Form for Class {
     type Field = Tes4Field;
     type Record = Tes4Record;
 
-    fn record_type() -> &'static [u8; 4] {
-        b"CLAS"
-    }
+    const RECORD_TYPE: &'static [u8; 4] = b"CLAS";
 
     //noinspection RsTypeCheck
     /// Reads class data from a raw record
