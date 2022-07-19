@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::io::Seek;
 
 use super::field::Tes3Field;
-use super::package::Package;
 use super::record::Tes3Record;
 use crate::plugin::Field;
-use crate::tes3::Skills;
+use crate::tes3::{Actor, ActorState, AiSettings, Destination, Package, Skills};
 use crate::*;
 
 use binrw::BinReaderExt;
@@ -23,39 +22,8 @@ bitflags! {
     }
 }
 
-bitflags! {
-    struct ServiceFlags: u32 {
-        const WEAPON = 0x00001;
-        const ARMOR = 0x00002;
-        const CLOTHING = 0x00004;
-        const BOOKS = 0x00008;
-        const INGREDIENTS = 0x00010;
-        const PICKS = 0x00020;
-        const PROBES = 0x00040;
-        const LIGHTS = 0x00080;
-        const APPARATUS = 0x00100;
-        const REPAIR_ITEMS = 0x00200;
-        const MISC = 0x00400;
-        const SPELLS = 0x00800;
-        const MAGIC_ITEMS = 0x01000;
-        const POTIONS = 0x02000;
-        const TRAINING = 0x04000;
-        const SPELLMAKING = 0x08000;
-        const ENCHANTING = 0x10000;
-        const REPAIR = 0x20000;
-    }
-}
-
 /// Maximum length of certain strings in an NPC record
 pub const NPC_STRING_LENGTH: usize = 32;
-
-/// NPC's cell travel destination
-#[derive(Debug)]
-pub struct Destination {
-    position: (f32, f32, f32),
-    rotation: (f32, f32, f32),
-    cell_name: Option<String>,
-}
 
 /// An NPC (or the PC) in the game
 #[derive(Debug)]
@@ -82,18 +50,101 @@ pub struct Npc {
     flags: NpcFlags,
     inventory: HashMap<String, u32>,
     spells: Vec<String>,
-    // <ai>
-    hello: u16,
-    fight: u8,
-    flee: u8,
-    alarm: u8,
-    ai_unknown1: u8,
-    ai_unknown2: u8,
-    ai_unknown3: u8,
-    services: ServiceFlags,
-    // </ai>
+    ai_settings: AiSettings,
     destinations: Vec<Destination>,
     packages: Vec<Package>,
+}
+
+impl ActorState for Npc {
+    fn iter_packages(&self) -> Box<dyn Iterator<Item = &Package> + '_> {
+        Box::new(self.packages.iter())
+    }
+
+    fn iter_packages_mut(&mut self) -> Box<dyn Iterator<Item = &mut Package> + '_> {
+        Box::new(self.packages.iter_mut())
+    }
+
+    fn add_package(&mut self, package: Package) {
+        self.packages.push(package);
+    }
+
+    fn iter_inventory(&self) -> Box<dyn Iterator<Item = (&str, u32)> + '_> {
+        Box::new(
+            self.inventory
+                .iter()
+                .map(|(id, count)| (id.as_str(), *count)),
+        )
+    }
+
+    fn iter_inventory_mut(&mut self) -> Box<dyn Iterator<Item = (&str, &mut u32)> + '_> {
+        Box::new(
+            self.inventory
+                .iter_mut()
+                .map(|(id, count)| (id.as_str(), count)),
+        )
+    }
+
+    fn add_item(&mut self, item_id: String, count: u32) {
+        self.inventory.insert(item_id, count);
+    }
+}
+
+impl Actor for Npc {
+    fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
+    }
+
+    fn model(&self) -> Option<&str> {
+        self.model.as_deref()
+    }
+
+    fn set_model(&mut self, model: Option<String>) {
+        self.model = model;
+    }
+
+    fn script(&self) -> Option<&str> {
+        self.script.as_deref()
+    }
+
+    fn set_script(&mut self, script: Option<String>) {
+        self.script = script;
+    }
+
+    fn iter_spells(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        Box::new(self.spells.iter().map(|s| s.as_str()))
+    }
+
+    fn add_spell(&mut self, spell_id: String) {
+        self.spells.push(spell_id);
+    }
+
+    fn ai_settings(&self) -> &AiSettings {
+        &self.ai_settings
+    }
+
+    fn ai_settings_mut(&mut self) -> &mut AiSettings {
+        &mut self.ai_settings
+    }
+
+    fn set_ai_settings(&mut self, settings: AiSettings) {
+        self.ai_settings = settings;
+    }
+
+    fn iter_destinations(&self) -> Box<dyn Iterator<Item = &Destination> + '_> {
+        Box::new(self.destinations.iter())
+    }
+
+    fn iter_destinations_mut(&mut self) -> Box<dyn Iterator<Item = &mut Destination> + '_> {
+        Box::new(self.destinations.iter_mut())
+    }
+
+    fn add_destination(&mut self, destination: Destination) {
+        self.destinations.push(destination);
+    }
 }
 
 impl Form for Npc {
@@ -134,16 +185,7 @@ impl Form for Npc {
             flags: NpcFlags::empty(),
             inventory: HashMap::new(),
             spells: vec![],
-            // <ai>
-            hello: 0,
-            fight: 0,
-            flee: 0,
-            alarm: 0,
-            ai_unknown1: 0,
-            ai_unknown2: 0,
-            ai_unknown3: 0,
-            services: ServiceFlags::empty(),
-            // </ai>
+            ai_settings: AiSettings::default(),
             destinations: vec![],
             packages: vec![],
         };
@@ -151,14 +193,11 @@ impl Form for Npc {
         for field in record.iter() {
             match field.name() {
                 b"NAME" => npc.id = String::from(field.get_zstring()?),
-                b"MODL" => npc.model = Some(String::from(field.get_zstring()?)),
-                b"FNAM" => npc.name = Some(String::from(field.get_zstring()?)),
                 b"RNAM" => npc.race = String::from(field.get_zstring()?),
                 b"CNAM" => npc.class = String::from(field.get_zstring()?),
                 b"ANAM" => npc.faction = String::from(field.get_zstring()?),
                 b"BNAM" => npc.head = String::from(field.get_zstring()?),
                 b"KNAM" => npc.hair = String::from(field.get_zstring()?),
-                b"SCRI" => npc.script = Some(String::from(field.get_zstring()?)),
                 b"NPDT" => {
                     let data = field.get();
                     let len = data.len();
@@ -201,66 +240,7 @@ impl Form for Npc {
                             source: None,
                         })?
                 }
-                b"NPCO" => {
-                    let mut reader = field.reader();
-                    let count = reader.read_le()?;
-                    let id = read_string::<NPC_STRING_LENGTH, _>(&mut reader)?;
-                    npc.inventory.insert(id, count);
-                }
-                b"NPCS" => {
-                    let spell = read_string::<NPC_STRING_LENGTH, _>(&mut field.get())
-                        .map_err(|e| decode_failed_because("Could not parse NPCS", e))?;
-                    npc.spells.push(spell);
-                }
-                b"AIDT" => {
-                    let mut reader = field.reader();
-                    npc.hello = reader.read_le()?;
-                    npc.fight = reader.read_le()?;
-                    npc.flee = reader.read_le()?;
-                    npc.alarm = reader.read_le()?;
-                    npc.ai_unknown1 = reader.read_le()?;
-                    npc.ai_unknown2 = reader.read_le()?;
-                    npc.ai_unknown3 = reader.read_le()?;
-                    // according to UESP, the remaining flag bits are "filled with junk data",
-                    // so we mask them out to prevent an error when reading the flags
-                    let flags = reader.read_le::<u32>()? & 0x3ffff;
-                    npc.services = ServiceFlags::from_bits(flags).unwrap();
-                }
-                b"DODT" => {
-                    let mut reader = field.reader();
-                    let pos_x = reader.read_le()?;
-                    let pos_y = reader.read_le()?;
-                    let pos_z = reader.read_le()?;
-                    let rot_x = reader.read_le()?;
-                    let rot_y = reader.read_le()?;
-                    let rot_z = reader.read_le()?;
-                    npc.destinations.push(Destination {
-                        position: (pos_x, pos_y, pos_z),
-                        rotation: (rot_x, rot_y, rot_z),
-                        cell_name: None,
-                    });
-                }
-                b"DNAM" => {
-                    if let Some(last_destination) = npc.destinations.last_mut() {
-                        if last_destination.cell_name == None {
-                            last_destination.cell_name = Some(String::from(field.get_zstring()?));
-                        } else {
-                            return Err(decode_failed("Orphaned DNAM field"));
-                        }
-                    } else {
-                        return Err(decode_failed("Orphaned DNAM field"));
-                    }
-                }
-                b"AI_A" | b"AI_E" | b"AI_F" | b"AI_T" | b"AI_W" => {
-                    npc.packages.push(Package::read(&field)?)
-                }
-                b"CNDT" => Package::read_cell_name(npc.packages.last_mut(), &field)?,
-                _ => {
-                    return Err(decode_failed(format!(
-                        "Unexpected field {}",
-                        field.name_as_str()
-                    )))
-                }
+                _ => npc.read_actor_field(&field)?,
             }
         }
 

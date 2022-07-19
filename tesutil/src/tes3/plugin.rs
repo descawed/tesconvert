@@ -13,9 +13,6 @@ use binrw::{BinReaderExt, BinWriterExt};
 mod field;
 pub use field::*;
 
-mod package;
-pub use package::*;
-
 mod npc;
 pub use npc::*;
 
@@ -51,6 +48,12 @@ pub use birthsign::*;
 
 mod potion;
 pub use potion::*;
+
+mod actor;
+pub use actor::*;
+
+mod creature;
+pub use creature::*;
 
 /// Save game information
 ///

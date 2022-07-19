@@ -3,7 +3,7 @@ use super::record::Tes3Record;
 use crate::plugin::Field;
 use crate::*;
 
-use crate::tes3::Package;
+use crate::tes3::{ActorState, Package};
 use binrw::{binrw, BinReaderExt};
 
 /// NPC disposition and reputation
@@ -63,6 +63,40 @@ impl NpcChange {
     }
 }
 
+impl ActorState for NpcChange {
+    fn iter_packages(&self) -> Box<dyn Iterator<Item = &Package> + '_> {
+        Box::new(self.packages.iter())
+    }
+
+    fn iter_packages_mut(&mut self) -> Box<dyn Iterator<Item = &mut Package> + '_> {
+        Box::new(self.packages.iter_mut())
+    }
+
+    fn add_package(&mut self, package: Package) {
+        self.packages.push(package);
+    }
+
+    fn iter_inventory(&self) -> Box<dyn Iterator<Item = (&str, u32)> + '_> {
+        Box::new(self.inventory.iter().map(|i| (i.id.as_str(), i.count)))
+    }
+
+    fn iter_inventory_mut(&mut self) -> Box<dyn Iterator<Item = (&str, &mut u32)> + '_> {
+        Box::new(
+            self.inventory
+                .iter_mut()
+                .map(|i| (i.id.as_str(), &mut i.count)),
+        )
+    }
+
+    fn add_item(&mut self, item_id: String, count: u32) {
+        self.inventory.push(InventoryItem {
+            id: item_id,
+            count,
+            ..InventoryItem::default()
+        });
+    }
+}
+
 impl Form for NpcChange {
     type Field = Tes3Field;
     type Record = Tes3Record;
@@ -84,15 +118,9 @@ impl Form for NpcChange {
                 b"NAME" => npc_change.id = String::from(field.get_zstring()?),
                 b"NPDT" => npc_change.disposition = field.reader().read_le()?,
                 b"NPCO" => {
-                    let mut reader = field.reader();
-                    let item = InventoryItem {
-                        count: reader.read_le()?,
-                        id: read_string::<32, _>(reader)?,
-                        ..InventoryItem::default()
-                    };
                     stack_start = npc_change.inventory.len();
                     base_indexes.push(stack_start);
-                    npc_change.inventory.push(item);
+                    npc_change.read_actor_state_field(field)?;
                 }
                 b"XIDX" => {
                     // start a new stack of a single item. the number of "pristine" items is the count
@@ -180,10 +208,9 @@ impl Form for NpcChange {
                         .ok_or_else(|| decode_failed("Orphaned XHLT field"))?;
                     item.remaining_durability = Some(field.get_u32()?);
                 }
-                b"AI_A" | b"AI_E" | b"AI_F" | b"AI_T" | b"AI_W" => {
-                    npc_change.packages.push(Package::read(&field)?)
+                b"AI_A" | b"AI_E" | b"AI_F" | b"AI_T" | b"AI_W" | b"CNDT" => {
+                    npc_change.read_actor_state_field(field)?
                 }
-                b"CNDT" => Package::read_cell_name(npc_change.packages.last_mut(), &field)?,
                 b"WIDX" => {
                     // index is NPCO index, slot is XIDX index
                     let mut reader = field.reader();
@@ -207,7 +234,7 @@ impl Form for NpcChange {
         Ok(npc_change)
     }
 
-    fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
+    fn write(&self, _: &mut Self::Record) -> Result<(), TesError> {
         todo!()
     }
 }
