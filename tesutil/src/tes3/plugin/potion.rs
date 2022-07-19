@@ -1,4 +1,4 @@
-use crate::tes3::{MagicEffectType, SpellEffect, Tes3Field, Tes3Record};
+use crate::tes3::{Item, MagicEffectType, SpellEffect, Tes3Field, Tes3Record};
 use crate::{decode_failed, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt};
 
@@ -22,6 +22,64 @@ pub struct Potion {
     pub name: Option<String>,
     pub alchemy_data: AlchemyData,
     pub effects: Vec<SpellEffect>,
+}
+
+impl Item for Potion {
+    fn id(&self) -> &str {
+        self.id.as_str()
+    }
+
+    fn set_id(&mut self, id: String) {
+        self.id = id;
+    }
+
+    fn model(&self) -> Option<&str> {
+        self.model.as_deref()
+    }
+
+    fn set_model(&mut self, model: Option<String>) {
+        self.model = model;
+    }
+
+    fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
+    }
+
+    fn weight(&self) -> f32 {
+        self.alchemy_data.weight
+    }
+
+    fn set_weight(&mut self, weight: f32) {
+        self.alchemy_data.weight = weight;
+    }
+
+    fn value(&self) -> u32 {
+        self.alchemy_data.value
+    }
+
+    fn set_value(&mut self, value: u32) {
+        self.alchemy_data.value = value;
+    }
+
+    fn script(&self) -> Option<&str> {
+        self.script.as_deref()
+    }
+
+    fn set_script(&mut self, script: Option<String>) {
+        self.script = script;
+    }
+
+    fn icon(&self) -> Option<&str> {
+        self.icon.as_deref()
+    }
+
+    fn set_icon(&mut self, icon: Option<String>) {
+        self.icon = icon;
+    }
 }
 
 impl Form for Potion {

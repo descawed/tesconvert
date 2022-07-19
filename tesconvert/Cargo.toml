@@ -12,6 +12,7 @@ clap = "3.2"
 anyhow = "1.0"
 num = "0.4"
 rust-ini = "0.18"
+enum-map = "2.4"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.10"

@@ -65,11 +65,11 @@ pub struct AiSettings {
 #[binrw]
 #[derive(Debug, Default)]
 pub struct ActorStats {
-    #[br(map = |s: [u8; Skill::LENGTH]| Skills::from_array(s))]
+    #[br(map = |s| Skills::from_array(s))]
     #[bw(map = |s| s.as_slice())]
     skills: Skills<u8>,
     health: u32,
-    #[br(map = |a: [u8; Attribute::LENGTH]| Attributes::from_array(a))]
+    #[br(map = |a| Attributes::from_array(a))]
     #[bw(map = |a| a.as_slice())]
     attributes: Attributes<u8>,
 }

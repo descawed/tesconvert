@@ -55,6 +55,12 @@ pub use actor::*;
 mod creature;
 pub use creature::*;
 
+mod misc_item;
+pub use misc_item::*;
+
+mod item;
+pub use item::*;
+
 /// Save game information
 ///
 /// For saves (.ess files), this information is included in the TES3 record.

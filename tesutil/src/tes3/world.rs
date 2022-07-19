@@ -141,6 +141,19 @@ impl Tes3World {
             }
         })
     }
+
+    /// Loads a form by ID and type
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data or no matching record is found.
+    pub fn require<T: Form<Field = Tes3Field, Record = Tes3Record>>(
+        &self,
+        id: &str,
+    ) -> Result<T, TesError> {
+        self.get(id)?
+            .ok_or_else(|| TesError::InvalidId(String::from(id)))
+    }
 }
 
 impl World for Tes3World {

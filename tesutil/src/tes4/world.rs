@@ -210,6 +210,18 @@ impl Tes4World {
         }
     }
 
+    /// Loads a form by ID and type
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data or no matching record is found.
+    pub fn require<T: Form<Field = Tes4Field, Record = Tes4Record>>(
+        &self,
+        search: &FindForm,
+    ) -> Result<T, TesError> {
+        self.get(search)?.ok_or_else(|| search.err())
+    }
+
     /// Updates a form by form ID
     pub fn update<T>(&self, form: &T, search: &FindForm) -> Result<(), TesError>
     where

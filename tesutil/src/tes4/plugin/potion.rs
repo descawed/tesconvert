@@ -1,17 +1,8 @@
-use crate::tes4::{FormId, SpellEffect, Tes4Field, Tes4Record, MAGIC_EFFECTS};
+use crate::tes4::{FormId, Item, SpellEffect, Tes4Field, Tes4Record, TextureHash, MAGIC_EFFECTS};
 use std::io::{Cursor, Read, Write};
 
 use crate::{decode_failed, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt, BinWriterExt};
-
-/// Texture hashes
-#[binrw]
-#[derive(Debug, Default)]
-pub struct TextureHash {
-    file_hash_pc: u64,
-    file_hash_console: u64,
-    folder_hash: u64,
-}
 
 /// An Oblivion potion
 #[derive(Debug)]
@@ -29,6 +20,80 @@ pub struct Potion {
     pub is_food_item: bool,
     unknown: [u8; 3],
     effects: Vec<SpellEffect>,
+}
+
+impl Item for Potion {
+    fn editor_id(&self) -> &str {
+        self.editor_id.as_str()
+    }
+
+    fn set_editor_id(&mut self, id: String) {
+        self.editor_id = id;
+    }
+
+    fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    fn value(&self) -> u32 {
+        self.value
+    }
+
+    fn set_value(&mut self, value: u32) {
+        self.value = value
+    }
+
+    fn weight(&self) -> f32 {
+        self.weight
+    }
+
+    fn set_weight(&mut self, weight: f32) {
+        self.weight = weight;
+    }
+
+    fn script(&self) -> Option<FormId> {
+        self.script
+    }
+
+    fn set_script(&mut self, script: Option<FormId>) {
+        self.script = script;
+    }
+
+    fn model(&self) -> Option<&str> {
+        self.model.as_deref()
+    }
+
+    fn set_model(&mut self, model: Option<String>) {
+        self.model = model;
+    }
+
+    fn icon(&self) -> Option<&str> {
+        self.icon.as_deref()
+    }
+
+    fn set_icon(&mut self, icon: Option<String>) {
+        self.icon = icon;
+    }
+
+    fn bound_radius(&self) -> Option<f32> {
+        self.bound_radius
+    }
+
+    fn set_bound_radius(&mut self, bound_radius: Option<f32>) {
+        self.bound_radius = bound_radius;
+    }
+
+    fn texture_hash(&self) -> Option<&TextureHash> {
+        self.texture_hash.as_ref()
+    }
+
+    fn set_texture_hash(&mut self, texture_hash: Option<TextureHash>) {
+        self.texture_hash = texture_hash;
+    }
 }
 
 impl Potion {
@@ -126,12 +191,6 @@ impl Form for Potion {
         let mut potion = Potion::default();
         for field in record.iter() {
             match field.name() {
-                b"EDID" => potion.editor_id = String::from(field.get_zstring()?),
-                b"MODL" => potion.model = Some(String::from(field.get_zstring()?)),
-                b"MODB" => potion.bound_radius = Some(field.get_f32()?),
-                b"MODT" => potion.texture_hash = Some(field.reader().read_le()?),
-                b"ICON" => potion.icon = Some(String::from(field.get_zstring()?)),
-                b"SCRI" => potion.script = Some(FormId(field.get_u32()?)),
                 b"DATA" => potion.weight = field.get_f32()?,
                 b"ENIT" => {
                     let mut reader = field.reader();
@@ -163,43 +222,21 @@ impl Form for Potion {
                         potion.name = String::from(field.get_zstring()?);
                     }
                 }
-                _ => {
-                    return Err(decode_failed(format!(
-                        "Unexpected {} field in ALCH record",
-                        field.name_as_str()
-                    )))
-                }
+                _ => potion.read_item_field(field)?,
             }
         }
 
         Ok(potion)
     }
 
-    fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
+    fn write(&self, mut record: &mut Self::Record) -> Result<(), TesError> {
         Potion::assert(record)?;
 
         record.clear();
 
-        record.add_field(Tes4Field::new_zstring(b"EDID", self.editor_id.clone())?);
+        self.write_scalar_fields(&mut record, &[b"EDID"])?;
         record.add_field(Tes4Field::new_zstring(b"FULL", self.name.clone())?);
-        if let Some(ref model) = self.model {
-            record.add_field(Tes4Field::new_zstring(b"MODL", model.clone())?);
-        }
-        if let Some(bound_radius) = self.bound_radius {
-            record.add_field(Tes4Field::new_f32(b"MODB", bound_radius));
-        }
-        if let Some(ref texture_hash) = self.texture_hash {
-            let mut buf = vec![];
-            let mut cursor = Cursor::new(&mut buf);
-            cursor.write_le(texture_hash)?;
-            record.add_field(Tes4Field::new(b"MODT", buf)?);
-        }
-        if let Some(ref icon) = self.icon {
-            record.add_field(Tes4Field::new_zstring(b"ICON", icon.clone())?);
-        }
-        if let Some(script) = self.script {
-            record.add_field(Tes4Field::new_u32(b"SCRI", script.0));
-        }
+        self.write_scalar_fields(&mut record, &[b"MODL", b"MODB", b"MODT", b"ICON", b"SCRI"])?;
         record.add_field(Tes4Field::new_f32(b"DATA", self.weight));
 
         let mut buf = vec![];

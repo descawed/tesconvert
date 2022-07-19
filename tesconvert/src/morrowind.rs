@@ -4,7 +4,7 @@ use std::iter::repeat;
 use std::path::Path;
 use std::thread;
 
-use tesutil::tes3::{InventoryItem, SkillType, Tes3World};
+use tesutil::tes3::{InventoryItem, Item, SkillType, Tes3World};
 use tesutil::tes4::cosave::{CoSave, ObConvert, OPCODE_BASE};
 use tesutil::tes4::save::*;
 use tesutil::tes4::{ActorValue, FindForm, FormId, Tes4World};
@@ -16,6 +16,7 @@ use crate::config::*;
 use crate::oblivion::Oblivion;
 
 use anyhow::{anyhow, Context, Result};
+use enum_map::{enum_map, EnumMap};
 #[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]
@@ -29,6 +30,7 @@ pub struct Morrowind {
     minor_skill_bonus: f32,
     misc_skill_bonus: f32,
     spec_skill_bonus: f32,
+    soul_gem_mult: f32,
 }
 
 impl Morrowind {
@@ -95,6 +97,7 @@ impl Morrowind {
         let minor_skill_bonus = Morrowind::get_float_setting(&world, "fMinorSkillBonus", 1.0)?;
         let misc_skill_bonus = Morrowind::get_float_setting(&world, "fMiscSkillBonus", 1.25)?;
         let spec_skill_bonus = Morrowind::get_float_setting(&world, "fSpecialSkillBonus", 0.8)?;
+        let soul_gem_mult = Morrowind::get_float_setting(&world, "fSoulGemMult", 3.0)?;
 
         Ok(Morrowind {
             world,
@@ -102,6 +105,7 @@ impl Morrowind {
             minor_skill_bonus,
             misc_skill_bonus,
             spec_skill_bonus,
+            soul_gem_mult,
         })
     }
 
@@ -287,6 +291,7 @@ pub struct MorrowindToOblivion {
     player_data: tes3::PlayerData,
     class: tes3::Class,
     active_spells: tes3::ActiveSpellList,
+    soul_map: EnumMap<tes4::SoulType, (u32, u32)>,
 }
 
 impl MorrowindToOblivion {
@@ -382,6 +387,25 @@ impl MorrowindToOblivion {
             .get(player_base.class())?
             .ok_or_else(|| anyhow!("Invalid Morrowind player class"))?;
 
+        let petty: tes3::MiscItem = mw.world.require("Misc_SoulGem_Petty")?;
+        let lesser: tes3::MiscItem = mw.world.require("Misc_SoulGem_Lesser")?;
+        let common: tes3::MiscItem = mw.world.require("Misc_SoulGem_Common")?;
+        let greater: tes3::MiscItem = mw.world.require("Misc_SoulGem_Greater")?;
+
+        let petty_value = (petty.value() as f32 * mw.soul_gem_mult) as u32;
+        let lesser_value = (lesser.value() as f32 * mw.soul_gem_mult) as u32;
+        let common_value = (common.value() as f32 * mw.soul_gem_mult) as u32;
+        let greater_value = (greater.value() as f32 * mw.soul_gem_mult) as u32;
+
+        let soul_map = enum_map! {
+            tes4::SoulType::None => (0, 0),
+            tes4::SoulType::Petty => (1, petty_value),
+            tes4::SoulType::Lesser => (petty_value + 1, lesser_value),
+            tes4::SoulType::Common => (lesser_value + 1, common_value),
+            tes4::SoulType::Greater => (common_value + 1, greater_value),
+            tes4::SoulType::Grand => (greater_value + 1, u32::MAX),
+        };
+
         Ok(MorrowindToOblivion {
             config,
             mw,
@@ -393,6 +417,7 @@ impl MorrowindToOblivion {
             player_data,
             class,
             active_spells,
+            soul_map,
         })
     }
 
@@ -1180,6 +1205,8 @@ impl MorrowindToOblivion {
             .iter_inventory()
             .zip(repeat(false))
             .collect();
+        // TODO: Oblivion stacks non-pristine items with the same properties but Morrowind doesn't.
+        //  we should combine the stacks in the Oblivion style where appropriate.
         for (mw_item, was_converted) in &mut mw_inventory {
             if mw_item.script.is_some() {
                 continue; // can't convert scripted items
@@ -1211,7 +1238,7 @@ impl MorrowindToOblivion {
             };
 
             if !stacks.contains_key(&iref) {
-                stacks.insert(iref, Item::new(iref, 0));
+                stacks.insert(iref, tes4::save::InventoryItem::new(iref, 0));
             }
 
             let ob_item = stacks.get_mut(&iref).unwrap();
@@ -1236,7 +1263,23 @@ impl MorrowindToOblivion {
             }
 
             if let Some(ref soul) = mw_item.soul {
-                // TODO: look up soul type from Morrowind
+                if let Some(creature) = self.mw.world.get::<tes3::Creature>(soul)? {
+                    let soul_size = creature.data().soul;
+                    let soul_type = self
+                        .soul_map
+                        .iter()
+                        .find_map(|(s, (min, max))| {
+                            if soul_size >= *min && soul_size <= *max {
+                                Some(s)
+                            } else {
+                                None
+                            }
+                        })
+                        // this unwrap is safe because the soul map values span the entire range of u32,
+                        // so we'll always find a match
+                        .unwrap();
+                    properties.push(Property::Soul(soul_type));
+                }
             }
 
             if !properties.is_empty() {
@@ -1250,7 +1293,7 @@ impl MorrowindToOblivion {
         for (form_id, count) in ob_player_npc.iter_inventory() {
             let iref = self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id));
             if !stacks.contains_key(&iref) {
-                stacks.insert(iref, Item::new(iref, -count));
+                stacks.insert(iref, tes4::save::InventoryItem::new(iref, -count));
             } else {
                 let item = stacks.get_mut(&iref).unwrap();
                 item.stack_count -= count;

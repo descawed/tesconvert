@@ -37,25 +37,25 @@ pub enum CreatureType {
 #[binrw]
 #[derive(Debug, Default)]
 pub struct CreatureData {
-    creature_type: CreatureType,
-    level: u32,
+    pub creature_type: CreatureType,
+    pub level: u32,
     #[br(map = |a| Attributes::from_array(a))]
     #[bw(map = |a| a.as_slice())]
-    attributes: Attributes<u32>,
-    health: u32,
-    magicka: u32,
-    fatigue: u32,
-    soul: u32,
-    combat: u32,
-    magic: u32,
-    stealth: u32,
-    attack_min_1: u32,
-    attack_max_1: u32,
-    attack_min_2: u32,
-    attack_max_2: u32,
-    attack_min_3: u32,
-    attack_max_3: u32,
-    gold: u32,
+    pub attributes: Attributes<u32>,
+    pub health: u32,
+    pub magicka: u32,
+    pub fatigue: u32,
+    pub soul: u32,
+    pub combat: u32,
+    pub magic: u32,
+    pub stealth: u32,
+    pub attack_min_1: u32,
+    pub attack_max_1: u32,
+    pub attack_min_2: u32,
+    pub attack_max_2: u32,
+    pub attack_min_3: u32,
+    pub attack_max_3: u32,
+    pub gold: u32,
 }
 
 #[derive(Debug, Default)]
@@ -185,8 +185,15 @@ impl Form for Creature {
         Ok(creature)
     }
 
-    fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
+    fn write(&self, _: &mut Self::Record) -> Result<(), TesError> {
         todo!()
+    }
+}
+
+impl Creature {
+    /// Get this creature's stats
+    pub fn data(&self) -> &CreatureData {
+        &self.data
     }
 }
 

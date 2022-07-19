@@ -36,8 +36,14 @@ pub use race::*;
 mod npc;
 pub use npc::*;
 
+mod item;
+pub use item::*;
+
 mod potion;
 pub use potion::*;
+
+mod soul_gem;
+pub use soul_gem::*;
 
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves

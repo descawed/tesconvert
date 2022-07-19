@@ -4,7 +4,7 @@ use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::tes4::plugin::Class;
 use crate::tes4::save::{ChangeRecord, ChangeType, FormChange, FORM_PLAYER_REF};
-use crate::tes4::{ActorValues, Npc, Skills};
+use crate::tes4::{ActorValues, Npc, Skills, SoulType};
 use crate::*;
 
 use binrw::{binrw, BinReaderExt, BinWriterExt};
@@ -154,7 +154,7 @@ pub enum Property {
     #[brw(magic = 0x2eu8)]
     EnchantmentPoints(f32),
     #[brw(magic = 0x2fu8)]
-    Soul(u8),
+    Soul(SoulType),
     #[brw(magic = 0x36u8)]
     LeveledItem([u8; 5]),
     #[brw(magic = 0x37u8)]
@@ -199,16 +199,16 @@ impl Property {
 
 /// An item in the player's inventory
 #[derive(Debug)]
-pub struct Item {
+pub struct InventoryItem {
     pub iref: u32,
     pub stack_count: i32,
     changes: Vec<Vec<Property>>,
 }
 
-impl Item {
+impl InventoryItem {
     /// Creates a new inventory item
-    pub fn new(iref: u32, stack_count: i32) -> Item {
-        Item {
+    pub fn new(iref: u32, stack_count: i32) -> InventoryItem {
+        InventoryItem {
             iref,
             stack_count,
             changes: vec![],
@@ -230,7 +230,7 @@ impl Item {
     /// # Errors
     ///
     /// Fails if an I/O error occurs
-    pub fn read<T: Read + Seek>(mut f: T) -> Result<Item, TesError> {
+    pub fn read<T: Read + Seek>(mut f: T) -> Result<InventoryItem, TesError> {
         let iref = f.read_le()?;
         let stack_count = f.read_le()?;
         let num_changes = f.read_le::<u32>()? as usize;
@@ -244,7 +244,7 @@ impl Item {
             changes.push(properties);
         }
 
-        Ok(Item {
+        Ok(InventoryItem {
             iref,
             stack_count,
             changes,
@@ -331,7 +331,7 @@ pub struct PlayerReferenceChange {
     // flag
     actor_flag: ActorFlag,
     // inventory
-    inventory: Vec<Item>,
+    inventory: Vec<InventoryItem>,
     // properties
     properties: Vec<Property>,
     // TODO: do we need to grab any of the modifier sections?
@@ -435,7 +435,7 @@ impl FormChange for PlayerReferenceChange {
             let num_items = reader.read_le::<u16>()? as usize;
             let mut inventory = Vec::with_capacity(num_items);
             for _ in 0..num_items {
-                inventory.push(Item::read(&mut reader)?);
+                inventory.push(InventoryItem::read(&mut reader)?);
             }
             inventory
         } else {
@@ -934,17 +934,17 @@ impl PlayerReferenceChange {
     }
 
     /// Add an item stack to the player's inventory
-    pub fn add_item(&mut self, item: Item) {
+    pub fn add_item(&mut self, item: InventoryItem) {
         self.inventory.push(item);
     }
 
     /// Iterate through the player's inventory
-    pub fn iter_inventory(&self) -> impl Iterator<Item = &Item> {
+    pub fn iter_inventory(&self) -> impl Iterator<Item = &InventoryItem> {
         self.inventory.iter()
     }
 
     /// Iterate through the player's inventory mutably
-    pub fn iter_inventory_mut(&mut self) -> impl Iterator<Item = &mut Item> {
+    pub fn iter_inventory_mut(&mut self) -> impl Iterator<Item = &mut InventoryItem> {
         self.inventory.iter_mut()
     }
 }
