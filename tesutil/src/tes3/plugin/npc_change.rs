@@ -19,23 +19,23 @@ struct Disposition {
 
 /// Script state attached to an item
 #[derive(Debug, Default, Clone)]
-struct Script {
-    name: String,
-    shorts: Vec<i16>,
-    longs: Vec<i32>,
-    floats: Vec<f32>,
+pub struct Script {
+    pub name: String,
+    pub shorts: Vec<i16>,
+    pub longs: Vec<i32>,
+    pub floats: Vec<f32>,
 }
 
 /// An item in the NPC's inventory
 #[derive(Debug, Default, Clone)]
 pub struct InventoryItem {
-    id: String,
-    count: u32,
-    is_equipped: bool,
-    soul: Option<String>,
-    enchantment_charge: Option<f32>,
-    remaining_durability: Option<u32>,
-    script: Option<Script>,
+    pub id: String,
+    pub count: u32,
+    pub is_equipped: bool,
+    pub soul: Option<String>,
+    pub enchantment_charge: Option<f32>,
+    pub remaining_durability: Option<u32>,
+    pub script: Option<Script>,
 }
 
 impl InventoryItem {
@@ -55,6 +55,12 @@ pub struct NpcChange {
     disposition: Disposition,
     inventory: Vec<InventoryItem>,
     packages: Vec<Package>,
+}
+
+impl NpcChange {
+    pub fn iter_inventory(&self) -> impl Iterator<Item = &InventoryItem> {
+        self.inventory.iter()
+    }
 }
 
 impl Form for NpcChange {

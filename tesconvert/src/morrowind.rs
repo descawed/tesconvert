@@ -1,9 +1,10 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::iter::repeat;
 use std::path::Path;
 use std::thread;
 
-use tesutil::tes3::{SkillType, Tes3World};
+use tesutil::tes3::{InventoryItem, SkillType, Tes3World};
 use tesutil::tes4;
 use tesutil::tes4::cosave::{CoSave, ObConvert, OPCODE_BASE};
 use tesutil::tes4::save::*;
@@ -282,6 +283,7 @@ pub struct MorrowindToOblivion {
     form_map: RefCell<HashMap<String, FormId>>,
     player_base: tes3::Npc,
     player_ref: tes3::PlayerReference,
+    player_change: tes3::NpcChange,
     player_data: tes3::PlayerData,
     class: tes3::Class,
     active_spells: tes3::ActiveSpellList,
@@ -340,15 +342,20 @@ impl MorrowindToOblivion {
             &ob.world(),
         )?);
 
-        // the compiler actually requires a type here but not on player_ref or class
         let player_base: tes3::Npc = mw
             .world
             .get("player")?
             .ok_or_else(|| anyhow!("Missing player record in Morrowind save"))?;
-        let player_ref = mw
+        // types aren't necessary here but I've included them to make it clearer why these two
+        // identical statements do different things
+        let player_ref: tes3::PlayerReference = mw
             .world
             .get("PlayerSaveGame")?
             .ok_or_else(|| anyhow!("Missing player reference record in Morrowind save"))?;
+        let player_change: tes3::NpcChange = mw
+            .world
+            .get("PlayerSaveGame")?
+            .ok_or_else(|| anyhow!("Missing player change record in Morrowind save"))?;
 
         let player_data = {
             let save = mw.world.get_save().unwrap();
@@ -382,6 +389,7 @@ impl MorrowindToOblivion {
             form_map,
             player_base,
             player_ref,
+            player_change,
             player_data,
             class,
             active_spells,
@@ -1122,6 +1130,101 @@ impl MorrowindToOblivion {
         Ok(())
     }
 
+    fn convert_inventory(&self, ob_player_ref: &mut PlayerReferenceChange) -> Result<()> {
+        let ob_player_npc: tes4::Npc = self
+            .ob
+            .world()
+            .get(&FindForm::ByIndex(FORM_PLAYER))?
+            .ok_or_else(|| anyhow!("Missing Oblivion player NPC record"))?;
+
+        let mut stacks = HashMap::new();
+        ob_player_ref.clear_inventory();
+        let mut mw_inventory: Vec<(&InventoryItem, bool)> = self
+            .player_change
+            .iter_inventory()
+            .zip(repeat(false))
+            .collect();
+        for (mw_item, was_converted) in &mut mw_inventory {
+            if mw_item.script.is_some() {
+                continue; // can't convert scripted items
+            }
+
+            if let Some(form_id) = self.form_map.borrow().get(&mw_item.id).copied() {
+                let iref = self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id));
+                if !stacks.contains_key(&iref) {
+                    stacks.insert(iref, Item::new(iref, 0));
+                }
+
+                let ob_item = stacks.get_mut(&iref).unwrap();
+                ob_item.stack_count += mw_item.count as i32;
+
+                let mut properties = vec![];
+                if mw_item.is_equipped {
+                    // FIXME: look up clothing type of Oblivion form and use EquippedAccessory if ring or amulet
+                    properties.push(Property::EquippedItem);
+                }
+
+                if mw_item.count > 1 {
+                    properties.push(Property::AffectedItemCount(mw_item.count as u16));
+                }
+
+                if let Some(durability) = mw_item.remaining_durability {
+                    // TODO: convert Morrowind integer health to Oblivion float health
+                }
+
+                if let Some(charge) = mw_item.enchantment_charge {
+                    properties.push(Property::EnchantmentPoints(charge));
+                }
+
+                if let Some(ref soul) = mw_item.soul {
+                    // TODO: look up soul type from Morrowind
+                }
+
+                if !properties.is_empty() {
+                    ob_item.add_change(properties);
+                }
+
+                *was_converted = true;
+            }
+        }
+
+        // remove default items
+        for (form_id, count) in ob_player_npc.iter_inventory() {
+            let iref = self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id));
+            if !stacks.contains_key(&iref) {
+                stacks.insert(iref, Item::new(iref, -count));
+            } else {
+                let item = stacks.get_mut(&iref).unwrap();
+                item.stack_count -= count;
+                if item.stack_count == 0 && !item.has_changes() {
+                    stacks.remove(&iref);
+                }
+            }
+        }
+
+        // update inventory
+        for (_, item) in stacks {
+            ob_player_ref.add_item(item);
+        }
+
+        // store a list of all the inventory we couldn't convert
+        self.with_cosave_mut(|cosave| {
+            let plugin = cosave.get_plugin_by_opcode(OPCODE_BASE).unwrap();
+            let mut obconvert = ObConvert::read(plugin)?;
+            for item in
+                mw_inventory
+                    .into_iter()
+                    .filter_map(|(i, was_converted)| if was_converted { None } else { Some(i) })
+            {
+                obconvert.add_morrowind_item(item.clone());
+            }
+            let plugin = cosave.get_plugin_by_opcode_mut(OPCODE_BASE).unwrap();
+            obconvert.write(plugin)
+        })?;
+
+        Ok(())
+    }
+
     /// Perform a Morrowind-to-Oblivion conversion
     pub fn convert(&self) -> Result<()> {
         let (mut ob_player_base, mut ob_player_ref) = {
@@ -1145,6 +1248,7 @@ impl MorrowindToOblivion {
         let (ob_class, ob_class_form_id) = self.convert_class()?;
         self.convert_spells(&mut ob_player_base, &mut ob_player_ref)?;
         self.convert_stats(&mut ob_player_base, &mut ob_player_ref, &ob_class)?;
+        self.convert_inventory(&mut ob_player_ref)?;
 
         // apply changes to save
         self.with_save_mut::<Result<()>, _>(|ob_save| {

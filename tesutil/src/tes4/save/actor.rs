@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
 use crate::tes4::save::{Attributes, ChangeRecord, ChangeType, FormChange};
-use crate::tes4::Skills;
+use crate::tes4::{ActorFlags, Skills};
 use crate::*;
 
 use binrw::{binrw, BinReaderExt, BinWriterExt};
@@ -20,22 +20,6 @@ bitflags! {
         const SKILLS = 0x00000200;
         const COMBAT_STYLE = 0x00000400;
         const BASE_MODIFIERS = 0x10000000;
-    }
-}
-
-bitflags! {
-    struct ActorFlags: u32 {
-        const FEMALE = 0x00000001;
-        const ESSENTIAL = 0x00000002;
-        const RESPAWN = 0x00000008;
-        const AUTO_CALC = 0x00000010;
-        const PC_LEVEL_OFFSET = 0x00000080;
-        const NO_LOW_LEVEL_PROCESSING = 0x00000200;
-        const NO_RUMORS = 0x00002000;
-        const SUMMONABLE = 0x00004000;
-        const NO_PERSUASION = 0x00008000;
-        const CAN_CORPSE_CHECK = 0x00100000;
-        const UNKNOWN = 0x40000000;
     }
 }
 

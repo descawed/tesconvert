@@ -4,7 +4,7 @@ use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::tes4::plugin::Class;
 use crate::tes4::save::{ChangeRecord, ChangeType, FormChange, FORM_PLAYER_REF};
-use crate::tes4::{ActorValues, Skills};
+use crate::tes4::{ActorValues, Npc, Skills};
 use crate::*;
 
 use binrw::{binrw, BinReaderExt, BinWriterExt};
@@ -200,12 +200,31 @@ impl Property {
 /// An item in the player's inventory
 #[derive(Debug)]
 pub struct Item {
-    iref: u32,
-    stack_count: i32,
+    pub iref: u32,
+    pub stack_count: i32,
     changes: Vec<Vec<Property>>,
 }
 
 impl Item {
+    /// Creates a new inventory item
+    pub fn new(iref: u32, stack_count: i32) -> Item {
+        Item {
+            iref,
+            stack_count,
+            changes: vec![],
+        }
+    }
+
+    /// DOes this item have changes?
+    pub fn has_changes(&self) -> bool {
+        !self.changes.is_empty()
+    }
+
+    /// Add a change set to the item stack
+    pub fn add_change(&mut self, properties: Vec<Property>) {
+        self.changes.push(properties);
+    }
+
     /// Reads an item from a binary stream
     ///
     /// # Errors
@@ -904,6 +923,29 @@ impl PlayerReferenceChange {
     /// Sets the change in the player's fatigue
     pub fn set_fatigue_delta(&mut self, value: f32) {
         self.fatigue_delta = value;
+    }
+
+    /// Clears the player's inventory
+    ///
+    /// Note that this is not the same as making the inventory empty; rather, it reverts the
+    /// inventory to its initial state at the start of the game.
+    pub fn clear_inventory(&mut self) {
+        self.inventory.clear();
+    }
+
+    /// Add an item stack to the player's inventory
+    pub fn add_item(&mut self, item: Item) {
+        self.inventory.push(item);
+    }
+
+    /// Iterate through the player's inventory
+    pub fn iter_inventory(&self) -> impl Iterator<Item = &Item> {
+        self.inventory.iter()
+    }
+
+    /// Iterate through the player's inventory mutably
+    pub fn iter_inventory_mut(&mut self) -> impl Iterator<Item = &mut Item> {
+        self.inventory.iter_mut()
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::tes4::{FormId, Tes4Field, Tes4Record};
 use crate::{Field, Form, Record, TesError};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Race {
     editor_id: String,
     name: Option<String>,
@@ -28,12 +28,7 @@ impl Form for Race {
     fn read(record: &Self::Record) -> Result<Self, TesError> {
         Race::assert(record)?;
 
-        let mut race = Race {
-            editor_id: String::new(),
-            name: None,
-            description: String::new(),
-            spells: vec![],
-        };
+        let mut race = Race::default();
 
         for field in record.iter() {
             match field.name() {

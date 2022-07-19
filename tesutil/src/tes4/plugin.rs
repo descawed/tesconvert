@@ -33,6 +33,9 @@ pub use birthsign::*;
 mod race;
 pub use race::*;
 
+mod npc;
+pub use npc::*;
+
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
 pub const MAX_MASTERS: usize = u8::MAX as usize - 2;

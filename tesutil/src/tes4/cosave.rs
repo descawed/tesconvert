@@ -13,7 +13,7 @@ pub const OPCODE_BASE: u32 = 0x4000;
 pub const FORMAT_VERSION: u32 = 1;
 
 #[binrw]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Chunk {
     pub tag: [u8; 4],
     pub version: u32,
@@ -25,6 +25,13 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn new(tag: [u8; 4]) -> Chunk {
+        Chunk {
+            tag,
+            ..Chunk::default()
+        }
+    }
+
     pub fn read<T: Read + Seek>(mut f: T) -> Result<Chunk, TesError> {
         Ok(f.read_le()?)
     }
@@ -74,6 +81,10 @@ impl Plugin {
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Chunk> + '_ {
         self.chunks.iter_mut()
+    }
+
+    pub fn add_chunk(&mut self, chunk: Chunk) {
+        self.chunks.push(chunk);
     }
 
     pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
