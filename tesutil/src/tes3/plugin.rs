@@ -61,6 +61,9 @@ pub use misc_item::*;
 mod weapon;
 pub use weapon::*;
 
+mod book;
+pub use book::*;
+
 mod enchantment;
 pub use enchantment::*;
 
@@ -69,6 +72,9 @@ pub use item::*;
 
 mod magic;
 pub use magic::*;
+
+mod enchantable;
+pub use enchantable::*;
 
 /// Save game information
 ///

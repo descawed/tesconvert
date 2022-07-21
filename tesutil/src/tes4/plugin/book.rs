@@ -1,43 +1,54 @@
-use crate::tes4::{Enchantable, EnchantmentType, FormId, Item, Tes4Field, Tes4Record, TextureHash};
+use crate::tes4::{
+    Enchantable, EnchantmentType, FormId, Item, Skill, Tes4Field, Tes4Record, TextureHash,
+};
 use crate::{Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt, BinWriterExt};
+use bitflags::bitflags;
 use std::io::Cursor;
+
+bitflags! {
+    #[derive(Default)]
+    struct BookFlags: u8 {
+        const SCROLL = 0x01;
+        const CANT_BE_TAKEN = 0x02;
+    }
+}
 
 #[binrw]
 #[derive(Debug, Default)]
-pub struct AmmoData {
-    pub speed: f32,
-    #[br(map = |v: u32| v & 1 != 0)]
-    #[bw(map = |v| if *v { 1u32 } else { 0 })]
-    pub ignores_normal_weapon_resistance: bool,
+pub struct BookData {
+    #[br(try_map = |f| BookFlags::from_bits(f).ok_or("Invalid book flags"))]
+    #[bw(map = |f| f.bits)]
+    flags: BookFlags,
+    #[br(try_map = |s: u8| if s == 0xff { Ok(None) } else { Skill::try_from(s).map(|v| Some(v)) })]
+    #[bw(map = |s| s.map_or(0xff, |v| v as u8))]
+    pub skill: Option<Skill>,
     pub value: u32,
     pub weight: f32,
-    pub damage: u16,
 }
 
 #[derive(Debug, Default)]
-pub struct Ammo {
+pub struct Book {
     editor_id: String,
     name: String,
+    pub text: String,
+    script: Option<FormId>,
     model: Option<String>,
     bound_radius: Option<f32>,
     texture_hash: Option<TextureHash>,
     icon: Option<String>,
-    enchantment: Option<FormId>,
     enchantment_points: Option<u16>,
-    pub data: AmmoData,
+    enchantment: Option<FormId>,
+    pub data: BookData,
 }
 
-impl Enchantable for Ammo {
+impl Enchantable for Book {
     fn enchantment(&self) -> Option<FormId> {
         self.enchantment
     }
 
     fn set_enchantment(&mut self, enchantment: Option<FormId>) {
         self.enchantment = enchantment;
-        if self.enchantment_points.is_none() {
-            self.enchantment_points = Some(0);
-        }
     }
 
     fn enchantment_points(&self) -> Option<u32> {
@@ -49,11 +60,11 @@ impl Enchantable for Ammo {
     }
 
     fn enchantment_type(&self) -> EnchantmentType {
-        EnchantmentType::Weapon
+        EnchantmentType::Scroll
     }
 }
 
-impl Item for Ammo {
+impl Item for Book {
     fn editor_id(&self) -> &str {
         self.editor_id.as_str()
     }
@@ -87,13 +98,11 @@ impl Item for Ammo {
     }
 
     fn script(&self) -> Option<FormId> {
-        None
+        self.script
     }
 
     fn set_script(&mut self, script: Option<FormId>) {
-        if script.is_some() {
-            panic!("AMMO is not scriptable");
-        }
+        self.script = script;
     }
 
     fn model(&self) -> Option<&str> {
@@ -129,34 +138,34 @@ impl Item for Ammo {
     }
 }
 
-impl Form for Ammo {
+impl Form for Book {
     type Field = Tes4Field;
     type Record = Tes4Record;
-    const RECORD_TYPE: &'static [u8; 4] = b"AMMO";
+    const RECORD_TYPE: &'static [u8; 4] = b"BOOK";
 
     fn read(record: &Self::Record) -> Result<Self, TesError> {
-        Ammo::assert(record)?;
+        Book::assert(record)?;
 
-        let mut ammo = Ammo::default();
+        let mut book = Book::default();
         for field in record.iter() {
             match field.name() {
-                b"ENAM" => ammo.enchantment = Some(FormId(field.get_u32()?)),
-                b"ANAM" => ammo.enchantment_points = Some(field.get_u16()?),
-                b"DATA" => ammo.data = field.reader().read_le()?,
-                _ => ammo.read_item_field(field)?,
+                b"DESC" => book.text = String::from(field.get_zstring()?),
+                b"ANAM" => book.enchantment_points = Some(field.get_u16()?),
+                b"ENAM" => book.enchantment = Some(FormId(field.get_u32()?)),
+                b"DATA" => book.data = field.reader().read_le()?,
+                _ => book.read_item_field(field)?,
             }
         }
 
-        Ok(ammo)
+        Ok(book)
     }
 
     fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
-        Ammo::assert(record)?;
+        Book::assert(record)?;
 
-        self.write_item_fields(
-            record,
-            &[b"EDID", b"FULL", b"MODL", b"MODB", b"MODT", b"ICON"],
-        )?;
+        self.write_item_fields(record, &[b"EDID", b"FULL"])?;
+        record.add_field(Tes4Field::new_zstring(b"DESC", self.text.clone())?);
+        self.write_item_fields(record, &[b"SCRI", b"MODL", b"MODB", b"MODT", b"ICON"])?;
 
         if let Some(enchantment_points) = self.enchantment_points {
             record.add_field(Tes4Field::new_u16(b"ANAM", enchantment_points));
@@ -174,12 +183,29 @@ impl Form for Ammo {
     }
 }
 
-impl Ammo {
-    pub fn new(editor_id: String, name: String) -> Ammo {
-        Ammo {
+impl Book {
+    pub fn new(editor_id: String, name: String, text: String) -> Book {
+        Book {
             editor_id,
             name,
-            ..Ammo::default()
+            text,
+            ..Book::default()
         }
+    }
+
+    pub fn is_scroll(&self) -> bool {
+        self.data.flags.contains(BookFlags::SCROLL)
+    }
+
+    pub fn set_is_scroll(&mut self, is_scroll: bool) {
+        self.data.flags.set(BookFlags::SCROLL, is_scroll);
+    }
+
+    pub fn can_be_taken(&self) -> bool {
+        !self.data.flags.contains(BookFlags::CANT_BE_TAKEN)
+    }
+
+    pub fn set_can_be_taken(&mut self, can_be_taken: bool) {
+        self.data.flags.set(BookFlags::CANT_BE_TAKEN, !can_be_taken);
     }
 }

@@ -6,11 +6,14 @@ use std::path::Path;
 use std::thread;
 
 use tesutil::tes3::Magic as Tes3Magic;
-use tesutil::tes3::{InventoryItem, Item as Tes3Item, SkillType, Tes3World};
+use tesutil::tes3::{
+    Enchantable as Tes3Enchantable, InventoryItem, Item as Tes3Item, SkillType, Tes3World,
+};
 use tesutil::tes4::cosave::{CoSave, ObConvert, OPCODE_BASE};
 use tesutil::tes4::save::*;
 use tesutil::tes4::{
-    ActorValue, Enchantable, FindForm, FormId, Item as Tes4Item, Tes4Field, Tes4Record, Tes4World,
+    ActorValue, Enchantable as Tes4Enchantable, FindForm, FormId, Item as Tes4Item, Tes4Field,
+    Tes4Record, Tes4World,
 };
 use tesutil::tes4::{Magic as Tes4Magic, TextureHash};
 use tesutil::{tes3, EffectRange};
@@ -362,12 +365,12 @@ impl MorrowindToOblivion {
             // we just ignore errors on this step for now
             if let Ok(Some(item)) = mw.world.get_item(mw_id.as_str()) {
                 if let Some(model) = item.model() {
-                    let ids = model_map.entry(String::from(model)).or_default();
+                    let ids = model_map.entry(model.to_lowercase()).or_default();
                     ids.push(*ob_id);
                 }
 
                 if let Some(icon) = item.icon() {
-                    let ids = icon_map.entry(String::from(icon)).or_default();
+                    let ids = icon_map.entry(icon.to_lowercase()).or_default();
                     ids.push(*ob_id);
                 }
             }
@@ -1205,7 +1208,7 @@ impl MorrowindToOblivion {
     }
 
     fn get_ob_model(&self, mw_model: &str) -> Option<(String, f32, TextureHash)> {
-        if let Some(ob_items) = self.model_map.get(mw_model) {
+        if let Some(ob_items) = self.model_map.get(&mw_model.to_lowercase()) {
             for ob_item in ob_items {
                 if let Ok(Some(item)) = self.ob.world().get_item(&FindForm::ByIndex(*ob_item)) {
                     if let (Some(ob_model), Some(bound_radius), Some(texture_hash)) =
@@ -1221,7 +1224,7 @@ impl MorrowindToOblivion {
     }
 
     fn get_ob_icon(&self, mw_icon: &str) -> Option<String> {
-        if let Some(ob_items) = self.icon_map.get(mw_icon) {
+        if let Some(ob_items) = self.icon_map.get(&mw_icon.to_lowercase()) {
             for ob_item in ob_items {
                 if let Ok(Some(item)) = self.ob.world().get_item(&FindForm::ByIndex(*ob_item)) {
                     if let Some(ob_icon) = item.icon() {
@@ -1305,6 +1308,62 @@ impl MorrowindToOblivion {
         })
     }
 
+    fn convert_item<T: Tes3Item, U: Tes4Item>(&self, mw_item: &T, ob_item: &mut U) -> bool {
+        if let Some(mw_model) = mw_item.model() {
+            match self.get_ob_model(mw_model) {
+                Some((model, bound_radius, texture_hash)) => {
+                    ob_item.set_model(Some(model));
+                    ob_item.set_bound_radius(Some(bound_radius));
+                    ob_item.set_texture_hash(Some(texture_hash));
+                }
+                None => return false, // can't convert model
+            }
+        }
+
+        if let Some(mw_icon) = mw_item.icon() {
+            match self.get_ob_icon(mw_icon) {
+                Some(ob_icon) => ob_item.set_icon(Some(ob_icon)),
+                None => return false, // can't convert icon
+            }
+        }
+
+        ob_item.set_value(mw_item.value());
+        ob_item.set_weight(mw_item.weight());
+
+        true
+    }
+
+    fn convert_enchantable<T: Tes3Enchantable, U: Tes4Enchantable>(
+        &self,
+        mw_enchantable: &T,
+        ob_enchantable: &mut U,
+    ) -> Result<Option<tes4::Enchantment>> {
+        Ok(
+            if let Some(mw_enchantment_id) = mw_enchantable.enchantment() {
+                let mw_enchantment: tes3::Enchantment =
+                    self.mw.world.get(mw_enchantment_id)?.ok_or_else(|| {
+                        anyhow!(
+                            "Invalid enchantment ID {} on Morrowind weapon {}",
+                            mw_enchantment_id,
+                            mw_enchantable.id()
+                        )
+                    })?;
+
+                self.convert_enchantment(&mw_enchantment, ob_enchantable.enchantment_type())?
+                    .map(|ob_enchantment| {
+                        let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
+
+                        ob_enchantable.set_enchantment(Some(form_id));
+                        ob_enchantable
+                            .set_enchantment_points(Some(mw_enchantable.enchantment_points()));
+                        ob_enchantment
+                    })
+            } else {
+                None
+            },
+        )
+    }
+
     fn convert_ammo(&self, mw_weapon: &tes3::Weapon) -> Result<Option<tes4::Ammo>> {
         // can't convert scripted items
         if mw_weapon.script().is_some() {
@@ -1316,50 +1375,15 @@ impl MorrowindToOblivion {
             String::from(mw_weapon.name().unwrap_or("")),
         );
 
-        if let Some(mw_model) = mw_weapon.model() {
-            match self.get_ob_model(mw_model) {
-                Some((model, bound_radius, texture_hash)) => {
-                    ob_ammo.set_model(Some(model));
-                    ob_ammo.set_bound_radius(Some(bound_radius));
-                    ob_ammo.set_texture_hash(Some(texture_hash));
-                }
-                None => return Ok(None), // can't convert model
-            }
-        }
-
-        if let Some(mw_icon) = mw_weapon.icon() {
-            match self.get_ob_icon(mw_icon) {
-                Some(ob_icon) => ob_ammo.set_icon(Some(ob_icon)),
-                None => return Ok(None), // can't convert icon
-            }
-        }
-
-        if let Some(mw_enchantment_id) = mw_weapon.enchantment() {
-            let mw_enchantment: tes3::Enchantment =
-                self.mw.world.get(mw_enchantment_id)?.ok_or_else(|| {
-                    anyhow!(
-                        "Invalid enchantment ID {} on Morrowind weapon {}",
-                        mw_enchantment_id,
-                        mw_weapon.id()
-                    )
-                })?;
-
-            match self.convert_enchantment(&mw_enchantment, tes4::EnchantmentType::Weapon)? {
-                Some(ob_enchantment) => {
-                    let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
-
-                    ob_ammo.set_enchantment(Some(form_id));
-                    ob_ammo.set_enchantment_points(Some(mw_weapon.data.enchantment_points));
-                }
-                None => return Ok(None), // can't convert enchantment
-            }
+        if !(self.convert_item(mw_weapon, &mut ob_ammo)
+            && self.convert_enchantable(mw_weapon, &mut ob_ammo)?.is_some())
+        {
+            return Ok(None);
         }
 
         ob_ammo.data.speed = mw_weapon.data.speed;
         ob_ammo.data.ignores_normal_weapon_resistance =
             mw_weapon.ignores_normal_weapon_resistance();
-        ob_ammo.data.value = mw_weapon.data.value;
-        ob_ammo.data.weight = mw_weapon.data.weight;
         // from what I've seen in the CS, arrows use chop damage
         ob_ammo.data.damage = mw_weapon.data.max_chop as u16;
 
@@ -1377,44 +1401,12 @@ impl MorrowindToOblivion {
             String::from(mw_weapon.name().unwrap_or("")),
         );
 
-        if let Some(mw_model) = mw_weapon.model() {
-            match self.get_ob_model(mw_model) {
-                Some((model, bound_radius, texture_hash)) => {
-                    ob_weapon.set_model(Some(model));
-                    ob_weapon.set_bound_radius(Some(bound_radius));
-                    ob_weapon.set_texture_hash(Some(texture_hash));
-                }
-                None => return Ok(None), // can't convert model
-            }
-        }
-
-        if let Some(mw_icon) = mw_weapon.icon() {
-            match self.get_ob_icon(mw_icon) {
-                Some(ob_icon) => ob_weapon.set_icon(Some(ob_icon)),
-                None => return Ok(None), // can't convert icon
-            }
-        }
-
-        if let Some(mw_enchantment_id) = mw_weapon.enchantment() {
-            let mw_enchantment: tes3::Enchantment =
-                self.mw.world.get(mw_enchantment_id)?.ok_or_else(|| {
-                    anyhow!(
-                        "Invalid enchantment ID {} on Morrowind weapon {}",
-                        mw_enchantment_id,
-                        mw_weapon.id()
-                    )
-                })?;
-
-            match self.convert_enchantment(&mw_enchantment, tes4::EnchantmentType::Weapon)? {
-                Some(ob_enchantment) => {
-                    let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
-
-                    ob_weapon.set_enchantment(Some(form_id));
-                    ob_weapon
-                        .set_enchantment_points(Some(mw_weapon.data.enchantment_points as u32));
-                }
-                None => return Ok(None), // can't convert enchantment
-            }
+        if !(self.convert_item(mw_weapon, &mut ob_weapon)
+            && self
+                .convert_enchantable(mw_weapon, &mut ob_weapon)?
+                .is_some())
+        {
+            return Ok(None);
         }
 
         ob_weapon.data.weapon_type = match mw_weapon.data.weapon_type {
@@ -1435,16 +1427,42 @@ impl MorrowindToOblivion {
         ob_weapon.data.reach = mw_weapon.data.reach;
         ob_weapon.data.ignores_normal_weapon_resistance =
             mw_weapon.ignores_normal_weapon_resistance();
-        ob_weapon.data.value = mw_weapon.data.value;
         ob_weapon.data.health =
             (mw_weapon.data.health as f32 / self.config.equipment_durability_ratio) as u32;
-        ob_weapon.data.weight = mw_weapon.data.weight;
         ob_weapon.data.damage = cmp::max(
             mw_weapon.data.max_chop,
             cmp::max(mw_weapon.data.max_slash, mw_weapon.data.max_thrust),
         ) as u16;
 
         Ok(Some(ob_weapon))
+    }
+
+    fn convert_book(&self, mw_book: &tes3::Book) -> Result<Option<tes4::Book>> {
+        // can't convert scripted items
+        if mw_book.script().is_some() {
+            return Ok(None);
+        }
+
+        let mut ob_book = tes4::Book::new(
+            String::from(mw_book.id()),
+            String::from(mw_book.name().unwrap_or("")),
+            mw_book.text.clone(),
+        );
+
+        if !(self.convert_item(mw_weapon, &mut ob_book)
+            && self.convert_enchantable(mw_weapon, &mut ob_book)?.is_some())
+        {
+            return Ok(None);
+        }
+
+        if let Some(mw_skill) = mw_book.data.skill {
+            // in this case, we just lose the skill if it can't be converted; at least you'll still be able to read it
+            ob_book.data.skill = Morrowind::oblivion_skill(mw_skill);
+        }
+
+        ob_book.set_is_scroll(mw_book.data.is_scroll);
+
+        Ok(Some(ob_book))
     }
 
     fn convert_inventory(&self, ob_player_ref: &mut PlayerReferenceChange) -> Result<()> {
@@ -1475,6 +1493,14 @@ impl MorrowindToOblivion {
                 self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id))
             } else if let Some(record) = self.mw.world.get_record(&mw_item.id)? {
                 match record.name() {
+                    tes3::Book::RECORD_TYPE => {
+                        let mw_book = tes3::Book::read(&*record)?;
+                        if let Some(ob_book) = self.convert_book(&mw_book)? {
+                            self.save_form(&mw_item.id, &ob_book)?.1
+                        } else {
+                            continue;
+                        }
+                    }
                     tes3::Potion::RECORD_TYPE => {
                         let mw_potion = tes3::Potion::read(&*record)?;
                         if let Some(ob_potion) = self.convert_potion(&mw_potion)? {

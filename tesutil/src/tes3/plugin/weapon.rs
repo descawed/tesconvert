@@ -1,4 +1,4 @@
-use crate::tes3::{Item, Tes3Field, Tes3Record};
+use crate::tes3::{Enchantable, Item, Tes3Field, Tes3Record};
 use crate::{decode_failed, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt};
 use bitflags::bitflags;
@@ -158,15 +158,25 @@ impl Form for Weapon {
     }
 }
 
-impl Weapon {
-    pub fn enchantment(&self) -> Option<&str> {
+impl Enchantable for Weapon {
+    fn enchantment(&self) -> Option<&str> {
         self.enchantment.as_deref()
     }
 
-    pub fn set_enchantment(&mut self, enchantment: Option<String>) {
+    fn set_enchantment(&mut self, enchantment: Option<String>) {
         self.enchantment = enchantment;
     }
 
+    fn enchantment_points(&self) -> u32 {
+        self.data.enchantment_points as u32
+    }
+
+    fn set_enchantment_points(&mut self, enchantment_points: u32) {
+        self.data.enchantment_points = enchantment_points as u16;
+    }
+}
+
+impl Weapon {
     pub fn ignores_normal_weapon_resistance(&self) -> bool {
         self.data
             .flags

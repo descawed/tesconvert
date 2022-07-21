@@ -241,6 +241,7 @@ impl Tes4World {
     pub fn get_item_from_record(&self, record: &Tes4Record) -> Result<Box<dyn Item>, TesError> {
         match record.name() {
             Ammo::RECORD_TYPE => Ok(Box::new(Ammo::read(record)?)),
+            Book::RECORD_TYPE => Ok(Box::new(Book::read(record)?)),
             Potion::RECORD_TYPE => Ok(Box::new(Potion::read(record)?)),
             Weapon::RECORD_TYPE => Ok(Box::new(Weapon::read(record)?)),
             _ => Err(TesError::RequirementFailed(String::from(

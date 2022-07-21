@@ -162,6 +162,7 @@ impl Tes3World {
     /// Fails if the matching record contains invalid data
     pub fn get_item_from_record(&self, record: &Tes3Record) -> Result<Box<dyn Item>, TesError> {
         match record.name() {
+            Book::RECORD_TYPE => Ok(Box::new(Book::read(record)?)),
             MiscItem::RECORD_TYPE => Ok(Box::new(MiscItem::read(record)?)),
             Potion::RECORD_TYPE => Ok(Box::new(Potion::read(record)?)),
             Weapon::RECORD_TYPE => Ok(Box::new(Weapon::read(record)?)),

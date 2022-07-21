@@ -1,4 +1,4 @@
-use crate::tes4::{Enchantable, FormId, Item, Tes4Field, Tes4Record, TextureHash};
+use crate::tes4::{Enchantable, EnchantmentType, FormId, Item, Tes4Field, Tes4Record, TextureHash};
 use crate::{Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt, BinWriterExt};
 use std::io::Cursor;
@@ -168,7 +168,7 @@ impl Form for Weapon {
     }
 }
 
-impl Enchantable<u32> for Weapon {
+impl Enchantable for Weapon {
     fn enchantment(&self) -> Option<FormId> {
         self.enchantment
     }
@@ -186,6 +186,13 @@ impl Enchantable<u32> for Weapon {
 
     fn set_enchantment_points(&mut self, enchantment_points: Option<u32>) {
         self.enchantment_points = enchantment_points;
+    }
+
+    fn enchantment_type(&self) -> EnchantmentType {
+        match self.data.weapon_type {
+            WeaponType::Staff => EnchantmentType::Staff,
+            _ => EnchantmentType::Weapon,
+        }
     }
 }
 
