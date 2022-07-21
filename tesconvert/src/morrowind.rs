@@ -1343,21 +1343,23 @@ impl MorrowindToOblivion {
                 let mw_enchantment: tes3::Enchantment =
                     self.mw.world.get(mw_enchantment_id)?.ok_or_else(|| {
                         anyhow!(
-                            "Invalid enchantment ID {} on Morrowind weapon {}",
-                            mw_enchantment_id,
-                            mw_enchantable.id()
+                            "Invalid enchantment ID {} on Morrowind weapon",
+                            mw_enchantment_id
                         )
                     })?;
 
-                self.convert_enchantment(&mw_enchantment, ob_enchantable.enchantment_type())?
-                    .map(|ob_enchantment| {
-                        let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
+                if let Some(ob_enchantment) =
+                    self.convert_enchantment(&mw_enchantment, ob_enchantable.enchantment_type())?
+                {
+                    let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
 
-                        ob_enchantable.set_enchantment(Some(form_id));
-                        ob_enchantable
-                            .set_enchantment_points(Some(mw_enchantable.enchantment_points()));
-                        ob_enchantment
-                    })
+                    ob_enchantable.set_enchantment(Some(form_id));
+                    ob_enchantable
+                        .set_enchantment_points(Some(mw_enchantable.enchantment_points()));
+                    Some(ob_enchantment)
+                } else {
+                    None
+                }
             } else {
                 None
             },
@@ -1449,8 +1451,8 @@ impl MorrowindToOblivion {
             mw_book.text.clone(),
         );
 
-        if !(self.convert_item(mw_weapon, &mut ob_book)
-            && self.convert_enchantable(mw_weapon, &mut ob_book)?.is_some())
+        if !(self.convert_item(mw_book, &mut ob_book)
+            && self.convert_enchantable(mw_book, &mut ob_book)?.is_some())
         {
             return Ok(None);
         }
