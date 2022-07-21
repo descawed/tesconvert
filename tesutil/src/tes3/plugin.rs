@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Cursor, Read, Seek, Write};
-use std::path::Path;
+use std::io::{Cursor, Read, Seek, Write};
 use std::str;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -292,142 +290,6 @@ impl Tes3Plugin {
             id_map: HashMap::new(),
             type_map: HashMap::new(),
         })
-    }
-
-    /// Read a plugin file from the provided reader
-    ///
-    /// Reads a plugin from any type that implements [`Read`] or a mutable reference to such a type.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the format of the plugin data is invalid or if an I/O error
-    /// occurs while reading the plugin data.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tesutil::tes3::*;
-    ///
-    /// # fn main() -> std::io::Result<()> {
-    /// let buf: Vec<u8> = vec![/* raw plugin data */];
-    /// let plugin = Tes3Plugin::read(&mut &buf[..])?;
-    /// println!("Plugin info: author {}, description {}", plugin.author(), plugin.description());
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
-    pub fn read<T: Read + Seek>(mut f: T) -> Result<Tes3Plugin, TesError> {
-        let header = Tes3Record::read(&mut f)?;
-        if header.name() != b"TES3" {
-            return Err(decode_failed(format!(
-                "Expected TES3 record, got {}",
-                header.display_name()
-            )));
-        }
-
-        let mut fields = header.into_iter();
-        let header = match fields.next() {
-            Some(field) if field.name() == b"HEDR" => field,
-            _ => return Err(decode_failed("Missing HEDR field")),
-        };
-
-        let header_data = header.consume();
-        if header_data.len() != HEADER_LENGTH {
-            return Err(decode_failed("Invalid HEDR field"));
-        }
-
-        // decode header structure
-        let mut head_reader: Cursor<&[u8]> = Cursor::new(header_data.as_ref());
-        let version = head_reader.read_le()?;
-        let flags: u32 = head_reader.read_le()?;
-        let author = read_string::<AUTHOR_LENGTH, _>(&mut head_reader)?;
-        let description = read_string::<DESCRIPTION_LENGTH, _>(&mut head_reader)?;
-        let num_records = head_reader.read_le::<u32>()? as usize;
-
-        let mut plugin = Tes3Plugin {
-            version,
-            is_master: flags & FLAG_MASTER != 0,
-            author,
-            description,
-            save: None,
-            screen_data: vec![],
-            masters: vec![],
-            records: Vec::with_capacity(num_records),
-            id_map: HashMap::with_capacity(num_records),
-            type_map: HashMap::new(),
-        };
-
-        let mut master_name = None;
-        for field in fields {
-            match field.name() {
-                b"MAST" => {
-                    if let Some(name) = master_name {
-                        return Err(decode_failed(format!("Missing size for master {}", name)));
-                    }
-
-                    let string_name = field.get_zstring()?;
-                    master_name = Some(String::from(string_name));
-                }
-                b"DATA" => {
-                    if let Some(name) = master_name {
-                        let size = field.get_u64()?;
-                        plugin.add_master(name, size)?;
-                        master_name = None;
-                    } else {
-                        return Err(decode_failed("Data field without master"));
-                    }
-                }
-                b"GMDT" => {
-                    // TODO: write a test for this part
-                    let data = field.consume();
-                    let mut reader: Cursor<&[u8]> = Cursor::new(data.as_ref());
-                    let current_health = reader.read_le()?;
-                    let max_health = reader.read_le()?;
-                    let hour = reader.read_le()?;
-                    let mut unknown1 = [0u8; 12];
-                    reader.read_exact(&mut unknown1)?;
-                    let current_cell = read_string::<CELL_LENGTH, _>(&mut reader)?;
-                    let mut unknown2 = [0u8; 4];
-                    reader.read_exact(&mut unknown2)?;
-                    let player_name = read_string::<NAME_LENGTH, _>(&mut reader)?;
-
-                    plugin.save = Some(SaveInfo {
-                        current_health,
-                        max_health,
-                        hour,
-                        unknown1,
-                        current_cell,
-                        unknown2,
-                        player_name,
-                    });
-                }
-                b"SCRD" => (),
-                b"SCRS" => plugin.screen_data = field.consume(),
-                _ => {
-                    return Err(decode_failed(format!(
-                        "Unexpected field in header: {}",
-                        field.name_as_str()
-                    )))
-                }
-            }
-        }
-
-        if let Some(name) = master_name {
-            return Err(decode_failed(format!("Missing size for master {}", name)));
-        }
-
-        // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
-        let mut here = f.seek(SeekFrom::Current(0))?;
-        let eof = f.seek(SeekFrom::End(0))?;
-        f.seek(SeekFrom::Start(here))?;
-
-        while here != eof {
-            plugin.add_record(Tes3Record::read_lazy(&mut f)?)?;
-            here = f.seek(SeekFrom::Current(0))?;
-        }
-
-        Ok(plugin)
     }
 
     /// Returns the plugin file version
@@ -795,10 +657,159 @@ impl Tes3Plugin {
             .get_mut(name)
             .map(|v| v.write().unwrap())
     }
+}
+
+impl Plugin for Tes3Plugin {
+    /// Read a plugin file from the provided reader
+    ///
+    /// Reads a plugin from any type that implements [`Read`] or a mutable reference to such a type.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the format of the plugin data is invalid or if an I/O error
+    /// occurs while reading the plugin data.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tesutil::tes3::*;
+    /// use tesutil::Plugin;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let buf: Vec<u8> = vec![/* raw plugin data */];
+    /// let plugin = Tes3Plugin::read(&mut &buf[..])?;
+    /// println!("Plugin info: author {}, description {}", plugin.author(), plugin.description());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`Read`]: https://doc.rust-lang.org/std/io/trait.Read.html
+    fn read<T: Read + Seek>(mut f: T) -> Result<Tes3Plugin, TesError> {
+        let header = Tes3Record::read(&mut f)?;
+        if header.name() != b"TES3" {
+            return Err(decode_failed(format!(
+                "Expected TES3 record, got {}",
+                header.display_name()
+            )));
+        }
+
+        let mut fields = header.into_iter();
+        let header = match fields.next() {
+            Some(field) if field.name() == b"HEDR" => field,
+            _ => return Err(decode_failed("Missing HEDR field")),
+        };
+
+        let header_data = header.consume();
+        if header_data.len() != HEADER_LENGTH {
+            return Err(decode_failed("Invalid HEDR field"));
+        }
+
+        // decode header structure
+        let mut head_reader: Cursor<&[u8]> = Cursor::new(header_data.as_ref());
+        let version = head_reader.read_le()?;
+        let flags: u32 = head_reader.read_le()?;
+        let author = read_string::<AUTHOR_LENGTH, _>(&mut head_reader)?;
+        let description = read_string::<DESCRIPTION_LENGTH, _>(&mut head_reader)?;
+        let num_records = head_reader.read_le::<u32>()? as usize;
+
+        let mut plugin = Tes3Plugin {
+            version,
+            is_master: flags & FLAG_MASTER != 0,
+            author,
+            description,
+            save: None,
+            screen_data: vec![],
+            masters: vec![],
+            records: Vec::with_capacity(num_records),
+            id_map: HashMap::with_capacity(num_records),
+            type_map: HashMap::new(),
+        };
+
+        let mut master_name = None;
+        for field in fields {
+            match field.name() {
+                b"MAST" => {
+                    if let Some(name) = master_name {
+                        return Err(decode_failed(format!("Missing size for master {}", name)));
+                    }
+
+                    let string_name = field.get_zstring()?;
+                    master_name = Some(String::from(string_name));
+                }
+                b"DATA" => {
+                    if let Some(name) = master_name {
+                        let size = field.get_u64()?;
+                        plugin.add_master(name, size)?;
+                        master_name = None;
+                    } else {
+                        return Err(decode_failed("Data field without master"));
+                    }
+                }
+                b"GMDT" => {
+                    // TODO: write a test for this part
+                    let data = field.consume();
+                    let mut reader: Cursor<&[u8]> = Cursor::new(data.as_ref());
+                    let current_health = reader.read_le()?;
+                    let max_health = reader.read_le()?;
+                    let hour = reader.read_le()?;
+                    let mut unknown1 = [0u8; 12];
+                    reader.read_exact(&mut unknown1)?;
+                    let current_cell = read_string::<CELL_LENGTH, _>(&mut reader)?;
+                    let mut unknown2 = [0u8; 4];
+                    reader.read_exact(&mut unknown2)?;
+                    let player_name = read_string::<NAME_LENGTH, _>(&mut reader)?;
+
+                    plugin.save = Some(SaveInfo {
+                        current_health,
+                        max_health,
+                        hour,
+                        unknown1,
+                        current_cell,
+                        unknown2,
+                        player_name,
+                    });
+                }
+                b"SCRD" => (),
+                b"SCRS" => plugin.screen_data = field.consume(),
+                _ => {
+                    return Err(decode_failed(format!(
+                        "Unexpected field in header: {}",
+                        field.name_as_str()
+                    )))
+                }
+            }
+        }
+
+        if let Some(name) = master_name {
+            return Err(decode_failed(format!("Missing size for master {}", name)));
+        }
+
+        // num_records is actually not guaranteed to be correct, so we ignore it and just read until we hit EOF
+        let mut here = f.seek(SeekFrom::Current(0))?;
+        let eof = f.seek(SeekFrom::End(0))?;
+        f.seek(SeekFrom::Start(here))?;
+
+        while here != eof {
+            plugin.add_record(Tes3Record::read_lazy(&mut f)?)?;
+            here = f.seek(SeekFrom::Current(0))?;
+        }
+
+        Ok(plugin)
+    }
+
+    /// Returns whether this plugin is a master on which other plugins can depend
+    fn is_master(&self) -> bool {
+        self.is_master
+    }
+
+    /// Set whether this plugin is a master
+    fn set_is_master(&mut self, is_master: bool) {
+        self.is_master = is_master;
+    }
 
     /// Gets an iterator over the names of this plugin's master files
-    pub fn iter_masters(&self) -> impl Iterator<Item = &str> {
-        self.masters.iter().map(|(n, _)| &n[..])
+    fn iter_masters(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        Box::new(self.masters.iter().map(|(n, _)| n.as_str()))
     }
 
     /// Writes a plugin to the provided writer
@@ -828,7 +839,7 @@ impl Tes3Plugin {
     ///
     /// [`Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    pub fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
+    fn write<T: Write + Seek>(&self, mut f: T) -> Result<(), TesError> {
         let mut header = Tes3Record::new(b"TES3");
         let mut buf: Vec<u8> = Vec::with_capacity(HEADER_LENGTH);
         let mut buf_writer = Cursor::new(&mut buf);
@@ -890,81 +901,6 @@ impl Tes3Plugin {
         }
 
         Ok(())
-    }
-}
-
-impl Plugin for Tes3Plugin {
-    /// Reads a plugin from a file
-    ///
-    /// Reads a plugin from the file at `path`. The entire plugin is read into memory and retains
-    /// no reference to the file once the read is complete.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be opened or if [`Plugin::read`] fails;
-    /// refer to that method for more information.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tesutil::tes3::*;
-    /// use tesutil::Plugin;
-    /// # use std::io;
-    ///
-    /// # fn main() -> io::Result<()> {
-    /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
-    /// assert!(plugin.is_master());
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`std::io::Error`]: https://doc.rust-lang.org/std/io/struct.Error.html
-    /// [`Plugin::read`]: #method.read
-    fn load_file<P: AsRef<Path>>(path: P) -> Result<Tes3Plugin, TesError> {
-        let f = File::open(path)?;
-        let reader = BufReader::new(f);
-        Tes3Plugin::read(reader)
-    }
-
-    /// Returns whether this plugin is a master on which other plugins can depend
-    fn is_master(&self) -> bool {
-        self.is_master
-    }
-
-    /// Set whether this plugin is a master
-    fn set_is_master(&mut self, is_master: bool) {
-        self.is_master = is_master;
-    }
-
-    /// Save a plugin to a file
-    ///
-    /// The file must not exist.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be created or if [`Plugin::write`] fails;
-    /// refer to that method for more information.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tesutil::tes3::*;
-    /// use tesutil::Plugin;
-    /// use tesutil::TesError;
-    ///
-    /// # fn main() -> Result<(), TesError> {
-    /// let mut plugin = Tes3Plugin::new(String::from("test"), String::from("sample plugin"))?;
-    /// plugin.set_is_master(true);
-    /// plugin.save_file("sample.esm")?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`Plugin::write`]: #method.write
-    fn save_file<P: AsRef<Path>>(&self, path: P) -> Result<(), TesError> {
-        let f = File::create(path)?;
-        let writer = BufWriter::new(f);
-        self.write(writer)
     }
 }
 

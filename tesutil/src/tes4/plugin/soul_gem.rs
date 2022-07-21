@@ -1,4 +1,4 @@
-use crate::tes4::{FormId, Item, Tes4Field, Tes4Record, TextureHash};
+use crate::tes4::{FormId, Item, Tes4Field, Tes4Record};
 use crate::{decode_failed_because, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt};
 use enum_map::Enum;
@@ -28,7 +28,7 @@ pub struct SoulGem {
     max_soul: SoulType,
     model: Option<String>,
     bound_radius: Option<f32>,
-    texture_hash: Option<TextureHash>,
+    texture_hash: Option<Vec<u8>>,
     icon: Option<String>,
     script: Option<FormId>,
 }
@@ -98,11 +98,11 @@ impl Item for SoulGem {
         self.bound_radius = bound_radius;
     }
 
-    fn texture_hash(&self) -> Option<&TextureHash> {
-        self.texture_hash.as_ref()
+    fn texture_hash(&self) -> Option<&[u8]> {
+        self.texture_hash.as_deref()
     }
 
-    fn set_texture_hash(&mut self, texture_hash: Option<TextureHash>) {
+    fn set_texture_hash(&mut self, texture_hash: Option<Vec<u8>>) {
         self.texture_hash = texture_hash;
     }
 }
@@ -140,7 +140,7 @@ impl Form for SoulGem {
         Ok(soul_gem)
     }
 
-    fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
+    fn write(&self, _: &mut Self::Record) -> Result<(), TesError> {
         todo!()
     }
 }

@@ -1,12 +1,10 @@
 use crate::tes3::{Tes3Field, Tes3Record};
 use crate::{
-    decode_failed, decode_failed_because, make_str_vec, read_string, write_str, Field, Form,
-    TesError,
+    decode_failed, decode_failed_because, make_str_vec, read_string, write_str, Field, TesError,
 };
 use binrw::{binrw, BinReaderExt, BinWriterExt};
 use bitflags::bitflags;
 use std::io::{Cursor, Read, Write};
-use std::mem::size_of;
 
 /// Maximum length of certain strings on actor records
 pub const ACTOR_STRING_LENGTH: usize = 32;

@@ -1,9 +1,8 @@
-use crate::tes4::{ActorFlags, FormId, Skill, Skills, Tes4Field, Tes4Record};
-use crate::{decode_failed, Attribute, Attributes, Field, Form, Record, TesError};
+use crate::tes4::{ActorFlags, FormId, Skills, Tes4Field, Tes4Record};
+use crate::{decode_failed, Attributes, Field, Form, Record, TesError};
 
-use binrw::{binrw, BinReaderExt, BinWriterExt};
+use binrw::{binrw, BinReaderExt};
 use bitflags::bitflags;
-use enum_map::Enum;
 
 bitflags! {
     #[derive(Default)]
@@ -201,7 +200,7 @@ impl Form for Npc {
         Ok(npc)
     }
 
-    fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
+    fn write(&self, _: &mut Self::Record) -> Result<(), TesError> {
         todo!()
     }
 }

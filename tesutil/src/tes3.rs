@@ -1,10 +1,9 @@
 use std::str;
 
-use crate::{Attribute, EffectRange, Specialization};
+use crate::Specialization;
 
-use binrw::binrw;
 use enum_map::{Enum, EnumMap};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::TryFromPrimitive;
 
 mod plugin;
 pub use plugin::*;

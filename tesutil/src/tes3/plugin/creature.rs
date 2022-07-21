@@ -1,8 +1,7 @@
 use crate::tes3::{Actor, ActorState, AiSettings, Destination, Package, Tes3Field, Tes3Record};
-use crate::{decode_failed, Attribute, Attributes, Field, Form, Record, TesError};
+use crate::{decode_failed, Attributes, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt};
 use bitflags::bitflags;
-use enum_map::Enum;
 
 bitflags! {
     #[derive(Default)]

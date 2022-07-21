@@ -1,4 +1,4 @@
-use crate::tes4::{Enchantable, EnchantmentType, FormId, Item, Tes4Field, Tes4Record, TextureHash};
+use crate::tes4::{Enchantable, EnchantmentType, FormId, Item, Tes4Field, Tes4Record};
 use crate::{Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt, BinWriterExt};
 use std::io::Cursor;
@@ -39,7 +39,7 @@ pub struct Weapon {
     script: Option<FormId>,
     model: Option<String>,
     bound_radius: Option<f32>,
-    texture_hash: Option<TextureHash>,
+    texture_hash: Option<Vec<u8>>,
     icon: Option<String>,
     enchantment_points: Option<u32>,
     enchantment: Option<FormId>,
@@ -111,11 +111,11 @@ impl Item for Weapon {
         self.bound_radius = bound_radius;
     }
 
-    fn texture_hash(&self) -> Option<&TextureHash> {
-        self.texture_hash.as_ref()
+    fn texture_hash(&self) -> Option<&[u8]> {
+        self.texture_hash.as_deref()
     }
 
-    fn set_texture_hash(&mut self, texture_hash: Option<TextureHash>) {
+    fn set_texture_hash(&mut self, texture_hash: Option<Vec<u8>>) {
         self.texture_hash = texture_hash;
     }
 }
@@ -152,11 +152,11 @@ impl Form for Weapon {
                 b"EDID", b"FULL", b"SCRI", b"MODL", b"MODB", b"MODT", b"ICON",
             ],
         )?;
-        if let Some(enchantment_points) = self.enchantment_points {
-            record.add_field(Tes4Field::new_u32(b"ANAM", enchantment_points));
-        }
         if let Some(enchantment_id) = self.enchantment {
             record.add_field(Tes4Field::new_u32(b"ENAM", enchantment_id.0));
+        }
+        if let Some(enchantment_points) = self.enchantment_points {
+            record.add_field(Tes4Field::new_u32(b"ANAM", enchantment_points));
         }
 
         let mut buf = vec![];

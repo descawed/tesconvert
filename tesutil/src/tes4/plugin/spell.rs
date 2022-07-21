@@ -1,12 +1,8 @@
 use std::convert::TryFrom;
-use std::io::{Cursor, Read, Write};
+use std::io::Cursor;
 
-use crate::tes4::{
-    ActorValue, FormId, Magic, MagicEffectType, ScriptEffect, SpellEffect, Tes4Field, Tes4Record,
-};
-use crate::{
-    decode_failed, decode_failed_because, EffectRange, Field, Form, MagicSchool, Record, TesError,
-};
+use crate::tes4::{Magic, SpellEffect, Tes4Field, Tes4Record};
+use crate::{decode_failed, decode_failed_because, Field, Form, Record, TesError};
 
 use binrw::{BinReaderExt, BinWriterExt};
 use bitflags::bitflags;

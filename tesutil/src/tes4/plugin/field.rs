@@ -17,7 +17,7 @@ use crate::*;
 /// `b"STRV"` or `b"DATA"`, and it would be cumbersome to have to explicitly clone these everywhere.
 /// The data, on the other hand, is taken as an owned value, because this is much more likely to be
 /// dynamic.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tes4Field {
     name: [u8; 4],
     data: Vec<u8>,

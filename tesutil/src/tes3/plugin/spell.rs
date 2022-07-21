@@ -1,9 +1,7 @@
 use std::convert::TryFrom;
 
-use crate::tes3::{Magic, MagicEffectType, Skill, SpellEffect, Tes3Field, Tes3Record};
-use crate::{
-    decode_failed, decode_failed_because, Attribute, EffectRange, Field, Form, Record, TesError,
-};
+use crate::tes3::{Magic, SpellEffect, Tes3Field, Tes3Record};
+use crate::{decode_failed, decode_failed_because, Field, Form, Record, TesError};
 
 use binrw::BinReaderExt;
 use bitflags::bitflags;

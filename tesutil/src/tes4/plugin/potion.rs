@@ -1,10 +1,8 @@
-use crate::tes4::{
-    FormId, Item, Magic, SpellEffect, Tes4Field, Tes4Record, TextureHash, MAGIC_EFFECTS,
-};
+use crate::tes4::{FormId, Item, Magic, SpellEffect, Tes4Field, Tes4Record, MAGIC_EFFECTS};
 use std::io::{Cursor, Read, Write};
 
-use crate::{decode_failed, Field, Form, Record, TesError};
-use binrw::{binrw, BinReaderExt, BinWriterExt};
+use crate::{Field, Form, Record, TesError};
+use binrw::{BinReaderExt, BinWriterExt};
 
 /// An Oblivion potion
 #[derive(Debug)]
@@ -13,7 +11,7 @@ pub struct Potion {
     name: String,
     model: Option<String>,
     bound_radius: Option<f32>,
-    texture_hash: Option<TextureHash>,
+    texture_hash: Option<Vec<u8>>,
     icon: Option<String>,
     script: Option<FormId>,
     pub weight: f32,
@@ -111,11 +109,11 @@ impl Item for Potion {
         self.bound_radius = bound_radius;
     }
 
-    fn texture_hash(&self) -> Option<&TextureHash> {
-        self.texture_hash.as_ref()
+    fn texture_hash(&self) -> Option<&[u8]> {
+        self.texture_hash.as_deref()
     }
 
-    fn set_texture_hash(&mut self, texture_hash: Option<TextureHash>) {
+    fn set_texture_hash(&mut self, texture_hash: Option<Vec<u8>>) {
         self.texture_hash = texture_hash;
     }
 }
@@ -134,11 +132,10 @@ impl Potion {
         // values copied from PotionCureDisease in Oblivion.esm
         self.model = Some(String::from(r"Clutter\Potions\Potion01.NIF"));
         self.bound_radius = Some(8.10082);
-        self.texture_hash = Some(TextureHash {
-            file_hash_pc: 0x4A92E9687008B0B1,
-            file_hash_console: 0x4A92E96D70083031,
-            folder_hash: 0xC28E78E874186E73,
-        });
+        self.texture_hash = Some(vec![
+            0xB1, 0xB0, 0x08, 0x70, 0x68, 0xE9, 0x92, 0x4A, 0x31, 0x30, 0x08, 0x70, 0x6D, 0xE9,
+            0x92, 0x4A, 0x73, 0x6E, 0x18, 0x74, 0xE8, 0x78, 0x8E, 0xC2,
+        ]);
         self.icon = Some(String::from(r"Clutter\Potions\IconPotion01.dds"));
     }
 
@@ -147,11 +144,10 @@ impl Potion {
         // values copied from PotionBurden in Oblivion.esm
         self.model = Some(String::from(r"Clutter\Potions\PotionPoison.NIF"));
         self.bound_radius = Some(8.08878);
-        self.texture_hash = Some(TextureHash {
-            file_hash_pc: 0x70B7D6B2700EEFEE,
-            file_hash_console: 0x70B7D6B7700E6F6E,
-            folder_hash: 0xC28E78E874186E73,
-        });
+        self.texture_hash = Some(vec![
+            0xEE, 0xEF, 0x0E, 0x70, 0xB2, 0xD6, 0xB7, 0x70, 0x6E, 0x6F, 0x0E, 0x70, 0xB7, 0xD6,
+            0xB7, 0x70, 0x73, 0x6E, 0x18, 0x74, 0xE8, 0x78, 0x8E, 0xC2,
+        ]);
         self.icon = Some(String::from(r"Clutter\Potions\IconPotionPoison01.dds"));
     }
 

@@ -1,16 +1,5 @@
 use crate::tes4::{FormId, Tes4Field, Tes4Record};
 use crate::{decode_failed, Field, TesError};
-use binrw::{binrw, BinReaderExt, BinWriterExt};
-use std::io::Cursor;
-
-/// Texture hashes
-#[binrw]
-#[derive(Debug, Default, Clone)]
-pub struct TextureHash {
-    pub file_hash_pc: u64,
-    pub file_hash_console: u64,
-    pub folder_hash: u64,
-}
 
 pub trait Item {
     /// Get this item's editor ID
@@ -62,10 +51,10 @@ pub trait Item {
     fn set_bound_radius(&mut self, bound_radius: Option<f32>);
 
     /// Get the texture hashes for the textures used by this item, if any
-    fn texture_hash(&self) -> Option<&TextureHash>;
+    fn texture_hash(&self) -> Option<&[u8]>;
 
     /// Set the texture hashes for the textures used by this item, if any
-    fn set_texture_hash(&mut self, texture_hash: Option<TextureHash>);
+    fn set_texture_hash(&mut self, texture_hash: Option<Vec<u8>>);
 
     /// Read data from a field in a record describing this item
     fn read_item_field(&mut self, field: &Tes4Field) -> Result<(), TesError> {
@@ -74,7 +63,7 @@ pub trait Item {
             b"FULL" => self.set_name(String::from(field.get_zstring()?)),
             b"MODL" => self.set_model(Some(String::from(field.get_zstring()?))),
             b"MODB" => self.set_bound_radius(Some(field.get_f32()?)),
-            b"MODT" => self.set_texture_hash(Some(field.reader().read_le()?)),
+            b"MODT" => self.set_texture_hash(Some(field.get().to_vec())),
             b"ICON" => self.set_icon(Some(String::from(field.get_zstring()?))),
             b"SCRI" => self.set_script(Some(FormId(field.get_u32()?))),
             _ => {
@@ -114,10 +103,7 @@ pub trait Item {
                 }
                 b"MODT" => {
                     if let Some(texture_hash) = self.texture_hash() {
-                        let mut buf = vec![];
-                        let mut cursor = Cursor::new(&mut buf);
-                        cursor.write_le(texture_hash)?;
-                        Tes4Field::new(field_name, buf)?
+                        Tes4Field::new(field_name, texture_hash.to_vec())?
                     } else {
                         continue;
                     }

@@ -1,11 +1,7 @@
 use std::convert::TryFrom;
-use std::io::{Cursor, Read, Write};
 
-use crate::{
-    decode_failed, decode_failed_because, Attribute, EffectRange, Field, MagicSchool,
-    Specialization, TesError,
-};
-use binrw::{binrw, BinReaderExt, BinWriterExt};
+use crate::{Attribute, Specialization, TesError};
+use binrw::binrw;
 use bitflags::bitflags;
 use enum_map::{Enum, EnumMap};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -51,6 +47,11 @@ impl FormId {
     /// Sets a form ID's index
     pub fn set_index(&mut self, index: u8) {
         self.0 = ((index as u32) << 24) | (self.0 & 0xffffff);
+    }
+
+    /// Sets a form ID's ID portion (i.e. excluding the plugin index)
+    pub fn set_id(&mut self, id: u32) {
+        self.0 = (self.0 & 0xff000000) | (id & 0x00ffffff);
     }
 }
 

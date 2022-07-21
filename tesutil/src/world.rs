@@ -10,6 +10,8 @@ use crate::*;
 pub trait World {
     type Plugin: Plugin;
 
+    const PLUGIN_DIR: &'static str;
+
     fn load_plugins<P, S, T>(
         plugin_dir: P,
         plugin_names: T,

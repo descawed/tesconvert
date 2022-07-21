@@ -114,6 +114,24 @@ impl GroupKind {
         }
         Ok(())
     }
+
+    fn acceptable_records(&self) -> Vec<&[u8; 4]> {
+        match self {
+            GroupKind::Top(ref tag) => vec![tag],
+            GroupKind::WorldChildren(_) => vec![b"ROAD", b"CELL"],
+            GroupKind::InteriorCellSubBlock(_) | GroupKind::ExteriorCellSubBlock(_, _) => {
+                vec![b"CELL"]
+            }
+            GroupKind::TopicChildren(_) => vec![b"INFO"],
+            GroupKind::CellPersistentChildren(_) | GroupKind::CellVisibleDistantChildren(_) => {
+                vec![b"REFR", b"ACHR", b"ACRE"]
+            }
+            GroupKind::CellTemporaryChildren(_) => {
+                vec![b"LAND", b"PGRD", b"REFR", b"ACHR", b"ACRE"]
+            }
+            _ => vec![], // remaining group kinds can only contain other groups
+        }
+    }
 }
 
 /// A group of records
@@ -206,6 +224,21 @@ impl Group {
         Group::read_without_name(&mut f)
     }
 
+    /// Add a record to this group
+    pub fn add_record(&mut self, record: Tes4Record) -> Result<Arc<RwLock<Tes4Record>>, TesError> {
+        // ensure the record is appropriate for this group type
+        if !self.kind.acceptable_records().contains(&record.name()) {
+            Err(TesError::RequirementFailed(format!(
+                "Group type {:?} cannot contain record of type {:?}",
+                self.kind,
+                record.name()
+            )))
+        } else {
+            self.records.push(Arc::new(RwLock::new(record)));
+            Ok(Arc::clone(self.records.last().unwrap()))
+        }
+    }
+
     /// Returns an iterator over Rc smart pointers to this group's records
     // need Box because the iterator is recursive
     pub fn iter_rc(&self) -> Box<dyn Iterator<Item = Arc<RwLock<Tes4Record>>> + '_> {
@@ -259,5 +292,10 @@ impl Group {
         f.seek(SeekFrom::Start(end_offset))?; // return to where we were
 
         Ok(())
+    }
+
+    /// Number of records in this group, including the group record itself
+    pub fn len(&self) -> usize {
+        1 + self.records.len() + self.groups.iter().map(|g| g.len()).sum::<usize>()
     }
 }

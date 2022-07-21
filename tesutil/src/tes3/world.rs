@@ -7,7 +7,6 @@ use super::plugin::*;
 use crate::{decode_failed, Form, Plugin, Record, TesError, World};
 
 const INI_FILE: &str = "Morrowind.ini";
-const PLUGIN_DIR: &str = "Data Files";
 
 /// The full set of objects in the game world
 ///
@@ -25,7 +24,7 @@ impl Tes3World {
         P: AsRef<Path>,
         T: Iterator<Item = &'a str>,
     {
-        let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
+        let plugin_dir = game_dir.as_ref().join(Self::PLUGIN_DIR);
         let plugins = Tes3World::load_plugins(plugin_dir, plugin_names)?;
         let plugins = plugins.into_iter().map(|(_, p)| p).collect();
         Ok(Tes3World {
@@ -187,6 +186,8 @@ impl Tes3World {
 
 impl World for Tes3World {
     type Plugin = Tes3Plugin;
+
+    const PLUGIN_DIR: &'static str = "Data Files";
 }
 
 #[cfg(test)]

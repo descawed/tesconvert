@@ -1,4 +1,4 @@
-use crate::tes3::{Item, Magic, MagicEffectType, SpellEffect, Tes3Field, Tes3Record};
+use crate::tes3::{Item, Magic, SpellEffect, Tes3Field, Tes3Record};
 use crate::{decode_failed, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt};
 
@@ -127,7 +127,7 @@ impl Form for Potion {
         Ok(potion)
     }
 
-    fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
+    fn write(&self, _: &mut Self::Record) -> Result<(), TesError> {
         todo!()
     }
 }

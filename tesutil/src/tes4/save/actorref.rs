@@ -4,7 +4,7 @@ use std::io::{Cursor, Seek, SeekFrom};
 
 use crate::tes4::plugin::Class;
 use crate::tes4::save::{ChangeRecord, ChangeType, FormChange, FORM_PLAYER_REF};
-use crate::tes4::{ActorValues, Npc, Skills, SoulType};
+use crate::tes4::{ActorValues, Skills, SoulType};
 use crate::*;
 
 use binrw::{binrw, BinReaderExt, BinWriterExt};

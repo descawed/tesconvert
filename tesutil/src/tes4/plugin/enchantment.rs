@@ -1,5 +1,5 @@
 use crate::tes4::{Magic, SpellEffect, Tes4Field, Tes4Record};
-use crate::{decode_failed, Field, Form, Record, TesError};
+use crate::{Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt, BinWriterExt};
 use std::io::Cursor;
 

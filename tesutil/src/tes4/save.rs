@@ -452,6 +452,11 @@ impl Save {
         self.plugins.iter().map(|s| s.as_str())
     }
 
+    /// Add a plugin dependency to the save
+    pub fn add_plugin(&mut self, plugin: String) {
+        self.plugins.push(plugin);
+    }
+
     /// Write a save to a binary stream
     ///
     /// # Errors

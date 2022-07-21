@@ -1,15 +1,14 @@
 use std::fs;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::path::Path;
 
 use super::cosave::*;
 use super::plugin::*;
 use super::save::*;
-use super::{FindForm, FormId, MagicEffectType, SpellEffect, MAGIC_EFFECTS};
+use super::{FindForm, FormId, MagicEffectType, MAGIC_EFFECTS};
 use crate::{Form, OwnedOrRef, Record, TesError, World};
 
 static BASE_GAME: &str = "Oblivion.esm";
-static PLUGIN_DIR: &str = "Data";
 
 /// The full set of objects in the game world
 ///
@@ -46,7 +45,7 @@ impl Tes4World {
             plugin_names.push(String::from(BASE_GAME));
         }
 
-        let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
+        let plugin_dir = game_dir.as_ref().join(Self::PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, plugin_names.into_iter())?;
 
         Ok(Tes4World {
@@ -69,13 +68,72 @@ impl Tes4World {
         let cosave_path = save_path.as_ref().with_extension("obse");
         let save = Save::load_file(save_path)?;
         let cosave = CoSave::load_file(cosave_path)?;
-        let plugin_dir = game_dir.as_ref().join(PLUGIN_DIR);
+        let plugin_dir = game_dir.as_ref().join(Self::PLUGIN_DIR);
         let plugins = Tes4World::load_plugins(plugin_dir, save.iter_plugins())?;
 
         Ok(Tes4World {
             plugins,
             save: Some((save, cosave)),
         })
+    }
+
+    /// Gets a plugin by name if the plugin is loaded
+    pub fn get_plugin(&self, search: &str) -> Option<&<Self as World>::Plugin> {
+        let search = search.to_lowercase();
+        self.plugins
+            .iter()
+            .find(|(name, _)| name.to_lowercase() == search)
+            .map(|(_, plugin)| plugin)
+    }
+
+    /// Gets a plugin mutably by name if the plugin is loaded
+    pub fn get_plugin_mut(&mut self, search: &str) -> Option<&mut <Self as World>::Plugin> {
+        let search = search.to_lowercase();
+        self.plugins
+            .iter_mut()
+            .find(|(name, _)| name.to_lowercase() == search)
+            .map(|(_, plugin)| plugin)
+    }
+
+    /// Gets the companion mod for this game, creating it and adding it to the save if it doesn't exist
+    pub fn get_companion_mod(
+        &mut self,
+        name: &str,
+    ) -> Result<&mut <Self as World>::Plugin, TesError> {
+        if self.get_plugin(name).is_none() {
+            let mut new_plugin = <Self as World>::Plugin::new(
+                Some(String::from("tesconvert")),
+                Some(String::from("Companion mod for converted Morrowind save")),
+            );
+            if let Some((ref mut save, _)) = self.save {
+                new_plugin.set_masters(save.iter_plugins().map(String::from).collect())?;
+                save.add_plugin(String::from(name));
+            }
+
+            self.plugins.push((String::from(name), new_plugin));
+        }
+
+        Ok(self.get_plugin_mut(name).unwrap())
+    }
+
+    /// Adds a record to the named plugin, generating an appropriate form ID for it
+    pub fn add_record_to_plugin(
+        &mut self,
+        plugin_name: &str,
+        mut record: Tes4Record,
+    ) -> Result<FormId, TesError> {
+        let (_, plugin) = self
+            .plugins
+            .iter_mut()
+            .find(|(name, _)| name == plugin_name)
+            .ok_or_else(|| {
+                TesError::RequirementFailed(format!("No plugin called {} is loaded", plugin_name))
+            })?;
+        let form_id = plugin.get_next_form_id();
+        record.set_id(form_id);
+        plugin.add_record(record)?;
+
+        Ok(form_id)
     }
 
     /// Gets the currently loaded save, if there is one
@@ -265,6 +323,22 @@ impl Tes4World {
 
 impl World for Tes4World {
     type Plugin = Tes4Plugin;
+
+    const PLUGIN_DIR: &'static str = "Data";
+}
+
+impl Index<u8> for Tes4World {
+    type Output = <Self as World>::Plugin;
+
+    fn index(&self, index: u8) -> &Self::Output {
+        &self.plugins[index as usize].1
+    }
+}
+
+impl IndexMut<u8> for Tes4World {
+    fn index_mut(&mut self, index: u8) -> &mut Self::Output {
+        &mut self.plugins[index as usize].1
+    }
 }
 
 #[cfg(test)]

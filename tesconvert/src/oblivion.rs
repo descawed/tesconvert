@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use tesutil::tes3;
 use tesutil::tes4;
 use tesutil::tes4::{Magic, Tes4World};
 use tesutil::EffectRange;
+use tesutil::{tes3, World};
 
 use anyhow::{anyhow, Result};
 #[cfg(windows)]
@@ -16,6 +16,7 @@ use winreg::RegKey;
 /// Container for Oblivion-related state and functionality
 #[derive(Debug)]
 pub struct Oblivion {
+    game_dir: PathBuf,
     world: RefCell<Tes4World>,
     // skill XP settings
     skill_use_exp: f32,
@@ -42,10 +43,13 @@ impl Oblivion {
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let world = match game_dir {
-            Some(path) => Tes4World::load_from_save(path, save_path),
-            None => Tes4World::load_from_save(Oblivion::detect_dir()?, save_path),
-        }?;
+        let oblivion_dir = match game_dir {
+            Some(path) => PathBuf::from(path.as_ref()),
+            None => Oblivion::detect_dir()?.into(),
+        };
+
+        let world =
+            Tes4World::load_from_save(<PathBuf as AsRef<Path>>::as_ref(&oblivion_dir), save_path)?;
 
         // the defaults here are the hard-coded defaults in the exe, as you can see when opening
         // the CS without any plugins loaded.
@@ -66,6 +70,7 @@ impl Oblivion {
         let master_min = world.get_float_setting("fMagicSpellLevelMasterMin", 100.0)?;
 
         Ok(Oblivion {
+            game_dir: oblivion_dir,
             world: RefCell::new(world),
             skill_use_exp,
             skill_use_factor,
@@ -206,5 +211,15 @@ impl Oblivion {
     /// Gets the Oblivion world mutably
     pub fn world_mut(&self) -> impl Deref<Target = Tes4World> + DerefMut<Target = Tes4World> + '_ {
         self.world.borrow_mut()
+    }
+
+    /// Get the path to the game directory
+    pub fn game_dir(&self) -> &Path {
+        self.game_dir.as_ref()
+    }
+
+    /// Get the path to the game's data directory
+    pub fn data_dir(&self) -> PathBuf {
+        self.game_dir.join(Tes4World::PLUGIN_DIR)
     }
 }

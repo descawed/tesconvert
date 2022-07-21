@@ -1,6 +1,4 @@
-use crate::tes4::{
-    Enchantable, EnchantmentType, FormId, Item, Skill, Tes4Field, Tes4Record, TextureHash,
-};
+use crate::tes4::{Enchantable, EnchantmentType, FormId, Item, Skill, Tes4Field, Tes4Record};
 use crate::{Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt, BinWriterExt};
 use bitflags::bitflags;
@@ -35,7 +33,7 @@ pub struct Book {
     script: Option<FormId>,
     model: Option<String>,
     bound_radius: Option<f32>,
-    texture_hash: Option<TextureHash>,
+    texture_hash: Option<Vec<u8>>,
     icon: Option<String>,
     enchantment_points: Option<u16>,
     enchantment: Option<FormId>,
@@ -129,11 +127,11 @@ impl Item for Book {
         self.bound_radius = bound_radius;
     }
 
-    fn texture_hash(&self) -> Option<&TextureHash> {
-        self.texture_hash.as_ref()
+    fn texture_hash(&self) -> Option<&[u8]> {
+        self.texture_hash.as_deref()
     }
 
-    fn set_texture_hash(&mut self, texture_hash: Option<TextureHash>) {
+    fn set_texture_hash(&mut self, texture_hash: Option<Vec<u8>>) {
         self.texture_hash = texture_hash;
     }
 }
@@ -163,9 +161,12 @@ impl Form for Book {
     fn write(&self, record: &mut Self::Record) -> Result<(), TesError> {
         Book::assert(record)?;
 
-        self.write_item_fields(record, &[b"EDID", b"FULL"])?;
-        record.add_field(Tes4Field::new_zstring(b"DESC", self.text.clone())?);
-        self.write_item_fields(record, &[b"SCRI", b"MODL", b"MODB", b"MODT", b"ICON"])?;
+        self.write_item_fields(
+            record,
+            &[
+                b"EDID", b"FULL", b"MODL", b"MODB", b"MODT", b"ICON", b"SCRI",
+            ],
+        )?;
 
         if let Some(enchantment_points) = self.enchantment_points {
             record.add_field(Tes4Field::new_u16(b"ANAM", enchantment_points));
@@ -173,6 +174,8 @@ impl Form for Book {
         if let Some(enchantment_id) = self.enchantment {
             record.add_field(Tes4Field::new_u32(b"ENAM", enchantment_id.0));
         }
+
+        record.add_field(Tes4Field::new_zstring(b"DESC", self.text.clone())?);
 
         let mut buf = vec![];
         let mut cursor = Cursor::new(&mut buf);

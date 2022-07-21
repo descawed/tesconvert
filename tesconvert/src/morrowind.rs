@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::iter::repeat;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use tesutil::tes3::Magic as Tes3Magic;
@@ -15,8 +15,8 @@ use tesutil::tes4::{
     ActorValue, Enchantable as Tes4Enchantable, FindForm, FormId, Item as Tes4Item, Tes4Field,
     Tes4Record, Tes4World,
 };
-use tesutil::tes4::{Magic as Tes4Magic, TextureHash};
-use tesutil::{tes3, EffectRange};
+use tesutil::tes4::{Magic as Tes4Magic, Tes4Plugin};
+use tesutil::{tes3, EffectRange, Plugin, World};
 use tesutil::{tes4, Record};
 use tesutil::{Attribute, Attributes, Form, TesError};
 
@@ -25,14 +25,22 @@ use crate::oblivion::Oblivion;
 
 use anyhow::{anyhow, Context, Result};
 use enum_map::{enum_map, EnumMap};
+use lazy_static::lazy_static;
+use regex::{Captures, Regex};
 #[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]
 use winreg::RegKey;
 
+lazy_static! {
+    static ref FONT_REGEX: Regex =
+        Regex::new("(?i)(<font\\b[^>]+face\\s*=\\s*\"?\\s*)([^\">]+)(\\s*\"?[^>]+>)").unwrap();
+}
+
 /// Container for Morrowind-related state and functionality
 #[derive(Debug)]
 pub struct Morrowind {
+    game_dir: PathBuf,
     pub world: Tes3World,
     major_skill_bonus: f32,
     minor_skill_bonus: f32,
@@ -96,11 +104,13 @@ impl Morrowind {
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let world = match game_dir {
-            // two calls because we're calling different functions here if P is not String
-            Some(path) => Tes3World::load_from_save(path.as_ref(), save_path),
-            None => Tes3World::load_from_save(Morrowind::detect_dir()?, save_path),
-        }?;
+        let morrowind_dir = match game_dir {
+            Some(path) => PathBuf::from(path.as_ref()),
+            None => Morrowind::detect_dir()?.into(),
+        };
+
+        let world =
+            Tes3World::load_from_save(<PathBuf as AsRef<Path>>::as_ref(&morrowind_dir), save_path)?;
         let major_skill_bonus = Morrowind::get_float_setting(&world, "fMajorSkillBonus", 0.75)?;
         let minor_skill_bonus = Morrowind::get_float_setting(&world, "fMinorSkillBonus", 1.0)?;
         let misc_skill_bonus = Morrowind::get_float_setting(&world, "fMiscSkillBonus", 1.25)?;
@@ -108,6 +118,7 @@ impl Morrowind {
         let soul_gem_mult = Morrowind::get_float_setting(&world, "fSoulGemMult", 3.0)?;
 
         Ok(Morrowind {
+            game_dir: morrowind_dir,
             world,
             major_skill_bonus,
             minor_skill_bonus,
@@ -284,6 +295,16 @@ impl Morrowind {
             xp
         }
     }
+
+    /// Get the path to the game directory
+    pub fn game_dir(&self) -> &Path {
+        self.game_dir.as_ref()
+    }
+
+    /// Get the path to the game's data directory
+    pub fn data_dir(&self) -> PathBuf {
+        self.game_dir.join(Tes3World::PLUGIN_DIR)
+    }
 }
 
 /// Container for Morrowind-to-Oblivion conversion state and functionality
@@ -303,6 +324,9 @@ pub struct MorrowindToOblivion {
     model_map: HashMap<String, Vec<FormId>>,
     icon_map: HashMap<String, Vec<FormId>>,
 }
+
+/// Name of the companion mod generated during the conversion
+pub const COMPANION_MOD_NAME: &str = "mw2ob.esp";
 
 impl MorrowindToOblivion {
     fn load_map<P: AsRef<Path>>(
@@ -435,6 +459,9 @@ impl MorrowindToOblivion {
             tes4::SoulType::Grand => (greater_value + 1, u32::MAX),
         };
 
+        // ensure that the companion mod exists
+        ob.world_mut().get_companion_mod(COMPANION_MOD_NAME)?;
+
         Ok(MorrowindToOblivion {
             config,
             mw,
@@ -452,7 +479,20 @@ impl MorrowindToOblivion {
         })
     }
 
-    fn save_form<T>(&self, mw_id: &str, form: &T) -> Result<(FormId, u32)>
+    fn add_form_to_mod<T>(&self, mw_id: &str, form: &T) -> Result<FormId>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        let mut record = Tes4Record::new(T::RECORD_TYPE);
+        form.write(&mut record)?;
+        let form_id = self.with_companion_mod(|plugin| plugin.add_new_record(record))?;
+        self.form_map
+            .borrow_mut()
+            .insert(String::from(mw_id), form_id);
+        Ok(form_id)
+    }
+
+    fn add_form_to_save<T>(&self, mw_id: &str, form: &T) -> Result<(FormId, u32)>
     where
         T: Form<Field = Tes4Field, Record = Tes4Record>,
     {
@@ -465,6 +505,25 @@ impl MorrowindToOblivion {
             .borrow_mut()
             .insert(String::from(mw_id), form_id);
         Ok((form_id, iref))
+    }
+
+    fn add_form_to_both<T>(&self, mw_id: &str, form: &T) -> Result<(FormId, u32)>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        let form_id = self.add_form_to_mod(mw_id, form)?;
+        let iref = self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id));
+        Ok((form_id, iref))
+    }
+
+    // there's no immutable version of this method because get_companion_mod is always mutable -
+    // it may need to create the mod if it doesn't exist yet
+    fn with_companion_mod<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&mut Tes4Plugin) -> T,
+    {
+        let mut ob_world = self.ob.world_mut();
+        f(ob_world.get_companion_mod(COMPANION_MOD_NAME).unwrap())
     }
 
     fn with_save<T, F>(&self, f: F) -> T
@@ -751,7 +810,7 @@ impl MorrowindToOblivion {
                 spell.spell_type,
                 tes4::SpellType::Power | tes4::SpellType::LesserPower | tes4::SpellType::Spell
             ) {
-                let (_, iref) = self.save_form(id, &spell)?;
+                let (_, iref) = self.add_form_to_both(id, &spell)?;
                 spell_irefs.push(iref);
             }
         }
@@ -1207,14 +1266,14 @@ impl MorrowindToOblivion {
         Ok(())
     }
 
-    fn get_ob_model(&self, mw_model: &str) -> Option<(String, f32, TextureHash)> {
+    fn get_ob_model(&self, mw_model: &str) -> Option<(String, f32, Vec<u8>)> {
         if let Some(ob_items) = self.model_map.get(&mw_model.to_lowercase()) {
             for ob_item in ob_items {
                 if let Ok(Some(item)) = self.ob.world().get_item(&FindForm::ByIndex(*ob_item)) {
                     if let (Some(ob_model), Some(bound_radius), Some(texture_hash)) =
                         (item.model(), item.bound_radius(), item.texture_hash())
                     {
-                        return Some((String::from(ob_model), bound_radius, texture_hash.clone()));
+                        return Some((String::from(ob_model), bound_radius, texture_hash.to_vec()));
                     }
                 }
             }
@@ -1351,7 +1410,7 @@ impl MorrowindToOblivion {
                 if let Some(ob_enchantment) =
                     self.convert_enchantment(&mw_enchantment, ob_enchantable.enchantment_type())?
                 {
-                    let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
+                    let form_id = self.add_form_to_mod(mw_enchantment_id, &ob_enchantment)?;
 
                     ob_enchantable.set_enchantment(Some(form_id));
                     ob_enchantable
@@ -1377,11 +1436,11 @@ impl MorrowindToOblivion {
             String::from(mw_weapon.name().unwrap_or("")),
         );
 
-        if !(self.convert_item(mw_weapon, &mut ob_ammo)
-            && self.convert_enchantable(mw_weapon, &mut ob_ammo)?.is_some())
-        {
+        if !self.convert_item(mw_weapon, &mut ob_ammo) {
             return Ok(None);
         }
+
+        self.convert_enchantable(mw_weapon, &mut ob_ammo)?;
 
         ob_ammo.data.speed = mw_weapon.data.speed;
         ob_ammo.data.ignores_normal_weapon_resistance =
@@ -1403,13 +1462,11 @@ impl MorrowindToOblivion {
             String::from(mw_weapon.name().unwrap_or("")),
         );
 
-        if !(self.convert_item(mw_weapon, &mut ob_weapon)
-            && self
-                .convert_enchantable(mw_weapon, &mut ob_weapon)?
-                .is_some())
-        {
+        if !self.convert_item(mw_weapon, &mut ob_weapon) {
             return Ok(None);
         }
+
+        self.convert_enchantable(mw_weapon, &mut ob_weapon)?;
 
         ob_weapon.data.weapon_type = match mw_weapon.data.weapon_type {
             tes3::WeaponType::LongBladeOneHand | tes3::WeaponType::ShortBladeOneHand => {
@@ -1445,17 +1502,30 @@ impl MorrowindToOblivion {
             return Ok(None);
         }
 
+        // map fonts
+        let ob_text = String::from(
+            FONT_REGEX.replace_all(&mw_book.text, |captures: &Captures| {
+                let mw_font_name = captures[2].to_lowercase();
+                let ob_font_name = match mw_font_name.as_str() {
+                    "magic cards" => "1",
+                    "daedric" => "4",
+                    _ => mw_font_name.as_str(),
+                };
+                format!("{}{}{}", &captures[1], ob_font_name, &captures[3])
+            }),
+        );
+
         let mut ob_book = tes4::Book::new(
             String::from(mw_book.id()),
             String::from(mw_book.name().unwrap_or("")),
-            mw_book.text.clone(),
+            ob_text,
         );
 
-        if !(self.convert_item(mw_book, &mut ob_book)
-            && self.convert_enchantable(mw_book, &mut ob_book)?.is_some())
-        {
+        if !self.convert_item(mw_book, &mut ob_book) {
             return Ok(None);
         }
+
+        self.convert_enchantable(mw_book, &mut ob_book)?;
 
         if let Some(mw_skill) = mw_book.data.skill {
             // in this case, we just lose the skill if it can't be converted; at least you'll still be able to read it
@@ -1498,7 +1568,10 @@ impl MorrowindToOblivion {
                     tes3::Book::RECORD_TYPE => {
                         let mw_book = tes3::Book::read(&*record)?;
                         if let Some(ob_book) = self.convert_book(&mw_book)? {
-                            self.save_form(&mw_item.id, &ob_book)?.1
+                            // FIXME: I don't think books work right when added in the save. no text appears,
+                            //  but when I copy the same record into an ESP, it displays correctly. need
+                            //  companion mod functionality.
+                            self.add_form_to_both(&mw_item.id, &ob_book)?.1
                         } else {
                             continue;
                         }
@@ -1506,7 +1579,7 @@ impl MorrowindToOblivion {
                     tes3::Potion::RECORD_TYPE => {
                         let mw_potion = tes3::Potion::read(&*record)?;
                         if let Some(ob_potion) = self.convert_potion(&mw_potion)? {
-                            self.save_form(&mw_item.id, &ob_potion)?.1
+                            self.add_form_to_both(&mw_item.id, &ob_potion)?.1
                         } else {
                             continue;
                         }
@@ -1515,13 +1588,13 @@ impl MorrowindToOblivion {
                         let mw_weapon = tes3::Weapon::read(&*record)?;
                         if mw_weapon.data.weapon_type == tes3::WeaponType::Arrow {
                             if let Some(ob_ammo) = self.convert_ammo(&mw_weapon)? {
-                                self.save_form(&mw_item.id, &ob_ammo)?.1
+                                self.add_form_to_both(&mw_item.id, &ob_ammo)?.1
                             } else {
                                 continue;
                             }
                         } else {
                             if let Some(ob_weapon) = self.convert_weapon(&mw_weapon)? {
-                                self.save_form(&mw_item.id, &ob_weapon)?.1
+                                self.add_form_to_both(&mw_item.id, &ob_weapon)?.1
                             } else {
                                 continue;
                             }
@@ -1648,6 +1721,14 @@ impl MorrowindToOblivion {
         self.convert_inventory(&mut ob_player_ref)?;
 
         // apply changes to save
+        self.with_companion_mod::<Result<()>, _>(|plugin| {
+            let data_dir = self.ob.data_dir();
+            let plugin_path = data_dir.join(COMPANION_MOD_NAME);
+            plugin.save_file(&plugin_path)?;
+
+            Ok(())
+        })?;
+
         self.with_save_mut::<Result<()>, _>(|ob_save| {
             // finalize converted class (we have to wait and do this here because this might take
             // ownership of the class)
