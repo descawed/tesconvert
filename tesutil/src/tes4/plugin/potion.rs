@@ -1,4 +1,6 @@
-use crate::tes4::{FormId, Item, SpellEffect, Tes4Field, Tes4Record, TextureHash, MAGIC_EFFECTS};
+use crate::tes4::{
+    FormId, Item, Magic, SpellEffect, Tes4Field, Tes4Record, TextureHash, MAGIC_EFFECTS,
+};
 use std::io::{Cursor, Read, Write};
 
 use crate::{decode_failed, Field, Form, Record, TesError};
@@ -20,6 +22,28 @@ pub struct Potion {
     pub is_food_item: bool,
     unknown: [u8; 3],
     effects: Vec<SpellEffect>,
+}
+
+impl Magic for Potion {
+    fn iter_effects(&self) -> Box<dyn Iterator<Item = &SpellEffect> + '_> {
+        Box::new(self.effects.iter())
+    }
+
+    fn iter_effects_mut(&mut self) -> Box<dyn Iterator<Item = &mut SpellEffect> + '_> {
+        Box::new(self.effects.iter_mut())
+    }
+
+    fn add_effect(&mut self, effect: SpellEffect) {
+        self.effects.push(effect);
+    }
+
+    fn name(&self) -> Option<&str> {
+        Some(self.name.as_str())
+    }
+
+    fn set_name(&mut self, name: Option<String>) {
+        self.name = name.unwrap_or_else(String::new);
+    }
 }
 
 impl Item for Potion {
@@ -105,16 +129,6 @@ impl Potion {
         }
     }
 
-    /// Adds an effect to this potion
-    pub fn add_effect(&mut self, effect: SpellEffect) {
-        self.effects.push(effect);
-    }
-
-    /// Iterates over this potion's effects
-    pub fn effects(&self) -> impl Iterator<Item = &SpellEffect> {
-        self.effects.iter()
-    }
-
     /// Set the model and texture info appropriately for a user-created potion
     pub fn use_potion_graphics(&mut self) {
         // values copied from PotionCureDisease in Oblivion.esm
@@ -144,8 +158,8 @@ impl Potion {
     /// Is this potion a poison?
     pub fn is_poison(&self) -> bool {
         self.effects.iter().all(|e| {
-            MAGIC_EFFECTS[e.effect].is_hostile()
-                || e.script_effect.as_ref().map_or(false, |s| s.is_hostile)
+            MAGIC_EFFECTS[e.effect_type()].is_hostile()
+                || e.script_effect().map_or(false, |s| s.is_hostile)
         })
     }
 
@@ -200,28 +214,7 @@ impl Form for Potion {
                     potion.is_food_item = flags & 2 != 0;
                     reader.read_exact(&mut potion.unknown)?;
                 }
-                b"EFID" => {
-                    let mut effect = SpellEffect::default();
-                    effect.load_from_field(&field)?;
-                    potion.effects.push(effect);
-                }
-                b"EFIT" | b"SCIT" => {
-                    if let Some(last_effect) = potion.effects.iter_mut().last() {
-                        last_effect.load_from_field(&field)?;
-                    } else {
-                        return Err(decode_failed(format!(
-                            "Orphaned {} field in ALCH record",
-                            field.name_as_str()
-                        )));
-                    }
-                }
-                b"FULL" => {
-                    if let Some(last_effect) = potion.effects.iter_mut().last() {
-                        last_effect.load_from_field(&field)?;
-                    } else {
-                        potion.name = String::from(field.get_zstring()?);
-                    }
-                }
+                b"EFID" | b"EFIT" | b"SCIT" | b"FULL" => potion.read_magic_field(field)?,
                 _ => potion.read_item_field(field)?,
             }
         }
@@ -234,9 +227,9 @@ impl Form for Potion {
 
         record.clear();
 
-        self.write_scalar_fields(&mut record, &[b"EDID"])?;
+        self.write_item_fields(&mut record, &[b"EDID"])?;
         record.add_field(Tes4Field::new_zstring(b"FULL", self.name.clone())?);
-        self.write_scalar_fields(&mut record, &[b"MODL", b"MODB", b"MODT", b"ICON", b"SCRI"])?;
+        self.write_item_fields(&mut record, &[b"MODL", b"MODB", b"MODT", b"ICON", b"SCRI"])?;
         record.add_field(Tes4Field::new_f32(b"DATA", self.weight));
 
         let mut buf = vec![];
@@ -248,11 +241,7 @@ impl Form for Potion {
         cursor.write_all(&self.unknown)?;
         record.add_field(Tes4Field::new(b"ENIT", buf)?);
 
-        for effect in &self.effects {
-            for field in effect.to_fields()? {
-                record.add_field(field);
-            }
-        }
+        self.write_magic_effects(&mut record)?;
 
         Ok(())
     }

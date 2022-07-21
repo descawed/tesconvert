@@ -1,4 +1,4 @@
-use crate::tes3::{Item, MagicEffectType, SpellEffect, Tes3Field, Tes3Record};
+use crate::tes3::{Item, Magic, MagicEffectType, SpellEffect, Tes3Field, Tes3Record};
 use crate::{decode_failed, Field, Form, Record, TesError};
 use binrw::{binrw, BinReaderExt};
 
@@ -22,6 +22,20 @@ pub struct Potion {
     pub name: Option<String>,
     pub alchemy_data: AlchemyData,
     pub effects: Vec<SpellEffect>,
+}
+
+impl Magic for Potion {
+    fn iter_effects(&self) -> Box<dyn Iterator<Item = &SpellEffect> + '_> {
+        Box::new(self.effects.iter())
+    }
+
+    fn iter_effects_mut(&mut self) -> Box<dyn Iterator<Item = &mut SpellEffect> + '_> {
+        Box::new(self.effects.iter_mut())
+    }
+
+    fn add_effect(&mut self, effect: SpellEffect) {
+        self.effects.push(effect);
+    }
 }
 
 impl Item for Potion {

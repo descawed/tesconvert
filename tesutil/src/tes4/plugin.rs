@@ -45,6 +45,21 @@ pub use potion::*;
 mod soul_gem;
 pub use soul_gem::*;
 
+mod magic;
+pub use magic::*;
+
+mod enchantable;
+pub use enchantable::*;
+
+mod enchantment;
+pub use enchantment::*;
+
+mod weapon;
+pub use weapon::*;
+
+mod ammo;
+pub use ammo::*;
+
 /// Maximum number of masters that a plugin can have
 // - 2 because index FF is reserved for saves, and we also need at least one index for ourselves
 pub const MAX_MASTERS: usize = u8::MAX as usize - 2;

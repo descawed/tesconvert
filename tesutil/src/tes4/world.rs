@@ -6,7 +6,7 @@ use super::cosave::*;
 use super::plugin::*;
 use super::save::*;
 use super::{FindForm, FormId, MagicEffectType, SpellEffect, MAGIC_EFFECTS};
-use crate::{Form, OwnedOrRef, TesError, World};
+use crate::{Form, OwnedOrRef, Record, TesError, World};
 
 static BASE_GAME: &str = "Oblivion.esm";
 static PLUGIN_DIR: &str = "Data";
@@ -231,6 +231,34 @@ impl Tes4World {
             Some(mut record) => form.write(&mut record),
             None => Err(search.err()),
         }
+    }
+
+    /// Gets an item from the given record
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data
+    pub fn get_item_from_record(&self, record: &Tes4Record) -> Result<Box<dyn Item>, TesError> {
+        match record.name() {
+            Ammo::RECORD_TYPE => Ok(Box::new(Ammo::read(record)?)),
+            Potion::RECORD_TYPE => Ok(Box::new(Potion::read(record)?)),
+            Weapon::RECORD_TYPE => Ok(Box::new(Weapon::read(record)?)),
+            _ => Err(TesError::RequirementFailed(String::from(
+                "The given record is not an item or its Form type is not implemented",
+            ))),
+        }
+    }
+
+    /// Loads an item by ID if such an item exists
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data
+    pub fn get_item(&self, search: &FindForm) -> Result<Option<Box<dyn Item>>, TesError> {
+        Ok(match self.get_record(search) {
+            Some(record) => Some(self.get_item_from_record(&record)?),
+            None => None,
+        })
     }
 }
 

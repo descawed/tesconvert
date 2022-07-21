@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::tes3::{MagicEffectType, Skill, SpellEffect, Tes3Field, Tes3Record};
+use crate::tes3::{Magic, MagicEffectType, Skill, SpellEffect, Tes3Field, Tes3Record};
 use crate::{
     decode_failed, decode_failed_because, Attribute, EffectRange, Field, Form, Record, TesError,
 };
@@ -72,10 +72,19 @@ impl Spell {
     pub fn always_succeeds(&self) -> bool {
         self.flags.contains(SpellFlags::ALWAYS_SUCCEEDS)
     }
+}
 
-    /// Iterates over this spell's effects
-    pub fn effects(&self) -> impl Iterator<Item = &SpellEffect> {
-        self.effects.iter()
+impl Magic for Spell {
+    fn iter_effects(&self) -> Box<dyn Iterator<Item = &SpellEffect> + '_> {
+        Box::new(self.effects.iter())
+    }
+
+    fn iter_effects_mut(&mut self) -> Box<dyn Iterator<Item = &mut SpellEffect> + '_> {
+        Box::new(self.effects.iter_mut())
+    }
+
+    fn add_effect(&mut self, effect: SpellEffect) {
+        self.effects.push(effect);
     }
 }
 

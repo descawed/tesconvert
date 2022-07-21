@@ -260,7 +260,7 @@ impl Tes3Record {
             for field in self.fields.iter() {
                 if field.name() == b"NAME" {
                     id = match &self.name {
-                        b"GMST" | b"WEAP" => field.get_string().ok(),
+                        b"GMST" => field.get_string().ok(),
                         _ => field.get_zstring().ok(),
                     };
                     break;

@@ -1,13 +1,18 @@
 use std::cell::RefCell;
+use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::iter::repeat;
 use std::path::Path;
 use std::thread;
 
-use tesutil::tes3::{InventoryItem, Item, SkillType, Tes3World};
+use tesutil::tes3::Magic as Tes3Magic;
+use tesutil::tes3::{InventoryItem, Item as Tes3Item, SkillType, Tes3World};
 use tesutil::tes4::cosave::{CoSave, ObConvert, OPCODE_BASE};
 use tesutil::tes4::save::*;
-use tesutil::tes4::{ActorValue, FindForm, FormId, Tes4World};
+use tesutil::tes4::{
+    ActorValue, Enchantable, FindForm, FormId, Item as Tes4Item, Tes4Field, Tes4Record, Tes4World,
+};
+use tesutil::tes4::{Magic as Tes4Magic, TextureHash};
 use tesutil::{tes3, EffectRange};
 use tesutil::{tes4, Record};
 use tesutil::{Attribute, Attributes, Form, TesError};
@@ -292,6 +297,8 @@ pub struct MorrowindToOblivion {
     class: tes3::Class,
     active_spells: tes3::ActiveSpellList,
     soul_map: EnumMap<tes4::SoulType, (u32, u32)>,
+    model_map: HashMap<String, Vec<FormId>>,
+    icon_map: HashMap<String, Vec<FormId>>,
 }
 
 impl MorrowindToOblivion {
@@ -346,6 +353,25 @@ impl MorrowindToOblivion {
             &config.config_path,
             &ob.world(),
         )?);
+
+        // we'll use these mappings later to determine appropriate Oblivion models and icons to use
+        // for Morrowind items that aren't explicitly mapped to an Oblivion item
+        let mut model_map: HashMap<_, Vec<FormId>> = HashMap::new();
+        let mut icon_map: HashMap<_, Vec<FormId>> = HashMap::new();
+        for (mw_id, ob_id) in form_map.borrow().iter() {
+            // we just ignore errors on this step for now
+            if let Ok(Some(item)) = mw.world.get_item(mw_id.as_str()) {
+                if let Some(model) = item.model() {
+                    let ids = model_map.entry(String::from(model)).or_default();
+                    ids.push(*ob_id);
+                }
+
+                if let Some(icon) = item.icon() {
+                    let ids = icon_map.entry(String::from(icon)).or_default();
+                    ids.push(*ob_id);
+                }
+            }
+        }
 
         let player_base: tes3::Npc = mw
             .world
@@ -418,7 +444,24 @@ impl MorrowindToOblivion {
             class,
             active_spells,
             soul_map,
+            model_map,
+            icon_map,
         })
+    }
+
+    fn save_form<T>(&self, mw_id: &str, form: &T) -> Result<(FormId, u32)>
+    where
+        T: Form<Field = Tes4Field, Record = Tes4Record>,
+    {
+        let (form_id, iref) = self.with_save_mut(|ob_save| {
+            ob_save
+                .add_form(form)
+                .map(|i| (ob_save.iref_to_form_id(i).unwrap(), i))
+        })?;
+        self.form_map
+            .borrow_mut()
+            .insert(String::from(mw_id), form_id);
+        Ok((form_id, iref))
     }
 
     fn with_save<T, F>(&self, f: F) -> T
@@ -603,7 +646,7 @@ impl MorrowindToOblivion {
         };
 
         let mut converted_any = false;
-        for effect in mw_spell.effects() {
+        for effect in mw_spell.iter_effects() {
             if let Some(ob_effect) = self.convert_effect(effect)? {
                 ob_spell.add_effect(ob_effect);
                 converted_any = true;
@@ -657,7 +700,7 @@ impl MorrowindToOblivion {
         let known_effects: HashSet<_> = ob_spells
             .iter()
             .filter(|(_, s)| s.spell_type == tes4::SpellType::Spell)
-            .flat_map(|(_, s)| s.effects().map(|e| e.effect_type()))
+            .flat_map(|(_, s)| s.iter_effects().map(|e| e.effect_type()))
             .collect();
 
         // set known magic effects
@@ -698,21 +741,19 @@ impl MorrowindToOblivion {
             })
             .collect();
 
-        self.with_save_mut(|save| {
-            let mut spell_irefs = Vec::with_capacity(ob_spells.len());
-            for (id, spell) in ob_spells {
-                // we don't put abilities and diseases in the spell list because those need to be added to the player by the OBSE plugin
-                if matches!(
-                    spell.spell_type,
-                    tes4::SpellType::Power | tes4::SpellType::LesserPower | tes4::SpellType::Spell
-                ) {
-                    let iref = save.add_form(&spell)?;
-                    let form_id = save.iref_to_form_id(iref).unwrap();
-                    spell_irefs.push(iref);
-                    self.form_map.borrow_mut().insert(String::from(id), form_id);
-                }
+        let mut spell_irefs = Vec::with_capacity(ob_spells.len());
+        for (id, spell) in ob_spells {
+            // we don't put abilities and diseases in the spell list because those need to be added to the player by the OBSE plugin
+            if matches!(
+                spell.spell_type,
+                tes4::SpellType::Power | tes4::SpellType::LesserPower | tes4::SpellType::Spell
+            ) {
+                let (_, iref) = self.save_form(id, &spell)?;
+                spell_irefs.push(iref);
             }
+        }
 
+        self.with_save_mut(|save| {
             for special in specials {
                 let iref = save.insert_form_id(special);
                 spell_irefs.push(iref);
@@ -806,7 +847,7 @@ impl MorrowindToOblivion {
                 .filter(|e| e.affected_actor() == "PlayerSaveGame")
             {
                 if let Some(base_effect) = mw_spell
-                    .effects()
+                    .iter_effects()
                     .enumerate()
                     .filter(|(p, _)| *p as i32 == effect.index())
                     .map(|(_, e)| e)
@@ -1163,7 +1204,42 @@ impl MorrowindToOblivion {
         Ok(())
     }
 
+    fn get_ob_model(&self, mw_model: &str) -> Option<(String, f32, TextureHash)> {
+        if let Some(ob_items) = self.model_map.get(mw_model) {
+            for ob_item in ob_items {
+                if let Ok(Some(item)) = self.ob.world().get_item(&FindForm::ByIndex(*ob_item)) {
+                    if let (Some(ob_model), Some(bound_radius), Some(texture_hash)) =
+                        (item.model(), item.bound_radius(), item.texture_hash())
+                    {
+                        return Some((String::from(ob_model), bound_radius, texture_hash.clone()));
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn get_ob_icon(&self, mw_icon: &str) -> Option<String> {
+        if let Some(ob_items) = self.icon_map.get(mw_icon) {
+            for ob_item in ob_items {
+                if let Ok(Some(item)) = self.ob.world().get_item(&FindForm::ByIndex(*ob_item)) {
+                    if let Some(ob_icon) = item.icon() {
+                        return Some(String::from(ob_icon));
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     fn convert_potion(&self, mw_potion: &tes3::Potion) -> Result<Option<tes4::Potion>> {
+        // can't convert scripted items
+        if mw_potion.script().is_some() {
+            return Ok(None);
+        }
+
         let mut ob_potion = tes4::Potion::new(
             mw_potion.id.clone(),
             mw_potion.name.clone().unwrap_or_else(String::new),
@@ -1181,13 +1257,194 @@ impl MorrowindToOblivion {
             }
         }
 
-        // only add the spell if we successfully converted at least one effect
+        // only add the potion if we successfully converted at least one effect
         Ok(if converted_any {
             ob_potion.use_auto_graphics();
             Some(ob_potion)
         } else {
             None
         })
+    }
+
+    fn convert_enchantment(
+        &self,
+        mw_enchantment: &tes3::Enchantment,
+        enchantment_type: tes4::EnchantmentType,
+    ) -> Result<Option<tes4::Enchantment>> {
+        // check if the enchantment we're converting makes sense as the type of enchantment requested
+        let expected_enchantment_type = match mw_enchantment.data.enchantment_type {
+            tes3::EnchantmentType::CastOnce => tes4::EnchantmentType::Scroll,
+            tes3::EnchantmentType::CastWhenStrikes => tes4::EnchantmentType::Weapon,
+            tes3::EnchantmentType::ConstantEffect => tes4::EnchantmentType::Apparel,
+            tes3::EnchantmentType::CastWhenUsed => return Ok(None), // this doesn't exist in Oblivion
+        };
+        if enchantment_type != expected_enchantment_type {
+            return Ok(None);
+        }
+
+        let mut ob_enchantment = tes4::Enchantment::new(mw_enchantment.id.clone());
+
+        ob_enchantment.data.enchantment_type = enchantment_type;
+        ob_enchantment.data.charge = mw_enchantment.data.charge;
+        ob_enchantment.data.cost = mw_enchantment.data.cost;
+        ob_enchantment.data.is_auto_calc = mw_enchantment.data.is_auto_calc;
+
+        let mut converted_any = false;
+        for effect in mw_enchantment.iter_effects() {
+            if let Some(ob_effect) = self.convert_effect(effect)? {
+                ob_enchantment.add_effect(ob_effect);
+                converted_any = true;
+            }
+        }
+
+        // only add the enchantment if we successfully converted at least one effect
+        Ok(if converted_any {
+            Some(ob_enchantment)
+        } else {
+            None
+        })
+    }
+
+    fn convert_ammo(&self, mw_weapon: &tes3::Weapon) -> Result<Option<tes4::Ammo>> {
+        // can't convert scripted items
+        if mw_weapon.script().is_some() {
+            return Ok(None);
+        }
+
+        let mut ob_ammo = tes4::Ammo::new(
+            String::from(mw_weapon.id()),
+            String::from(mw_weapon.name().unwrap_or("")),
+        );
+
+        if let Some(mw_model) = mw_weapon.model() {
+            match self.get_ob_model(mw_model) {
+                Some((model, bound_radius, texture_hash)) => {
+                    ob_ammo.set_model(Some(model));
+                    ob_ammo.set_bound_radius(Some(bound_radius));
+                    ob_ammo.set_texture_hash(Some(texture_hash));
+                }
+                None => return Ok(None), // can't convert model
+            }
+        }
+
+        if let Some(mw_icon) = mw_weapon.icon() {
+            match self.get_ob_icon(mw_icon) {
+                Some(ob_icon) => ob_ammo.set_icon(Some(ob_icon)),
+                None => return Ok(None), // can't convert icon
+            }
+        }
+
+        if let Some(mw_enchantment_id) = mw_weapon.enchantment() {
+            let mw_enchantment: tes3::Enchantment =
+                self.mw.world.get(mw_enchantment_id)?.ok_or_else(|| {
+                    anyhow!(
+                        "Invalid enchantment ID {} on Morrowind weapon {}",
+                        mw_enchantment_id,
+                        mw_weapon.id()
+                    )
+                })?;
+
+            match self.convert_enchantment(&mw_enchantment, tes4::EnchantmentType::Weapon)? {
+                Some(ob_enchantment) => {
+                    let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
+
+                    ob_ammo.set_enchantment(Some(form_id));
+                    ob_ammo.set_enchantment_points(Some(mw_weapon.data.enchantment_points));
+                }
+                None => return Ok(None), // can't convert enchantment
+            }
+        }
+
+        ob_ammo.data.speed = mw_weapon.data.speed;
+        ob_ammo.data.ignores_normal_weapon_resistance =
+            mw_weapon.ignores_normal_weapon_resistance();
+        ob_ammo.data.value = mw_weapon.data.value;
+        ob_ammo.data.weight = mw_weapon.data.weight;
+        // from what I've seen in the CS, arrows use chop damage
+        ob_ammo.data.damage = mw_weapon.data.max_chop as u16;
+
+        Ok(Some(ob_ammo))
+    }
+
+    fn convert_weapon(&self, mw_weapon: &tes3::Weapon) -> Result<Option<tes4::Weapon>> {
+        // can't convert scripted items
+        if mw_weapon.script().is_some() {
+            return Ok(None);
+        }
+
+        let mut ob_weapon = tes4::Weapon::new(
+            String::from(mw_weapon.id()),
+            String::from(mw_weapon.name().unwrap_or("")),
+        );
+
+        if let Some(mw_model) = mw_weapon.model() {
+            match self.get_ob_model(mw_model) {
+                Some((model, bound_radius, texture_hash)) => {
+                    ob_weapon.set_model(Some(model));
+                    ob_weapon.set_bound_radius(Some(bound_radius));
+                    ob_weapon.set_texture_hash(Some(texture_hash));
+                }
+                None => return Ok(None), // can't convert model
+            }
+        }
+
+        if let Some(mw_icon) = mw_weapon.icon() {
+            match self.get_ob_icon(mw_icon) {
+                Some(ob_icon) => ob_weapon.set_icon(Some(ob_icon)),
+                None => return Ok(None), // can't convert icon
+            }
+        }
+
+        if let Some(mw_enchantment_id) = mw_weapon.enchantment() {
+            let mw_enchantment: tes3::Enchantment =
+                self.mw.world.get(mw_enchantment_id)?.ok_or_else(|| {
+                    anyhow!(
+                        "Invalid enchantment ID {} on Morrowind weapon {}",
+                        mw_enchantment_id,
+                        mw_weapon.id()
+                    )
+                })?;
+
+            match self.convert_enchantment(&mw_enchantment, tes4::EnchantmentType::Weapon)? {
+                Some(ob_enchantment) => {
+                    let (form_id, _) = self.save_form(mw_enchantment_id, &ob_enchantment)?;
+
+                    ob_weapon.set_enchantment(Some(form_id));
+                    ob_weapon
+                        .set_enchantment_points(Some(mw_weapon.data.enchantment_points as u32));
+                }
+                None => return Ok(None), // can't convert enchantment
+            }
+        }
+
+        ob_weapon.data.weapon_type = match mw_weapon.data.weapon_type {
+            tes3::WeaponType::LongBladeOneHand | tes3::WeaponType::ShortBladeOneHand => {
+                tes4::WeaponType::BladeOneHand
+            }
+            tes3::WeaponType::LongBladeTwoClose => tes4::WeaponType::BladeTwoHand,
+            tes3::WeaponType::BluntOneHand | tes3::WeaponType::AxeOneHand => {
+                tes4::WeaponType::BluntOneHand
+            }
+            tes3::WeaponType::BluntTwoClose
+            | tes3::WeaponType::BluntTwoWide
+            | tes3::WeaponType::AxeTwoHand => tes4::WeaponType::BluntTwoHand,
+            tes3::WeaponType::MarksmanBow => tes4::WeaponType::Bow,
+            _ => return Ok(None), // can't convert this weapon type
+        };
+        ob_weapon.data.speed = mw_weapon.data.speed;
+        ob_weapon.data.reach = mw_weapon.data.reach;
+        ob_weapon.data.ignores_normal_weapon_resistance =
+            mw_weapon.ignores_normal_weapon_resistance();
+        ob_weapon.data.value = mw_weapon.data.value;
+        ob_weapon.data.health =
+            (mw_weapon.data.health as f32 / self.config.equipment_durability_ratio) as u32;
+        ob_weapon.data.weight = mw_weapon.data.weight;
+        ob_weapon.data.damage = cmp::max(
+            mw_weapon.data.max_chop,
+            cmp::max(mw_weapon.data.max_slash, mw_weapon.data.max_thrust),
+        ) as u16;
+
+        Ok(Some(ob_weapon))
     }
 
     fn convert_inventory(&self, ob_player_ref: &mut PlayerReferenceChange) -> Result<()> {
@@ -1198,7 +1455,6 @@ impl MorrowindToOblivion {
             .ok_or_else(|| anyhow!("Missing Oblivion player NPC record"))?;
 
         let mut stacks = HashMap::new();
-        let mut created_forms = HashMap::new();
         ob_player_ref.clear_inventory();
         let mut mw_inventory: Vec<(&InventoryItem, bool)> = self
             .player_change
@@ -1208,27 +1464,39 @@ impl MorrowindToOblivion {
         // TODO: Oblivion stacks non-pristine items with the same properties but Morrowind doesn't.
         //  we should combine the stacks in the Oblivion style where appropriate.
         for (mw_item, was_converted) in &mut mw_inventory {
-            if mw_item.script.is_some() {
+            // note: we have to do this in its own statement, otherwise form_map stays borrowed across
+            // the whole if block and we get errors when we call save_form
+            let existing_mapping = self.form_map.borrow().get(&mw_item.id).copied();
+            if mw_item.script.is_some() && existing_mapping.is_none() {
                 continue; // can't convert scripted items
             }
 
-            let iref = if let Some(iref) = created_forms.get(mw_item.id.as_str()).copied() {
-                iref
-            } else if let Some(form_id) = self.form_map.borrow().get(&mw_item.id).copied() {
+            let iref = if let Some(form_id) = existing_mapping {
                 self.with_save_mut(|ob_save| ob_save.insert_form_id(form_id))
             } else if let Some(record) = self.mw.world.get_record(&mw_item.id)? {
                 match record.name() {
                     tes3::Potion::RECORD_TYPE => {
                         let mw_potion = tes3::Potion::read(&*record)?;
                         if let Some(ob_potion) = self.convert_potion(&mw_potion)? {
-                            let iref =
-                                self.with_save_mut(|ob_save| ob_save.add_form(&ob_potion))?;
-
-                            created_forms.insert(mw_item.id.as_str(), iref);
-
-                            iref
+                            self.save_form(&mw_item.id, &ob_potion)?.1
                         } else {
                             continue;
+                        }
+                    }
+                    tes3::Weapon::RECORD_TYPE => {
+                        let mw_weapon = tes3::Weapon::read(&*record)?;
+                        if mw_weapon.data.weapon_type == tes3::WeaponType::Arrow {
+                            if let Some(ob_ammo) = self.convert_ammo(&mw_weapon)? {
+                                self.save_form(&mw_item.id, &ob_ammo)?.1
+                            } else {
+                                continue;
+                            }
+                        } else {
+                            if let Some(ob_weapon) = self.convert_weapon(&mw_weapon)? {
+                                self.save_form(&mw_item.id, &ob_weapon)?.1
+                            } else {
+                                continue;
+                            }
                         }
                     }
                     _ => continue,

@@ -2,7 +2,7 @@ use std::convert::TryFrom;
 use std::io::{Cursor, Read, Write};
 
 use crate::tes4::{
-    ActorValue, FormId, MagicEffectType, ScriptEffect, SpellEffect, Tes4Field, Tes4Record,
+    ActorValue, FormId, Magic, MagicEffectType, ScriptEffect, SpellEffect, Tes4Field, Tes4Record,
 };
 use crate::{
     decode_failed, decode_failed_because, EffectRange, Field, Form, MagicSchool, Record, TesError,
@@ -136,15 +136,27 @@ impl Spell {
     pub fn set_can_be_absorbed_or_reflected(&mut self, value: bool) {
         self.flags.set(SpellFlags::DISALLOW_ABSORB_REFLECT, !value);
     }
+}
 
-    /// Adds an effect to this spell
-    pub fn add_effect(&mut self, effect: SpellEffect) {
+impl Magic for Spell {
+    fn iter_effects(&self) -> Box<dyn Iterator<Item = &SpellEffect> + '_> {
+        Box::new(self.effects.iter())
+    }
+
+    fn iter_effects_mut(&mut self) -> Box<dyn Iterator<Item = &mut SpellEffect> + '_> {
+        Box::new(self.effects.iter_mut())
+    }
+
+    fn add_effect(&mut self, effect: SpellEffect) {
         self.effects.push(effect);
     }
 
-    /// Iterates over this spell's effects
-    pub fn effects(&self) -> impl Iterator<Item = &SpellEffect> {
-        self.effects.iter()
+    fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
     }
 }
 
@@ -172,34 +184,7 @@ impl Form for Spell {
                     spell.flags = SpellFlags::from_bits(reader.read_le::<u32>()? as u8)
                         .ok_or_else(|| decode_failed("Invalid spell flags"))?;
                 }
-                b"EFID" => {
-                    let mut effect = SpellEffect::default();
-                    effect.load_from_field(&field)?;
-                    spell.effects.push(effect);
-                }
-                b"EFIT" | b"SCIT" => {
-                    if let Some(last_effect) = spell.effects.iter_mut().last() {
-                        last_effect.load_from_field(&field)?;
-                    } else {
-                        return Err(decode_failed(format!(
-                            "Orphaned {} field in SPEL record",
-                            field.name_as_str()
-                        )));
-                    }
-                }
-                b"FULL" => {
-                    if let Some(last_effect) = spell.effects.iter_mut().last() {
-                        last_effect.load_from_field(&field)?;
-                    } else {
-                        spell.name = Some(String::from(field.get_zstring()?));
-                    }
-                }
-                _ => {
-                    return Err(decode_failed(format!(
-                        "Unexpected {} field in SPEL record",
-                        field.name_as_str()
-                    )))
-                }
+                _ => spell.read_magic_field(&field)?,
             }
         }
 
@@ -231,11 +216,7 @@ impl Form for Spell {
 
         record.add_field(Tes4Field::new(b"SPIT", buf)?);
 
-        for effect in &self.effects {
-            for field in effect.to_fields()? {
-                record.add_field(field);
-            }
-        }
+        self.write_magic_effects(record)?;
 
         Ok(())
     }

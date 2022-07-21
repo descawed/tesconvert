@@ -2,9 +2,9 @@ use std::cmp;
 use std::fs;
 use std::ops::{Add, Div};
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use clap::Result as ClapResult;
 use clap::{App, Arg, SubCommand};
 use ini::Ini;
 use num::{Float, One};
@@ -90,10 +90,12 @@ pub struct Config {
     pub ob_path: Option<String>,
     /// Strategy to use when combining skills
     pub combine_strategy: CombineStrategy,
+    /// MW:OB equipment durability ratio
+    pub equipment_durability_ratio: f32,
 }
 
 impl Config {
-    fn get(maybe_options: Option<Vec<&str>>, safe: bool) -> ClapResult<Config> {
+    fn get(maybe_options: Option<Vec<&str>>, safe: bool) -> Result<Config> {
         let app = App::new("tesconvert")
             .author("descawed <tesutil@descawed.com>")
             .version("0.1")
@@ -130,6 +132,20 @@ impl Config {
                     the default, uses the value of the highest old skill as the value of the new skill. 'average' averages \
                     the old skills to come up with the value of the new skill. 'lowest' uses the value of the lowest old \
                     skill."
+                    )
+            )
+            .arg(
+                Arg::with_name("durability_ratio")
+                    .short('d')
+                    .long("durability")
+                    .takes_value(true)
+                    .value_name("RATIO")
+                    .help("Ratio of Morrowind equipment durability to Oblivion equipment durability")
+                    .long_help(
+                        "Morrowind uses a larger range for equipment durability values than Oblivion. For example, in Morrowind \
+                        an Iron Dagger has 400 health and a Daedric Warhammer has 8000, whereas in Oblivion an Iron Dagger has \
+                        70 health and a Daedric Warhammer has 784. For this reason, we divide (coming from Morrowind) or multiply \
+                        (coming from Oblivion) by this ratio to scale the values from one game to be reasonable in the other."
                     )
             )
             .subcommand(
@@ -179,6 +195,10 @@ impl Config {
                 "lowest" => CombineStrategy::Lowest,
                 _ => unreachable!(),
             },
+            equipment_durability_ratio: matches
+                .value_of("durability_ratio")
+                .map(|v| f32::from_str(v))
+                .unwrap_or(Ok(5.))?,
         })
     }
 

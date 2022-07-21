@@ -58,8 +58,17 @@ pub use creature::*;
 mod misc_item;
 pub use misc_item::*;
 
+mod weapon;
+pub use weapon::*;
+
+mod enchantment;
+pub use enchantment::*;
+
 mod item;
 pub use item::*;
+
+mod magic;
+pub use magic::*;
 
 /// Save game information
 ///
@@ -630,9 +639,6 @@ impl Tes3Plugin {
                 let name = rb.name();
                 let type_map = self.id_map.entry(key).or_insert_with(HashMap::new);
                 // FIXME: it appears there are duplicates in the save file even among the same type (specifically CREC records)
-                /*if type_map.contains_key(name) {
-                    return Err(TesError::DuplicateId(key));
-                }*/
 
                 type_map.insert(*name, Arc::clone(&r));
             }

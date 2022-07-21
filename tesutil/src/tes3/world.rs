@@ -4,10 +4,10 @@ use std::path::Path;
 use ini::Ini;
 
 use super::plugin::*;
-use crate::{decode_failed, Form, Plugin, TesError, World};
+use crate::{decode_failed, Form, Plugin, Record, TesError, World};
 
-static INI_FILE: &str = "Morrowind.ini";
-static PLUGIN_DIR: &str = "Data Files";
+const INI_FILE: &str = "Morrowind.ini";
+const PLUGIN_DIR: &str = "Data Files";
 
 /// The full set of objects in the game world
 ///
@@ -153,6 +153,34 @@ impl Tes3World {
     ) -> Result<T, TesError> {
         self.get(id)?
             .ok_or_else(|| TesError::InvalidId(String::from(id)))
+    }
+
+    /// Gets an item from the given record
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data
+    pub fn get_item_from_record(&self, record: &Tes3Record) -> Result<Box<dyn Item>, TesError> {
+        match record.name() {
+            MiscItem::RECORD_TYPE => Ok(Box::new(MiscItem::read(record)?)),
+            Potion::RECORD_TYPE => Ok(Box::new(Potion::read(record)?)),
+            Weapon::RECORD_TYPE => Ok(Box::new(Weapon::read(record)?)),
+            _ => Err(TesError::RequirementFailed(String::from(
+                "The given record is not an item or its Form type is not implemented",
+            ))),
+        }
+    }
+
+    /// Loads an item by ID if such an item exists
+    ///
+    /// # Errors
+    ///
+    /// Fails if the matching record contains invalid data
+    pub fn get_item(&self, id: &str) -> Result<Option<Box<dyn Item>>, TesError> {
+        Ok(match self.get_record(id)? {
+            Some(record) => Some(self.get_item_from_record(&record)?),
+            None => None,
+        })
     }
 }
 

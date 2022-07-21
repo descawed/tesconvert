@@ -4,7 +4,7 @@ use std::path::Path;
 
 use tesutil::tes3;
 use tesutil::tes4;
-use tesutil::tes4::Tes4World;
+use tesutil::tes4::{Magic, Tes4World};
 use tesutil::EffectRange;
 
 use anyhow::{anyhow, Result};
@@ -160,7 +160,7 @@ impl Oblivion {
             let world = self.world.borrow();
             let mut total_cost = 0f32;
 
-            for effect in spell.effects() {
+            for effect in spell.iter_effects() {
                 let base_effect = world.get_magic_effect(effect.effect_type())?;
 
                 let effect_factor = base_effect.base_cost() * self.base_cost_mult;

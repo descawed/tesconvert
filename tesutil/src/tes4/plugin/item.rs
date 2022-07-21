@@ -5,7 +5,7 @@ use std::io::Cursor;
 
 /// Texture hashes
 #[binrw]
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TextureHash {
     pub file_hash_pc: u64,
     pub file_hash_console: u64,
@@ -71,6 +71,7 @@ pub trait Item {
     fn read_item_field(&mut self, field: &Tes4Field) -> Result<(), TesError> {
         match field.name() {
             b"EDID" => self.set_editor_id(String::from(field.get_zstring()?)),
+            b"FULL" => self.set_name(String::from(field.get_zstring()?)),
             b"MODL" => self.set_model(Some(String::from(field.get_zstring()?))),
             b"MODB" => self.set_bound_radius(Some(field.get_f32()?)),
             b"MODT" => self.set_texture_hash(Some(field.reader().read_le()?)),
@@ -88,7 +89,7 @@ pub trait Item {
     }
 
     /// Write zero or more item data fields to the provided record
-    fn write_scalar_fields(
+    fn write_item_fields(
         &self,
         record: &mut Tes4Record,
         fields: &[&[u8; 4]],
@@ -96,6 +97,7 @@ pub trait Item {
         for field_name in fields.iter().copied() {
             let field = match field_name {
                 b"EDID" => Tes4Field::new_zstring(field_name, String::from(self.editor_id()))?,
+                b"FULL" => Tes4Field::new_zstring(field_name, String::from(self.name()))?,
                 b"MODL" => {
                     if let Some(model) = self.model() {
                         Tes4Field::new_zstring(field_name, String::from(model))?
@@ -136,7 +138,7 @@ pub trait Item {
                 }
                 _ => {
                     return Err(TesError::RequirementFailed(format!(
-                        "Unexpected item scalar field {:?}",
+                        "Unexpected item field {:?}",
                         field_name
                     )))
                 }
