@@ -5,7 +5,7 @@ use bitflags::bitflags;
 use std::io::Cursor;
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct BookFlags: u8 {
         const SCROLL = 0x01;
         const CANT_BE_TAKEN = 0x02;
@@ -16,7 +16,7 @@ bitflags! {
 #[derive(Debug, Default)]
 pub struct BookData {
     #[br(try_map = |f| BookFlags::from_bits(f).ok_or("Invalid book flags"))]
-    #[bw(map = |f| f.bits)]
+    #[bw(map = |f| f.bits())]
     flags: BookFlags,
     #[br(try_map = |s: u8| if s == 0xff { Ok(None) } else { Skill::try_from(s).map(|v| Some(v)) })]
     #[bw(map = |s| s.map_or(0xff, |v| v as u8))]

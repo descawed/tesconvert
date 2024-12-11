@@ -17,7 +17,7 @@ pub use world::*;
 pub mod cosave;
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct ActorFlags: u32 {
         const FEMALE = 0x00000001;
         const ESSENTIAL = 0x00000002;

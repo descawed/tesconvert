@@ -1,17 +1,17 @@
 use std::cmp;
 use std::fs;
 use std::ops::{Add, Div};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use clap::{App, Arg, SubCommand};
+use clap::{Arg, Command};
 use ini::Ini;
 use num::{Float, One};
 
-/// The command to be executed
+/// The conversion action to be executed
 #[derive(Debug, PartialEq)]
-pub enum Command {
+pub enum Action {
     /// Convert a Morrowind character to Oblivion
     MorrowindToOblivion,
     /// Convert an Oblivion character to Morrowind
@@ -75,19 +75,19 @@ pub fn iter_form_map<P: AsRef<Path>>(ini_dir: P) -> Result<impl Iterator<Item = 
 #[derive(Debug)]
 pub struct Config {
     /// The conversion command to execute
-    pub command: Command,
+    pub command: Action,
     /// Path to the save file that the character is being taken from
-    pub source_path: String,
+    pub source_path: PathBuf,
     /// Path to the save file that the character is being added to
-    pub target_path: String,
+    pub target_path: PathBuf,
     /// Path to the new save file that will be created
-    pub output_path: String,
+    pub output_path: PathBuf,
     /// Path to the directory where our configuration files are stored
-    pub config_path: String,
+    pub config_path: PathBuf,
     /// Path to the Morrowind directory
-    pub mw_path: Option<String>,
+    pub mw_path: Option<PathBuf>,
     /// Path to the Oblivion directory
-    pub ob_path: Option<String>,
+    pub ob_path: Option<PathBuf>,
     /// Strategy to use when combining skills
     pub combine_strategy: CombineStrategy,
     /// MW:OB equipment durability ratio
@@ -95,35 +95,35 @@ pub struct Config {
 }
 
 impl Config {
-    fn get(maybe_options: Option<Vec<&str>>, safe: bool) -> Result<Config> {
-        let app = App::new("tesconvert")
+    fn get(maybe_options: Option<Vec<&str>>) -> Result<Config> {
+        let app = Command::new("tesconvert")
             .author("descawed <tesutil@descawed.com>")
             .version("0.1")
             .about("Converts characters between Elder Scrolls games")
             .subcommand_required(true)
             .arg(
-                Arg::with_name("mw_path")
+                Arg::new("mw_path")
                     .short('m')
                     .long("morrowind-path")
-                    .takes_value(true)
+                    .value_parser(clap::value_parser!(PathBuf))
                     .value_name("PATH")
                     .help("Path to the Morrowind directory")
             )
             .arg(
-                Arg::with_name("ob_path")
+                Arg::new("ob_path")
                     .short('o')
                     .long("oblivion-path")
-                    .takes_value(true)
+                    .value_parser(clap::value_parser!(PathBuf))
                     .value_name("PATH")
                     .help("Path to the Oblivion directory")
             )
             .arg(
-                Arg::with_name("combine")
+                Arg::new("combine")
                     .short('c')
                     .long("combine")
-                    .takes_value(true)
                     .value_name("STRATEGY")
-                    .possible_values(&["highest", "average", "lowest"])
+                    .value_parser(["highest", "average", "lowest"])
+                    .default_value("highest")
                     .help("Strategy for combining skills that were consolidated between games")
                     .long_help(
                         "Certain skills that exist in one game have been combined into a single skill in later games, \
@@ -135,10 +135,10 @@ impl Config {
                     )
             )
             .arg(
-                Arg::with_name("durability_ratio")
+                Arg::new("durability_ratio")
                     .short('d')
                     .long("durability")
-                    .takes_value(true)
+                    .value_parser(clap::value_parser!(f32))
                     .value_name("RATIO")
                     .help("Ratio of Morrowind equipment durability to Oblivion equipment durability")
                     .long_help(
@@ -149,54 +149,54 @@ impl Config {
                     )
             )
             .subcommand(
-                SubCommand::with_name("mw2ob")
+                Command::new("mw2ob")
                     .about("Converts a Morrowind character to Oblivion")
                     .arg(
-                        Arg::with_name("SOURCE_PATH")
+                        Arg::new("SOURCE_PATH")
                             .required(true)
                             .help("Path to the Morrowind save file")
+                            .value_parser(clap::value_parser!(PathBuf))
                     )
                     .arg(
-                        Arg::with_name("TARGET_PATH")
+                        Arg::new("TARGET_PATH")
                             .required(true)
                             .help("Path to the input Oblivion save file")
+                            .value_parser(clap::value_parser!(PathBuf))
                     )
                     .arg(
-                        Arg::with_name("OUTPUT_PATH")
+                        Arg::new("OUTPUT_PATH")
                             .required(true)
                             .help("Path to the output Oblivion save file")
+                            .value_parser(clap::value_parser!(PathBuf))
                     )
             );
 
-        let matches = match maybe_options {
-            Some(options) if safe => app.get_matches_from_safe(options)?,
-            Some(options) if !safe => app.get_matches_from(options),
-            None if safe => app.get_matches_safe()?,
-            None if !safe => app.get_matches(),
-            _ => unreachable!(), // the match is exhaustive even without this arm, but the compiler doesn't understand that
+        let mut matches = match maybe_options {
+            Some(options) => app.get_matches_from(options),
+            None => app.get_matches(),
         };
 
-        let (sub_command, sub_matches) = matches.subcommand().unwrap();
+        let (sub_command, mut sub_matches) = matches.remove_subcommand().unwrap();
 
         Ok(Config {
-            command: match sub_command {
-                "mw2ob" => Command::MorrowindToOblivion,
+            command: match sub_command.as_str() {
+                "mw2ob" => Action::MorrowindToOblivion,
                 _ => unreachable!(),
             },
-            source_path: String::from(sub_matches.value_of("SOURCE_PATH").unwrap()),
-            target_path: String::from(sub_matches.value_of("TARGET_PATH").unwrap()),
-            output_path: String::from(sub_matches.value_of("OUTPUT_PATH").unwrap()),
-            config_path: String::from("."),
-            mw_path: matches.value_of("mw_path").map(String::from),
-            ob_path: matches.value_of("ob_path").map(String::from),
-            combine_strategy: match matches.value_of("combine").unwrap_or("highest") {
+            source_path: sub_matches.remove_one::<PathBuf>("SOURCE_PATH").expect("Source save path is required"),
+            target_path: sub_matches.remove_one::<PathBuf>("TARGET_PATH").expect("Target save path is required"),
+            output_path: sub_matches.remove_one::<PathBuf>("OUTPUT_PATH").expect("Output save path is required"),
+            config_path: PathBuf::from("."),
+            mw_path: matches.remove_one::<PathBuf>("mw_path"),
+            ob_path: matches.remove_one::<PathBuf>("ob_path"),
+            combine_strategy: match *matches.get_one::<&str>("combine").unwrap_or(&"highest") {
                 "highest" => CombineStrategy::Highest,
                 "average" => CombineStrategy::Average,
                 "lowest" => CombineStrategy::Lowest,
                 _ => unreachable!(),
             },
             equipment_durability_ratio: matches
-                .value_of("durability_ratio")
+                .get_one::<String>("durability_ratio")
                 .map(|v| f32::from_str(v))
                 .unwrap_or(Ok(5.))?,
         })
@@ -208,7 +208,7 @@ impl Config {
     ///
     /// Panics if the command line is invalid.
     pub fn get_from_cli() -> Config {
-        Config::get(None, false).unwrap()
+        Config::get(None).unwrap()
     }
 
     /// Gets configuration from the provided strings
@@ -217,7 +217,7 @@ impl Config {
     ///
     /// Panics if the provided command line is invalid.
     pub fn get_from_strings(options: Vec<&str>) -> Config {
-        Config::get(Some(options), false).unwrap()
+        Config::get(Some(options)).unwrap()
     }
 }
 
@@ -237,19 +237,18 @@ mod tests {
                 "target",
                 "output",
             ]),
-            true,
         )
         .unwrap();
-        assert_eq!(config.command, Command::MorrowindToOblivion);
+        assert_eq!(config.command, Action::MorrowindToOblivion);
         assert_eq!(config.combine_strategy, CombineStrategy::Lowest);
-        assert_eq!(config.source_path, "source");
-        assert_eq!(config.target_path, "target");
-        assert_eq!(config.output_path, "output");
+        assert_eq!(config.source_path, PathBuf::from("source"));
+        assert_eq!(config.target_path, PathBuf::from("target"));
+        assert_eq!(config.output_path, PathBuf::from("output"));
     }
 
     #[test]
     fn test_empty_args() {
-        assert!(Config::get(Some(vec!["tesconvert"]), true).is_err());
+        assert!(Config::get(Some(vec!["tesconvert"])).is_err());
     }
 
     #[test]
@@ -264,14 +263,13 @@ mod tests {
                 "path2",
                 "path3"
             ]),
-            true
         )
         .is_err());
     }
 
     #[test]
     fn test_insufficient_args() {
-        assert!(Config::get(Some(vec!["tesconvert", "mw2ob", "source"]), true).is_err());
+        assert!(Config::get(Some(vec!["tesconvert", "mw2ob", "source"])).is_err());
     }
 
     #[test]

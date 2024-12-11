@@ -30,7 +30,7 @@ macro_rules! flag_property {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct RecordFlags: u32 {
         const MASTER = 0x00001;
         const DELETED = 0x00020;
@@ -69,7 +69,7 @@ pub struct Tes4Record {
     #[bw(calc = raw_data.len() as u32)]
     size: u32,
     #[br(try_map = |f| RecordFlags::from_bits(f).ok_or("Invalid record flags"))]
-    #[bw(map = |f| f.bits)]
+    #[bw(map = |f| f.bits())]
     flags: RecordFlags,
     form_id: FormId,
     vcs_info: u32,
@@ -239,14 +239,14 @@ impl Record<Tes4Field> for Tes4Record {
                 encoder.read_to_end(&mut comp_buf)?;
 
                 f.write_le(&(comp_buf.len() as u32))?;
-                f.write_le(&self.flags.bits)?;
+                f.write_le(&self.flags.bits())?;
                 f.write_le(&self.form_id.0)?;
                 f.write_le(&self.vcs_info)?;
                 f.write_le(&(size as u32))?;
                 f.write_le(&comp_buf)?;
             } else {
                 f.write_le(&(size as u32))?;
-                f.write_le(&self.flags.bits)?;
+                f.write_le(&self.flags.bits())?;
                 f.write_le(&self.form_id.0)?;
                 f.write_le(&self.vcs_info)?;
 

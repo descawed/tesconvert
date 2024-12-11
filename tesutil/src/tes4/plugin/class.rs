@@ -280,8 +280,8 @@ impl Class {
             class_flags |= ClassFlags::GUARD;
         }
 
-        f.write_le(&class_flags.bits)?;
-        f.write_le(&self.services.bits)?;
+        f.write_le(&class_flags.bits())?;
+        f.write_le(&self.services.bits())?;
         f.write_le(&(self.skill_trained as u8))?;
         f.write_le(&self.max_training_level)?;
         f.write_le(&0u16)?;

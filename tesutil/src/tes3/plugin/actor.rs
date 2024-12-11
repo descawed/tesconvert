@@ -66,12 +66,12 @@ pub struct AiSettings {
     // according to UESP, the remaining flag bits are "filled with junk data",
     // so we mask them out to prevent an error when reading the flags
     #[br(try_map = |s: u32| ServiceFlags::from_bits(s & 0x3ffff).ok_or("Invalid service flags"))]
-    #[bw(map = |s| s.bits)]
+    #[bw(map = |s| s.bits())]
     services: ServiceFlags,
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct ServiceFlags: u32 {
         const WEAPON = 0x00001;
         const ARMOR = 0x00002;

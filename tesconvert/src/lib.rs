@@ -10,7 +10,7 @@ use morrowind::*;
 
 pub fn convert(config: Config) -> Result<()> {
     match config.command {
-        Command::MorrowindToOblivion => {
+        Action::MorrowindToOblivion => {
             let mw2ob = MorrowindToOblivion::load(config)?;
             mw2ob.convert()
         }

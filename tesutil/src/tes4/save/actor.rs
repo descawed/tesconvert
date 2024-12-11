@@ -28,7 +28,7 @@ bitflags! {
 #[derive(Debug)]
 pub struct ActorBase {
     #[br(try_map = |f| ActorFlags::from_bits(f).ok_or("Invalid actor flags"))]
-    #[bw(map = |f| f.bits)]
+    #[bw(map = |f| f.bits())]
     flags: ActorFlags,
     pub magicka: u16,
     pub fatigue: u16,
@@ -259,7 +259,7 @@ impl FormChange for ActorChange {
             writer.write_le(&combat_style)?;
         }
 
-        record.set_data(flags.bits, buf)?;
+        record.set_data(flags.bits(), buf)?;
         Ok(())
     }
 }

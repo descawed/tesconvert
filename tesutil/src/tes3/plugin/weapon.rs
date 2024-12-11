@@ -4,7 +4,7 @@ use binrw::{binrw, BinReaderExt};
 use bitflags::bitflags;
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct WeaponFlags: u32 {
         const IGNORE_NORMAL_WEAPON_RESISTANCE = 0x01;
         const SILVER = 0x02;
@@ -50,7 +50,7 @@ pub struct WeaponData {
     pub min_thrust: u8,
     pub max_thrust: u8,
     #[br(try_map = |f| WeaponFlags::from_bits(f).ok_or("Invalid weapon flags"))]
-    #[bw(map = |f| f.bits)]
+    #[bw(map = |f| f.bits())]
     flags: WeaponFlags,
 }
 

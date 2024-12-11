@@ -1,4 +1,5 @@
 use std::convert::{Into, TryFrom};
+use std::sync::LazyLock;
 
 use crate::tes4::{ActorValue, FormId, Tes4Field, Tes4Record};
 use crate::{
@@ -8,7 +9,6 @@ use crate::{
 use binrw::BinReaderExt;
 use bitflags::bitflags;
 use enum_map::*;
-use lazy_static::lazy_static;
 
 #[derive(Debug, Copy, Clone, Eq, Enum, PartialEq, Hash)]
 pub enum MagicEffectType {
@@ -627,6 +627,7 @@ pub enum ProjectileType {
 }
 
 bitflags! {
+    #[derive(Debug)]
     pub struct EffectFlags: u32 {
         const HOSTILE = 0x00000001;
         const RECOVER = 0x00000002;
@@ -878,817 +879,815 @@ impl Form for MagicEffect {
     }
 }
 
-lazy_static! {
-    pub static ref MAGIC_EFFECTS: EnumMap<MagicEffectType, MagicEffect> = {
-        use MagicEffectType::*;
-        use MagicSchool::*;
+pub static MAGIC_EFFECTS: LazyLock<EnumMap<MagicEffectType, MagicEffect>> = LazyLock::new(||{
+    use MagicEffectType::*;
+    use MagicSchool::*;
 
-        enum_map! {
-            AbsorbAttribute => MagicEffect::new(
-                AbsorbAttribute, "Absorb Attribute", Restoration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::USE_ATTRIBUTE,
-                vec![AbsorbAttribute, DamageAttribute, DrainAttribute, Dispel]
-            ),
-            AbsorbFatigue => MagicEffect::new(
-                AbsorbFatigue, "Absorb Fatigue", Restoration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::TOUCH,
-                vec![AbsorbFatigue, DamageFatigue, DrainFatigue, Dispel]
-            ),
-            AbsorbHealth => MagicEffect::new(
-                AbsorbHealth, "Absorb Health", Restoration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::TOUCH,
-                vec![AbsorbHealth, DamageHealth, DrainHealth, Dispel]
-            ),
-            AbsorbSkill => MagicEffect::new(
-                AbsorbSkill, "Absorb Skill", Restoration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::USE_SKILL,
-                vec![AbsorbSkill, DrainSkill, Dispel]
-            ),
-            AbsorbMagicka => MagicEffect::new(
-                AbsorbMagicka, "Absorb Spell Points", Restoration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::TOUCH,
-                vec![AbsorbMagicka, DamageMagicka, DrainMagicka, Dispel]
-            ),
-            BoundArmorExtra01 => MagicEffect::new(
-                BoundArmorExtra01, "Bound Armor Extra 01", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra02 => MagicEffect::new(
-                BoundArmorExtra02, "Bound Armor Extra 02", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra03 => MagicEffect::new(
-                BoundArmorExtra03, "Bound Armor Extra 03", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra04 => MagicEffect::new(
-                BoundArmorExtra04, "Bound Armor Extra 04", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra05 => MagicEffect::new(
-                BoundArmorExtra05, "Bound Armor Extra 05", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra06 => MagicEffect::new(
-                BoundArmorExtra06, "Bound Armor Extra 06", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra07 => MagicEffect::new(
-                BoundArmorExtra07, "Bound Armor Extra 07", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra08 => MagicEffect::new(
-                BoundArmorExtra08, "Bound Armor Extra 08", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra09 => MagicEffect::new(
-                BoundArmorExtra09, "Bound Armor Extra 09", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundArmorExtra10 => MagicEffect::new(
-                BoundArmorExtra10, "Bound Armor Extra 10", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundBoots => MagicEffect::new(
-                BoundBoots, "Bound Boots", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundCuirass => MagicEffect::new(
-                BoundCuirass, "Bound Cuirass", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundGauntlets => MagicEffect::new(
-                BoundGauntlets, "Bound Gauntlets", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundGreaves => MagicEffect::new(
-                BoundGreaves, "Bound Greaves", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundHelmet => MagicEffect::new(
-                BoundHelmet, "Bound Helmet", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            BoundShield => MagicEffect::new(
-                BoundShield, "Bound Shield", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
-                vec![]
-            ),
-            Burden => MagicEffect::new(
-                Burden, "Burden", Alteration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, Feather]
-            ),
-            BoundOrderWeapon1 => MagicEffect::new(
-                BoundOrderWeapon1, "Bound Weapon Extra 01", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundOrderWeapon2 => MagicEffect::new(
-                BoundOrderWeapon2, "Bound Weapon Extra 02", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundOrderWeapon3 => MagicEffect::new(
-                BoundOrderWeapon3, "Bound Weapon Extra 03", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundOrderWeapon4 => MagicEffect::new(
-                BoundOrderWeapon4, "Bound Weapon Extra 04", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundOrderWeapon5 => MagicEffect::new(
-                BoundOrderWeapon5, "Bound Weapon Extra 05", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundOrderWeapon6 => MagicEffect::new(
-                BoundOrderWeapon6, "Bound Weapon Extra 06", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            SummonStaffOfSheogorath => MagicEffect::new(
-                SummonStaffOfSheogorath, "Bound Weapon Extra 07", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundPriestDagger => MagicEffect::new(
-                BoundPriestDagger, "Bound Weapon Extra 08", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundWeaponExtra09 => MagicEffect::new(
-                BoundWeaponExtra09, "Bound Weapon Extra 09", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundWeaponExtra10 => MagicEffect::new(
-                BoundWeaponExtra10, "Bound Weapon Extra 10", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundAxe => MagicEffect::new(
-                BoundAxe, "Bound Axe", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundBow => MagicEffect::new(
-                BoundBow, "Bound Bow", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundDagger => MagicEffect::new(
-                BoundDagger, "Bound Dagger", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundMace => MagicEffect::new(
-                BoundMace, "Bound Mace", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            BoundSword => MagicEffect::new(
-                BoundSword, "Bound Sword", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
-                vec![]
-            ),
-            Calm => MagicEffect::new(
-                Calm, "Calm", Illusion, Some(ActorValue::ResistMagic),
-                EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, Frenzy]
-            ),
-            Chameleon => MagicEffect::new(
-                Chameleon, "Chameleon", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            Charm => MagicEffect::new(
-                Charm, "Charm", Illusion, Some(ActorValue::ResistMagic),
-                EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel]
-            ),
-            CommandCreature => MagicEffect::new(
-                CommandCreature, "Command Creature", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel]
-            ),
-            CommandHumanoid => MagicEffect::new(
-                CommandHumanoid, "Command Humanoid", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel]
-            ),
-            CureDisease => MagicEffect::new(
-                CureDisease, "Cure Disease", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            CureParalysis => MagicEffect::new(
-                CureParalysis, "Cure Paralysis", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            CurePoison => MagicEffect::new(
-                CurePoison, "Cure Poison", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            Darkness => MagicEffect::new(
-                Darkness, "Darkness", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            Demoralize => MagicEffect::new(
-                Demoralize, "Demoralize", Illusion, Some(ActorValue::ResistMagic),
-                EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, Rally]
-            ),
-            DamageAttribute => MagicEffect::new(
-                DamageAttribute, "Damage Attribute", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbAttribute, Dispel, FortifyAttribute, RestoreAttribute]
-            ),
-            DamageFatigue => MagicEffect::new(
-                DamageFatigue, "Damage Fatigue", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbFatigue, Dispel, FortifyFatigue, RestoreFatigue]
-            ),
-            DamageHealth => MagicEffect::new(
-                DamageHealth, "Damage Health", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbHealth, Dispel, FortifyHealth, RestoreHealth]
-            ),
-            DamageMagicka => MagicEffect::new(
-                DamageMagicka, "Damage Magicka", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbMagicka, Dispel, FortifyMagicka, RestoreMagicka]
-            ),
-            DisintegrateArmor => MagicEffect::new(
-                DisintegrateArmor, "Disintegrate Armor", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, FireShield, FrostShield, ShockShield, Shield]
-            ),
-            DiseaseInfo => MagicEffect::new(
-                DiseaseInfo, "Disease Info", Destruction, Some(ActorValue::ResistDisease),
-                EffectFlags::empty(),
-                vec![CureDisease]
-            ),
-            DisintegrateWeapon => MagicEffect::new(
-                DisintegrateWeapon, "Disintegrate Weapon", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, FireShield, FrostShield, ShockShield, Shield]
-            ),
-            DrainAttribute => MagicEffect::new(
-                DrainAttribute, "Drain Attribute", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::USE_ATTRIBUTE,
-                vec![AbsorbAttribute, Dispel, FortifyAttribute, RestoreAttribute]
-            ),
-            DrainFatigue => MagicEffect::new(
-                DrainFatigue, "Drain Fatigue", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbFatigue, Dispel, FortifyFatigue, RestoreFatigue]
-            ),
-            DrainHealth => MagicEffect::new(
-                DrainHealth, "Drain Health", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbHealth, Dispel, FortifyHealth, RestoreHealth]
-            ),
-            DrainSkill => MagicEffect::new(
-                DrainSkill, "Drain Skill", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::USE_SKILL,
-                vec![AbsorbSkill, Dispel, FortifySkill]
-            ),
-            DrainMagicka => MagicEffect::new(
-                DrainMagicka, "Drain Spell Points", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbMagicka, Dispel, FortifyMagicka, RestoreMagicka]
-            ),
-            Dispel => MagicEffect::new(
-                Dispel, "Dispel", Mysticism, Some(ActorValue::ResistMagic),
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION,
-                vec![]
-            ),
-            DetectLife => MagicEffect::new(
-                DetectLife, "Detect Life", Mysticism, None,
-                EffectFlags::RECOVER | EffectFlags::SELF,
-                vec![]
-            ),
-            MehrunesDagonCustomEffect => MagicEffect::new(
-                MehrunesDagonCustomEffect, "Mehrunes Dagon Custom Effect", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![AbsorbHealth, Dispel, FortifyHealth, RestoreHealth]
-            ),
-            FireDamage => MagicEffect::new(
-                FireDamage, "Fire Damage", Destruction, Some(ActorValue::ResistFire),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::FX_PERSIST | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, FireShield, ResistFire]
-            ),
-            FireShield => MagicEffect::new(
-                FireShield, "Fire Shield", Alteration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            FortifyAttribute => MagicEffect::new(
-                FortifyAttribute, "Fortify Attribute", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            FortifyFatigue => MagicEffect::new(
-                FortifyFatigue, "Fortify Fatigue", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            FortifyHealth => MagicEffect::new(
-                FortifyHealth, "Fortify Health", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            FortifyMagickaMultiplier => MagicEffect::new(
-                FortifyMagickaMultiplier, "Fortify Magicka Multiplier", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF,
-                vec![]
-            ),
-            FortifySkill => MagicEffect::new(
-                FortifySkill, "Fortify Skill", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            FortifyMagicka => MagicEffect::new(
-                FortifyMagicka, "Fortify Spell Points", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            FrostDamage => MagicEffect::new(
-                FrostDamage, "Frost Damage", Destruction, Some(ActorValue::ResistFrost),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, FrostShield, ResistFrost]
-            ),
-            Frenzy => MagicEffect::new(
-                Frenzy, "Frenzy", Illusion, Some(ActorValue::ResistMagic),
-                EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Calm, Dispel]
-            ),
-            FrostShield => MagicEffect::new(
-                FrostShield, "Frost Shield", Alteration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            Feather => MagicEffect::new(
-                Feather, "Feather", Alteration, Some(ActorValue::ResistMagic),
-                EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel]
-            ),
-            Invisibility => MagicEffect::new(
-                Invisibility, "Invisibilty", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            Light => MagicEffect::new(
-                Light, "Light", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ShockShield => MagicEffect::new(
-                ShockShield, "Lightning Shield", Alteration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            Lock => MagicEffect::new(
-                Lock, "Lock", Alteration, None,
-                EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION,
-                vec![]
-            ),
-            SummonMythicDawnHelm => MagicEffect::new(
-                SummonMythicDawnHelm, "Summon Mythic Dawn Helm", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonMythicDawnArmor => MagicEffect::new(
-                SummonMythicDawnArmor, "Summon Mythic Dawn Armor", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            NightEye => MagicEffect::new(
-                NightEye, "Night-Eye", Illusion, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            Open => MagicEffect::new(
-                Open, "Open", Alteration, None,
-                EffectFlags::TARGET | EffectFlags::NO_DURATION,
-                vec![]
-            ),
-            Paralyze => MagicEffect::new(
-                Paralyze, "Paralyze", Illusion, Some(ActorValue::ResistParalysis),
-                EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![CureParalysis, Dispel]
-            ),
-            PoisonInfo => MagicEffect::new(
-                PoisonInfo, "Poison Info", Destruction, Some(ActorValue::ResistPoison),
-                EffectFlags::empty(),
-                vec![CurePoison]
-            ),
-            Rally => MagicEffect::new(
-                Rally, "Rally", Illusion, Some(ActorValue::ResistMagic),
-                EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Demoralize, Dispel]
-            ),
-            Reanimate => MagicEffect::new(
-                Reanimate, "Reanimate", Conjuration, None,
-                EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE | EffectFlags::NO_AREA,
-                vec![]
-            ),
-            RestoreAttribute => MagicEffect::new(
-                RestoreAttribute, "Restore Attribute", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::USE_ATTRIBUTE,
-                vec![]
-            ),
-            ReflectDamage => MagicEffect::new(
-                ReflectDamage, "Reflect Damage", Mysticism, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF,
-                vec![]
-            ),
-            RestoreFatigue => MagicEffect::new(
-                RestoreFatigue, "Restore Fatigue", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            RestoreHealth => MagicEffect::new(
-                RestoreHealth, "Restore Health", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            RestoreMagicka => MagicEffect::new(
-                RestoreMagicka, "Restore Spell Points", Restoration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ReflectSpell => MagicEffect::new(
-                ReflectSpell, "Reflect", Mysticism, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistDisease => MagicEffect::new(
-                ResistDisease, "Resist Disease", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistFire => MagicEffect::new(
-                ResistFire, "Resist Fire", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistFrost => MagicEffect::new(
-                ResistFrost, "Resist Frost", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistMagic => MagicEffect::new(
-                ResistMagic, "Resist Magic", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistNormalWeapons => MagicEffect::new(
-                ResistNormalWeapons, "Resist Normal Weapons", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistParalysis => MagicEffect::new(
-                ResistParalysis, "Resist Paralysis", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistPoison => MagicEffect::new(
-                ResistPoison, "Resist Poison", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistShock => MagicEffect::new(
-                ResistShock, "Resist Shock", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ResistWaterDamage => MagicEffect::new(
-                ResistWaterDamage, "Resist Water Damage", Restoration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            SpellAbsorption => MagicEffect::new(
-                SpellAbsorption, "Spell Absorption", Mysticism, Some(ActorValue::ResistMagic),
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            ScriptEffect => MagicEffect::new(
-                ScriptEffect, "Script Effect", Alteration, None,
-                EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![Dispel]
-            ),
-            ShockDamage => MagicEffect::new(
-                ShockDamage, "Shock Damage", Destruction, Some(ActorValue::ResistShock),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, ShockShield, ResistShock]
-            ),
-            Shield => MagicEffect::new(
-                Shield, "Shield", Alteration, None,
-                EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![]
-            ),
-            Silence => MagicEffect::new(
-                Silence, "Silence", Illusion, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![Dispel]
-            ),
-            StuntedMagicka => MagicEffect::new(
-                StuntedMagicka, "Stunted Magicka", Destruction, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SoulTrap => MagicEffect::new(
-                SoulTrap, "Soul Trap", Mysticism, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![Dispel]
-            ),
-            SunDamage => MagicEffect::new(
-                SunDamage, "Sun Damage", Destruction, None,
-                EffectFlags::DETRIMENTAL | EffectFlags::SELF,
-                vec![]
-            ),
-            Telekinesis => MagicEffect::new(
-                Telekinesis, "Telekinesis", Mysticism, None,
-                EffectFlags::RECOVER | EffectFlags::TARGET | EffectFlags::NO_AREA,
-                vec![]
-            ),
-            TurnUndead => MagicEffect::new(
-                TurnUndead, "Turn Undead", Conjuration, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, Rally]
-            ),
-            Vampirism => MagicEffect::new(
-                Vampirism, "Vampirism", Destruction, Some(ActorValue::ResistDisease),
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_DURATION,
-                vec![]
-            ),
-            WaterBreathing => MagicEffect::new(
-                WaterBreathing, "Water Breathing", Alteration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            WaterWalking => MagicEffect::new(
-                WaterWalking, "Water Walking", Alteration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            WeaknessToDisease => MagicEffect::new(
-                WeaknessToDisease, "Weakness to Disease", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, ResistDisease]
-            ),
-            WeaknessToFire => MagicEffect::new(
-                WeaknessToFire, "Weakness to Fire", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, FireShield, ResistFire]
-            ),
-            WeaknessToFrost => MagicEffect::new(
-                WeaknessToFrost, "Weakness to Frost", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, FrostShield, ResistFrost]
-            ),
-            WeaknessToMagic => MagicEffect::new(
-                WeaknessToMagic, "Weakness to Magic", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, ResistMagic]
-            ),
-            WeaknessToNormalWeapons => MagicEffect::new(
-                WeaknessToNormalWeapons, "Weakness to Normal Weapons", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, ResistNormalWeapons]
-            ),
-            WeaknessToPoison => MagicEffect::new(
-                WeaknessToPoison, "Weakness to Poison", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, ResistPoison]
-            ),
-            WeaknessToShock => MagicEffect::new(
-                WeaknessToShock, "Weakness to Shock", Destruction, Some(ActorValue::ResistMagic),
-                EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
-                vec![Dispel, ShockShield, ResistShock]
-            ),
-            SummonRufiosGhost => MagicEffect::new(
-                SummonRufiosGhost, "Extra Summon 01", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonAncestorGuardian => MagicEffect::new(
-                SummonAncestorGuardian, "Extra Summon 02", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSpiderling => MagicEffect::new(
-                SummonSpiderling, "Extra Summon 03", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonFleshAtronach => MagicEffect::new(
-                SummonFleshAtronach, "Extra Summon 04", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonBear => MagicEffect::new(
-                SummonBear, "Extra Summon 05", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonGluttonousHunger => MagicEffect::new(
-                SummonGluttonousHunger, "Extra Summon 06", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonRavenousHunger => MagicEffect::new(
-                SummonRavenousHunger, "Extra Summon 07", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonVoraciousHunger => MagicEffect::new(
-                SummonVoraciousHunger, "Extra Summon 08", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonDarkSeducer => MagicEffect::new(
-                SummonDarkSeducer, "Extra Summon 09", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonGoldenSaint => MagicEffect::new(
-                SummonGoldenSaint, "Extra Summon 10", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            WabbaSummon => MagicEffect::new(
-                WabbaSummon, "Extra Summon 11", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonDecrepitShambles => MagicEffect::new(
-                SummonDecrepitShambles, "Extra Summon 12", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonShambles => MagicEffect::new(
-                SummonShambles, "Extra Summon 13", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonRepleteShambles => MagicEffect::new(
-                SummonRepleteShambles, "Extra Summon 14", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonHunger => MagicEffect::new(
-                SummonHunger, "Extra Summon 15", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonMangledFleshAtronach => MagicEffect::new(
-                SummonMangledFleshAtronach, "Extra Summon 16", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonTornFleshAtronach => MagicEffect::new(
-                SummonTornFleshAtronach, "Extra Summon 17", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonStitchedFleshAtronach => MagicEffect::new(
-                SummonStitchedFleshAtronach, "Extra Summon 18", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSewnFleshAtronach => MagicEffect::new(
-                SummonSewnFleshAtronach, "Extra Summon 19", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            ExtraSummon20 => MagicEffect::new(
-                ExtraSummon20, "Extra Summon 20", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonClannfear => MagicEffect::new(
-                SummonClannfear, "Summon Clannfear", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonDaedroth => MagicEffect::new(
-                SummonDaedroth, "Summon Daedroth", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonDremora => MagicEffect::new(
-                SummonDremora, "Summon Dremora", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonDremoraLord => MagicEffect::new(
-                SummonDremoraLord, "Summon Dremora Lord", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonFlameAtronach => MagicEffect::new(
-                SummonFlameAtronach, "Summon Fire Atronach", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonFrostAtronach => MagicEffect::new(
-                SummonFrostAtronach, "Summon Frost Atronach", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonGhost => MagicEffect::new(
-                SummonGhost, "Summon Ghost", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonHeadlessZombie => MagicEffect::new(
-                SummonHeadlessZombie, "Summon Headless Zombie", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonLich => MagicEffect::new(
-                SummonLich, "Summon Lich", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonScamp => MagicEffect::new(
-                SummonScamp, "Summon Scamp", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSkeletonGuardian => MagicEffect::new(
-                SummonSkeletonGuardian, "Summon Skeleton Archer", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSkeletonChampion => MagicEffect::new(
-                SummonSkeletonChampion, "Summon Skeleton Champion", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSkeleton => MagicEffect::new(
-                SummonSkeleton, "Summon Skeleton", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSkeletonHero => MagicEffect::new(
-                SummonSkeletonHero, "Summon Skeleton Hero", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonSpiderDaedra => MagicEffect::new(
-                SummonSpiderDaedra, "Summon Spider Daedra", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonStormAtronach => MagicEffect::new(
-                SummonStormAtronach, "Summon Storm Atronach", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonFadedWraith => MagicEffect::new(
-                SummonFadedWraith, "Summon Wraith", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonGloomWraith => MagicEffect::new(
-                SummonGloomWraith, "Summon Wraith Lord", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonXivilai => MagicEffect::new(
-                SummonXivilai, "Summon Xivilai", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-            SummonZombie => MagicEffect::new(
-                SummonZombie, "Summon Zombie", Conjuration, None,
-                EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
-                vec![]
-            ),
-        }
-    };
-}
+    enum_map! {
+        AbsorbAttribute => MagicEffect::new(
+            AbsorbAttribute, "Absorb Attribute", Restoration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::USE_ATTRIBUTE,
+            vec![AbsorbAttribute, DamageAttribute, DrainAttribute, Dispel]
+        ),
+        AbsorbFatigue => MagicEffect::new(
+            AbsorbFatigue, "Absorb Fatigue", Restoration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::TOUCH,
+            vec![AbsorbFatigue, DamageFatigue, DrainFatigue, Dispel]
+        ),
+        AbsorbHealth => MagicEffect::new(
+            AbsorbHealth, "Absorb Health", Restoration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::TOUCH,
+            vec![AbsorbHealth, DamageHealth, DrainHealth, Dispel]
+        ),
+        AbsorbSkill => MagicEffect::new(
+            AbsorbSkill, "Absorb Skill", Restoration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::USE_SKILL,
+            vec![AbsorbSkill, DrainSkill, Dispel]
+        ),
+        AbsorbMagicka => MagicEffect::new(
+            AbsorbMagicka, "Absorb Spell Points", Restoration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::TOUCH,
+            vec![AbsorbMagicka, DamageMagicka, DrainMagicka, Dispel]
+        ),
+        BoundArmorExtra01 => MagicEffect::new(
+            BoundArmorExtra01, "Bound Armor Extra 01", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra02 => MagicEffect::new(
+            BoundArmorExtra02, "Bound Armor Extra 02", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra03 => MagicEffect::new(
+            BoundArmorExtra03, "Bound Armor Extra 03", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra04 => MagicEffect::new(
+            BoundArmorExtra04, "Bound Armor Extra 04", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra05 => MagicEffect::new(
+            BoundArmorExtra05, "Bound Armor Extra 05", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra06 => MagicEffect::new(
+            BoundArmorExtra06, "Bound Armor Extra 06", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra07 => MagicEffect::new(
+            BoundArmorExtra07, "Bound Armor Extra 07", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra08 => MagicEffect::new(
+            BoundArmorExtra08, "Bound Armor Extra 08", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra09 => MagicEffect::new(
+            BoundArmorExtra09, "Bound Armor Extra 09", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundArmorExtra10 => MagicEffect::new(
+            BoundArmorExtra10, "Bound Armor Extra 10", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundBoots => MagicEffect::new(
+            BoundBoots, "Bound Boots", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundCuirass => MagicEffect::new(
+            BoundCuirass, "Bound Cuirass", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundGauntlets => MagicEffect::new(
+            BoundGauntlets, "Bound Gauntlets", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundGreaves => MagicEffect::new(
+            BoundGreaves, "Bound Greaves", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundHelmet => MagicEffect::new(
+            BoundHelmet, "Bound Helmet", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        BoundShield => MagicEffect::new(
+            BoundShield, "Bound Shield", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_ARMOR,
+            vec![]
+        ),
+        Burden => MagicEffect::new(
+            Burden, "Burden", Alteration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, Feather]
+        ),
+        BoundOrderWeapon1 => MagicEffect::new(
+            BoundOrderWeapon1, "Bound Weapon Extra 01", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundOrderWeapon2 => MagicEffect::new(
+            BoundOrderWeapon2, "Bound Weapon Extra 02", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundOrderWeapon3 => MagicEffect::new(
+            BoundOrderWeapon3, "Bound Weapon Extra 03", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundOrderWeapon4 => MagicEffect::new(
+            BoundOrderWeapon4, "Bound Weapon Extra 04", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundOrderWeapon5 => MagicEffect::new(
+            BoundOrderWeapon5, "Bound Weapon Extra 05", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundOrderWeapon6 => MagicEffect::new(
+            BoundOrderWeapon6, "Bound Weapon Extra 06", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        SummonStaffOfSheogorath => MagicEffect::new(
+            SummonStaffOfSheogorath, "Bound Weapon Extra 07", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundPriestDagger => MagicEffect::new(
+            BoundPriestDagger, "Bound Weapon Extra 08", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundWeaponExtra09 => MagicEffect::new(
+            BoundWeaponExtra09, "Bound Weapon Extra 09", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundWeaponExtra10 => MagicEffect::new(
+            BoundWeaponExtra10, "Bound Weapon Extra 10", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundAxe => MagicEffect::new(
+            BoundAxe, "Bound Axe", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundBow => MagicEffect::new(
+            BoundBow, "Bound Bow", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundDagger => MagicEffect::new(
+            BoundDagger, "Bound Dagger", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundMace => MagicEffect::new(
+            BoundMace, "Bound Mace", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        BoundSword => MagicEffect::new(
+            BoundSword, "Bound Sword", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE | EffectFlags::USE_WEAPON,
+            vec![]
+        ),
+        Calm => MagicEffect::new(
+            Calm, "Calm", Illusion, Some(ActorValue::ResistMagic),
+            EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, Frenzy]
+        ),
+        Chameleon => MagicEffect::new(
+            Chameleon, "Chameleon", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        Charm => MagicEffect::new(
+            Charm, "Charm", Illusion, Some(ActorValue::ResistMagic),
+            EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel]
+        ),
+        CommandCreature => MagicEffect::new(
+            CommandCreature, "Command Creature", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel]
+        ),
+        CommandHumanoid => MagicEffect::new(
+            CommandHumanoid, "Command Humanoid", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel]
+        ),
+        CureDisease => MagicEffect::new(
+            CureDisease, "Cure Disease", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        CureParalysis => MagicEffect::new(
+            CureParalysis, "Cure Paralysis", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        CurePoison => MagicEffect::new(
+            CurePoison, "Cure Poison", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        Darkness => MagicEffect::new(
+            Darkness, "Darkness", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        Demoralize => MagicEffect::new(
+            Demoralize, "Demoralize", Illusion, Some(ActorValue::ResistMagic),
+            EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, Rally]
+        ),
+        DamageAttribute => MagicEffect::new(
+            DamageAttribute, "Damage Attribute", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbAttribute, Dispel, FortifyAttribute, RestoreAttribute]
+        ),
+        DamageFatigue => MagicEffect::new(
+            DamageFatigue, "Damage Fatigue", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbFatigue, Dispel, FortifyFatigue, RestoreFatigue]
+        ),
+        DamageHealth => MagicEffect::new(
+            DamageHealth, "Damage Health", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbHealth, Dispel, FortifyHealth, RestoreHealth]
+        ),
+        DamageMagicka => MagicEffect::new(
+            DamageMagicka, "Damage Magicka", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbMagicka, Dispel, FortifyMagicka, RestoreMagicka]
+        ),
+        DisintegrateArmor => MagicEffect::new(
+            DisintegrateArmor, "Disintegrate Armor", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, FireShield, FrostShield, ShockShield, Shield]
+        ),
+        DiseaseInfo => MagicEffect::new(
+            DiseaseInfo, "Disease Info", Destruction, Some(ActorValue::ResistDisease),
+            EffectFlags::empty(),
+            vec![CureDisease]
+        ),
+        DisintegrateWeapon => MagicEffect::new(
+            DisintegrateWeapon, "Disintegrate Weapon", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, FireShield, FrostShield, ShockShield, Shield]
+        ),
+        DrainAttribute => MagicEffect::new(
+            DrainAttribute, "Drain Attribute", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::USE_ATTRIBUTE,
+            vec![AbsorbAttribute, Dispel, FortifyAttribute, RestoreAttribute]
+        ),
+        DrainFatigue => MagicEffect::new(
+            DrainFatigue, "Drain Fatigue", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbFatigue, Dispel, FortifyFatigue, RestoreFatigue]
+        ),
+        DrainHealth => MagicEffect::new(
+            DrainHealth, "Drain Health", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbHealth, Dispel, FortifyHealth, RestoreHealth]
+        ),
+        DrainSkill => MagicEffect::new(
+            DrainSkill, "Drain Skill", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::USE_SKILL,
+            vec![AbsorbSkill, Dispel, FortifySkill]
+        ),
+        DrainMagicka => MagicEffect::new(
+            DrainMagicka, "Drain Spell Points", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbMagicka, Dispel, FortifyMagicka, RestoreMagicka]
+        ),
+        Dispel => MagicEffect::new(
+            Dispel, "Dispel", Mysticism, Some(ActorValue::ResistMagic),
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION,
+            vec![]
+        ),
+        DetectLife => MagicEffect::new(
+            DetectLife, "Detect Life", Mysticism, None,
+            EffectFlags::RECOVER | EffectFlags::SELF,
+            vec![]
+        ),
+        MehrunesDagonCustomEffect => MagicEffect::new(
+            MehrunesDagonCustomEffect, "Mehrunes Dagon Custom Effect", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![AbsorbHealth, Dispel, FortifyHealth, RestoreHealth]
+        ),
+        FireDamage => MagicEffect::new(
+            FireDamage, "Fire Damage", Destruction, Some(ActorValue::ResistFire),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::FX_PERSIST | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, FireShield, ResistFire]
+        ),
+        FireShield => MagicEffect::new(
+            FireShield, "Fire Shield", Alteration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        FortifyAttribute => MagicEffect::new(
+            FortifyAttribute, "Fortify Attribute", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        FortifyFatigue => MagicEffect::new(
+            FortifyFatigue, "Fortify Fatigue", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        FortifyHealth => MagicEffect::new(
+            FortifyHealth, "Fortify Health", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        FortifyMagickaMultiplier => MagicEffect::new(
+            FortifyMagickaMultiplier, "Fortify Magicka Multiplier", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF,
+            vec![]
+        ),
+        FortifySkill => MagicEffect::new(
+            FortifySkill, "Fortify Skill", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        FortifyMagicka => MagicEffect::new(
+            FortifyMagicka, "Fortify Spell Points", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        FrostDamage => MagicEffect::new(
+            FrostDamage, "Frost Damage", Destruction, Some(ActorValue::ResistFrost),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, FrostShield, ResistFrost]
+        ),
+        Frenzy => MagicEffect::new(
+            Frenzy, "Frenzy", Illusion, Some(ActorValue::ResistMagic),
+            EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Calm, Dispel]
+        ),
+        FrostShield => MagicEffect::new(
+            FrostShield, "Frost Shield", Alteration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        Feather => MagicEffect::new(
+            Feather, "Feather", Alteration, Some(ActorValue::ResistMagic),
+            EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel]
+        ),
+        Invisibility => MagicEffect::new(
+            Invisibility, "Invisibilty", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        Light => MagicEffect::new(
+            Light, "Light", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ShockShield => MagicEffect::new(
+            ShockShield, "Lightning Shield", Alteration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        Lock => MagicEffect::new(
+            Lock, "Lock", Alteration, None,
+            EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_DURATION,
+            vec![]
+        ),
+        SummonMythicDawnHelm => MagicEffect::new(
+            SummonMythicDawnHelm, "Summon Mythic Dawn Helm", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonMythicDawnArmor => MagicEffect::new(
+            SummonMythicDawnArmor, "Summon Mythic Dawn Armor", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        NightEye => MagicEffect::new(
+            NightEye, "Night-Eye", Illusion, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        Open => MagicEffect::new(
+            Open, "Open", Alteration, None,
+            EffectFlags::TARGET | EffectFlags::NO_DURATION,
+            vec![]
+        ),
+        Paralyze => MagicEffect::new(
+            Paralyze, "Paralyze", Illusion, Some(ActorValue::ResistParalysis),
+            EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![CureParalysis, Dispel]
+        ),
+        PoisonInfo => MagicEffect::new(
+            PoisonInfo, "Poison Info", Destruction, Some(ActorValue::ResistPoison),
+            EffectFlags::empty(),
+            vec![CurePoison]
+        ),
+        Rally => MagicEffect::new(
+            Rally, "Rally", Illusion, Some(ActorValue::ResistMagic),
+            EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Demoralize, Dispel]
+        ),
+        Reanimate => MagicEffect::new(
+            Reanimate, "Reanimate", Conjuration, None,
+            EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE | EffectFlags::NO_AREA,
+            vec![]
+        ),
+        RestoreAttribute => MagicEffect::new(
+            RestoreAttribute, "Restore Attribute", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::USE_ATTRIBUTE,
+            vec![]
+        ),
+        ReflectDamage => MagicEffect::new(
+            ReflectDamage, "Reflect Damage", Mysticism, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF,
+            vec![]
+        ),
+        RestoreFatigue => MagicEffect::new(
+            RestoreFatigue, "Restore Fatigue", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        RestoreHealth => MagicEffect::new(
+            RestoreHealth, "Restore Health", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        RestoreMagicka => MagicEffect::new(
+            RestoreMagicka, "Restore Spell Points", Restoration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ReflectSpell => MagicEffect::new(
+            ReflectSpell, "Reflect", Mysticism, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistDisease => MagicEffect::new(
+            ResistDisease, "Resist Disease", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistFire => MagicEffect::new(
+            ResistFire, "Resist Fire", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistFrost => MagicEffect::new(
+            ResistFrost, "Resist Frost", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistMagic => MagicEffect::new(
+            ResistMagic, "Resist Magic", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistNormalWeapons => MagicEffect::new(
+            ResistNormalWeapons, "Resist Normal Weapons", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistParalysis => MagicEffect::new(
+            ResistParalysis, "Resist Paralysis", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistPoison => MagicEffect::new(
+            ResistPoison, "Resist Poison", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistShock => MagicEffect::new(
+            ResistShock, "Resist Shock", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ResistWaterDamage => MagicEffect::new(
+            ResistWaterDamage, "Resist Water Damage", Restoration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        SpellAbsorption => MagicEffect::new(
+            SpellAbsorption, "Spell Absorption", Mysticism, Some(ActorValue::ResistMagic),
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        ScriptEffect => MagicEffect::new(
+            ScriptEffect, "Script Effect", Alteration, None,
+            EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![Dispel]
+        ),
+        ShockDamage => MagicEffect::new(
+            ShockDamage, "Shock Damage", Destruction, Some(ActorValue::ResistShock),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, ShockShield, ResistShock]
+        ),
+        Shield => MagicEffect::new(
+            Shield, "Shield", Alteration, None,
+            EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![]
+        ),
+        Silence => MagicEffect::new(
+            Silence, "Silence", Illusion, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![Dispel]
+        ),
+        StuntedMagicka => MagicEffect::new(
+            StuntedMagicka, "Stunted Magicka", Destruction, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SoulTrap => MagicEffect::new(
+            SoulTrap, "Soul Trap", Mysticism, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![Dispel]
+        ),
+        SunDamage => MagicEffect::new(
+            SunDamage, "Sun Damage", Destruction, None,
+            EffectFlags::DETRIMENTAL | EffectFlags::SELF,
+            vec![]
+        ),
+        Telekinesis => MagicEffect::new(
+            Telekinesis, "Telekinesis", Mysticism, None,
+            EffectFlags::RECOVER | EffectFlags::TARGET | EffectFlags::NO_AREA,
+            vec![]
+        ),
+        TurnUndead => MagicEffect::new(
+            TurnUndead, "Turn Undead", Conjuration, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::RECOVER | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, Rally]
+        ),
+        Vampirism => MagicEffect::new(
+            Vampirism, "Vampirism", Destruction, Some(ActorValue::ResistDisease),
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_DURATION,
+            vec![]
+        ),
+        WaterBreathing => MagicEffect::new(
+            WaterBreathing, "Water Breathing", Alteration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        WaterWalking => MagicEffect::new(
+            WaterWalking, "Water Walking", Alteration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        WeaknessToDisease => MagicEffect::new(
+            WeaknessToDisease, "Weakness to Disease", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, ResistDisease]
+        ),
+        WeaknessToFire => MagicEffect::new(
+            WeaknessToFire, "Weakness to Fire", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, FireShield, ResistFire]
+        ),
+        WeaknessToFrost => MagicEffect::new(
+            WeaknessToFrost, "Weakness to Frost", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, FrostShield, ResistFrost]
+        ),
+        WeaknessToMagic => MagicEffect::new(
+            WeaknessToMagic, "Weakness to Magic", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, ResistMagic]
+        ),
+        WeaknessToNormalWeapons => MagicEffect::new(
+            WeaknessToNormalWeapons, "Weakness to Normal Weapons", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, ResistNormalWeapons]
+        ),
+        WeaknessToPoison => MagicEffect::new(
+            WeaknessToPoison, "Weakness to Poison", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, ResistPoison]
+        ),
+        WeaknessToShock => MagicEffect::new(
+            WeaknessToShock, "Weakness to Shock", Destruction, Some(ActorValue::ResistMagic),
+            EffectFlags::HOSTILE | EffectFlags::DETRIMENTAL | EffectFlags::RECOVER | EffectFlags::MAGNITUDE_PERCENT | EffectFlags::SELF | EffectFlags::TOUCH | EffectFlags::TARGET,
+            vec![Dispel, ShockShield, ResistShock]
+        ),
+        SummonRufiosGhost => MagicEffect::new(
+            SummonRufiosGhost, "Extra Summon 01", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonAncestorGuardian => MagicEffect::new(
+            SummonAncestorGuardian, "Extra Summon 02", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSpiderling => MagicEffect::new(
+            SummonSpiderling, "Extra Summon 03", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonFleshAtronach => MagicEffect::new(
+            SummonFleshAtronach, "Extra Summon 04", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonBear => MagicEffect::new(
+            SummonBear, "Extra Summon 05", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonGluttonousHunger => MagicEffect::new(
+            SummonGluttonousHunger, "Extra Summon 06", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonRavenousHunger => MagicEffect::new(
+            SummonRavenousHunger, "Extra Summon 07", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonVoraciousHunger => MagicEffect::new(
+            SummonVoraciousHunger, "Extra Summon 08", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonDarkSeducer => MagicEffect::new(
+            SummonDarkSeducer, "Extra Summon 09", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonGoldenSaint => MagicEffect::new(
+            SummonGoldenSaint, "Extra Summon 10", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        WabbaSummon => MagicEffect::new(
+            WabbaSummon, "Extra Summon 11", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonDecrepitShambles => MagicEffect::new(
+            SummonDecrepitShambles, "Extra Summon 12", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonShambles => MagicEffect::new(
+            SummonShambles, "Extra Summon 13", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonRepleteShambles => MagicEffect::new(
+            SummonRepleteShambles, "Extra Summon 14", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonHunger => MagicEffect::new(
+            SummonHunger, "Extra Summon 15", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonMangledFleshAtronach => MagicEffect::new(
+            SummonMangledFleshAtronach, "Extra Summon 16", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonTornFleshAtronach => MagicEffect::new(
+            SummonTornFleshAtronach, "Extra Summon 17", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonStitchedFleshAtronach => MagicEffect::new(
+            SummonStitchedFleshAtronach, "Extra Summon 18", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSewnFleshAtronach => MagicEffect::new(
+            SummonSewnFleshAtronach, "Extra Summon 19", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        ExtraSummon20 => MagicEffect::new(
+            ExtraSummon20, "Extra Summon 20", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonClannfear => MagicEffect::new(
+            SummonClannfear, "Summon Clannfear", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonDaedroth => MagicEffect::new(
+            SummonDaedroth, "Summon Daedroth", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonDremora => MagicEffect::new(
+            SummonDremora, "Summon Dremora", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonDremoraLord => MagicEffect::new(
+            SummonDremoraLord, "Summon Dremora Lord", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonFlameAtronach => MagicEffect::new(
+            SummonFlameAtronach, "Summon Fire Atronach", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonFrostAtronach => MagicEffect::new(
+            SummonFrostAtronach, "Summon Frost Atronach", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonGhost => MagicEffect::new(
+            SummonGhost, "Summon Ghost", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonHeadlessZombie => MagicEffect::new(
+            SummonHeadlessZombie, "Summon Headless Zombie", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonLich => MagicEffect::new(
+            SummonLich, "Summon Lich", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonScamp => MagicEffect::new(
+            SummonScamp, "Summon Scamp", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSkeletonGuardian => MagicEffect::new(
+            SummonSkeletonGuardian, "Summon Skeleton Archer", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSkeletonChampion => MagicEffect::new(
+            SummonSkeletonChampion, "Summon Skeleton Champion", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSkeleton => MagicEffect::new(
+            SummonSkeleton, "Summon Skeleton", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSkeletonHero => MagicEffect::new(
+            SummonSkeletonHero, "Summon Skeleton Hero", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonSpiderDaedra => MagicEffect::new(
+            SummonSpiderDaedra, "Summon Spider Daedra", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonStormAtronach => MagicEffect::new(
+            SummonStormAtronach, "Summon Storm Atronach", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonFadedWraith => MagicEffect::new(
+            SummonFadedWraith, "Summon Wraith", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonGloomWraith => MagicEffect::new(
+            SummonGloomWraith, "Summon Wraith Lord", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonXivilai => MagicEffect::new(
+            SummonXivilai, "Summon Xivilai", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+        SummonZombie => MagicEffect::new(
+            SummonZombie, "Summon Zombie", Conjuration, None,
+            EffectFlags::RECOVER | EffectFlags::SELF | EffectFlags::NO_MAGNITUDE,
+            vec![]
+        ),
+    }
+});

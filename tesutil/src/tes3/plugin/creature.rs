@@ -4,7 +4,7 @@ use binrw::{binrw, BinReaderExt};
 use bitflags::bitflags;
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct CreatureFlags: u32 {
         const BIPED = 0x00000001;
         const RESPAWN = 0x00000002;

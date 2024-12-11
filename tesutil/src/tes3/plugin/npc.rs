@@ -11,6 +11,7 @@ use binrw::BinReaderExt;
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Debug)]
     struct NpcFlags: u32 {
         const FEMALE = 0x0001;
         const ESSENTIAL = 0x0002;

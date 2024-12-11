@@ -5,7 +5,7 @@ use binrw::{binrw, BinReaderExt};
 use bitflags::bitflags;
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct AiFlags: u32 {
         const WEAPONS = 0x00000001;
         const ARMOR = 0x00000002;
@@ -28,7 +28,7 @@ bitflags! {
 #[derive(Debug, Default)]
 pub struct ActorSettings {
     #[br(try_map = |f| ActorFlags::from_bits(f).ok_or("Invalid actor flags"))]
-    #[bw(map = |f| f.bits)]
+    #[bw(map = |f| f.bits())]
     flags: ActorFlags,
     base_spell: u16,
     fatigue: u16,
@@ -54,7 +54,7 @@ pub struct AiSettings {
     energy_level: u8,
     responsibility: u8,
     #[br(try_map = |f| AiFlags::from_bits(f).ok_or("Invalid AI flags"))]
-    #[bw(map = |f| f.bits)]
+    #[bw(map = |f| f.bits())]
     flags: AiFlags,
     train_skill: u8,
     train_level: u8,

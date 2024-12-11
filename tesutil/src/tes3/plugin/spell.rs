@@ -20,7 +20,7 @@ pub enum SpellType {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct SpellFlags: u32 {
         const AUTO_CALC = 0x01;
         const PC_START_SPELL = 0x02;

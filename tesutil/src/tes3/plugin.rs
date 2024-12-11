@@ -324,9 +324,8 @@ impl Tes3Plugin {
     /// ```no_run
     /// use tesutil::*;
     /// use tesutil::tes3::*;
-    /// # use std::io;
     ///
-    /// # fn main() -> io::Result<()> {
+    /// # fn main() -> Result<(), TesError> {
     /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
     /// assert_eq!(plugin.author(), "Bethesda Softworks");
     /// # Ok(())
@@ -370,9 +369,8 @@ impl Tes3Plugin {
     /// ```no_run
     /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
-    /// # use std::io;
     ///
-    /// # fn main() -> io::Result<()> {
+    /// # fn main() -> Result<(), tesutil::TesError> {
     /// let plugin = Tes3Plugin::load_file("Bloodmoon.esm")?;
     /// assert_eq!(plugin.description(), "The main data file for BloodMoon.\r\n(requires Morrowind.esm to run)");
     /// # Ok(())
@@ -530,11 +528,10 @@ impl Tes3Plugin {
     /// ```no_run
     /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
-    /// # use std::io;
     ///
-    /// # fn main() -> io::Result<()> {
+    /// # fn main() -> Result<(), tesutil::TesError> {
     /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
-    /// if let Some(record) = plugin.get_record("HortatorVotes") {
+    /// if let Some(record) = plugin.get_record("HortatorVotes")? {
     ///     // do something with record
     /// }
     /// # Ok(())
@@ -600,11 +597,10 @@ impl Tes3Plugin {
     /// ```no_run
     /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
-    /// # use std::io;
     ///
-    /// # fn main() -> io::Result<()> {
+    /// # fn main() -> Result<(), tesutil::TesError> {
     /// let mut plugin = Tes3Plugin::load_file("Morrowind.esm")?;
-    /// if let Some(mut record) = plugin.get_record_mut("HortatorVotes") {
+    /// if let Some(mut record) = plugin.get_record_mut("HortatorVotes")? {
     ///     // change something with record
     /// }
     /// # Ok(())
@@ -674,10 +670,11 @@ impl Plugin for Tes3Plugin {
     /// ```no_run
     /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
+    /// use std::io::Cursor;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> Result<(), tesutil::TesError> {
     /// let buf: Vec<u8> = vec![/* raw plugin data */];
-    /// let plugin = Tes3Plugin::read(&mut &buf[..])?;
+    /// let plugin = Tes3Plugin::read(Cursor::new(buf))?;
     /// println!("Plugin info: author {}, description {}", plugin.author(), plugin.description());
     /// # Ok(())
     /// # }
@@ -827,11 +824,12 @@ impl Plugin for Tes3Plugin {
     /// ```no_run
     /// use tesutil::tes3::*;
     /// use tesutil::Plugin;
+    /// use std::io::Cursor;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> Result<(), tesutil::TesError> {
     /// let mut buf: Vec<u8> = vec![];
     /// let plugin = Tes3Plugin::load_file("Morrowind.esm")?;
-    /// plugin.write(&mut &mut buf)?;
+    /// plugin.write(Cursor::new(&mut buf))?;
     /// assert_eq!(buf.len(), 79837557);
     /// # Ok(())
     /// # }

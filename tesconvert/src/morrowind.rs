@@ -1,9 +1,9 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, LazyCell};
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::iter::repeat;
 use std::path::{Path, PathBuf};
-use std::thread;
+use std::{thread, thread_local};
 
 use tesutil::tes3::Magic as Tes3Magic;
 use tesutil::tes3::{
@@ -25,17 +25,11 @@ use crate::oblivion::Oblivion;
 
 use anyhow::{anyhow, Context, Result};
 use enum_map::{enum_map, EnumMap};
-use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 #[cfg(windows)]
 use winreg::enums::*;
 #[cfg(windows)]
 use winreg::RegKey;
-
-lazy_static! {
-    static ref FONT_REGEX: Regex =
-        Regex::new("(?i)(<font\\b[^>]+face\\s*=\\s*\"?\\s*)([^\">]+)(\\s*\"?[^>]+>)").unwrap();
-}
 
 /// Container for Morrowind-related state and functionality
 #[derive(Debug)]
@@ -1200,7 +1194,7 @@ impl MorrowindToOblivion {
         ob_player_ref.set_health_delta(-health_delta);
 
         ob_player_base.set_base_health(Some(level_health as u32));
-        let mut base = ob_player_base.actor_base_mut().unwrap();
+        let base = ob_player_base.actor_base_mut().unwrap();
         base.level = self.player_base.level as i16;
         // this will be recalculated once we add back racial and birthsign bonuses
         base.magicka = 0;
@@ -1497,6 +1491,14 @@ impl MorrowindToOblivion {
     }
 
     fn convert_book(&self, mw_book: &tes3::Book) -> Result<Option<tes4::Book>> {
+        // in practice, we only ever call this function on one thread, but the compiler can't
+        // enforce that, so we'll use thread_local to avoid switching to OnceLock
+        thread_local! {
+            static FONT_REGEX: LazyCell<Regex> = LazyCell::new(|| {
+                Regex::new("(?i)(<font\\b[^>]+face\\s*=\\s*\"?\\s*)([^\">]+)(\\s*\"?[^>]+>)").unwrap()
+            });
+        }
+
         // can't convert scripted items
         if mw_book.script().is_some() {
             return Ok(None);
@@ -1504,15 +1506,17 @@ impl MorrowindToOblivion {
 
         // map fonts
         let ob_text = String::from(
-            FONT_REGEX.replace_all(&mw_book.text, |captures: &Captures| {
-                let mw_font_name = captures[2].to_lowercase();
-                let ob_font_name = match mw_font_name.as_str() {
-                    "magic cards" => "1",
-                    "daedric" => "4",
-                    _ => mw_font_name.as_str(),
-                };
-                format!("{}{}{}", &captures[1], ob_font_name, &captures[3])
-            }),
+            FONT_REGEX.with(|re| {
+                re.replace_all(&mw_book.text, |captures: &Captures| {
+                    let mw_font_name = captures[2].to_lowercase();
+                    let ob_font_name = match mw_font_name.as_str() {
+                        "magic cards" => "1",
+                        "daedric" => "4",
+                        _ => mw_font_name.as_str(),
+                    };
+                    format!("{}{}{}", &captures[1], ob_font_name, &captures[3])
+                })
+            })
         );
 
         let mut ob_book = tes4::Book::new(

@@ -7,6 +7,7 @@ use binrw::BinReaderExt;
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Debug)]
     struct AutoCalcFlags: u32 {
         const WEAPON = 0x0001;
         const ARMOR = 0x0002;

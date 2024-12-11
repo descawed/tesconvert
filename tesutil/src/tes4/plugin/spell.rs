@@ -30,6 +30,7 @@ pub enum SpellLevel {
 }
 
 bitflags! {
+    #[derive(Debug)]
     struct SpellFlags: u8 {
         const MANUAL_SPELL_COST = 0x01;
         const IMMUNE_TO_SILENCE_1 = 0x02;
@@ -208,7 +209,7 @@ impl Form for Spell {
         writer.write_le(&(spell_type as u32))?;
         writer.write_le(&self.cost)?;
         writer.write_le(&(spell_level as u32))?;
-        writer.write_le(&self.flags.bits)?;
+        writer.write_le(&self.flags.bits())?;
 
         record.add_field(Tes4Field::new(b"SPIT", buf)?);
 

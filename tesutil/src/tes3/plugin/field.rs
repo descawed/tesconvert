@@ -70,11 +70,11 @@ impl Field for Tes3Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::tes3::*;
-    /// # use std::io;
+    /// use std::io::Cursor;
     ///
-    /// # fn main() -> io::Result<()> {
+    /// # fn main() -> Result<(), TesError> {
     /// let data = b"NAME\x09\0\0\0GameHour\0";
-    /// let field = Tes3Field::read(&mut data.as_ref())?;
+    /// let field = Tes3Field::read(Cursor::new(data))?;
     /// assert_eq!(field.name(), b"NAME");
     /// # Ok(())
     /// # }
@@ -202,11 +202,12 @@ impl Field for Tes3Field {
     /// ```rust
     /// use tesutil::*;
     /// use tesutil::tes3::*;
+    /// use std::io::Cursor;
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut buf: Vec<u8> = vec![];
     /// let field = Tes3Field::new(b"NAME", vec![1, 2, 3])?;
-    /// field.write(&mut &mut buf)?;
+    /// field.write(Cursor::new(&mut buf))?;
     /// assert!(buf.len() > 0);
     /// # Ok(())
     /// # }

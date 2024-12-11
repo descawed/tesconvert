@@ -3,3 +3,4 @@ members = [
     "tesutil",
     "tesconvert",
 ]
+resolver = "2"
